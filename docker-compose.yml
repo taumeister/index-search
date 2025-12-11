@@ -8,6 +8,8 @@ services:
       - "8010:8000"
     volumes:
       - ./:/app
+      # Host-Datenpfad ins Container-/data/INDEX einhängen (anpassbar via HOST_INDEX_PATH)
+      - ${HOST_INDEX_PATH:-/home/tom/projekte/INDEX}:/data/INDEX:ro
     environment:
       - TZ=Europe/Berlin
     restart: unless-stopped
