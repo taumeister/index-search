@@ -1,6 +1,6 @@
 function sizeWindow() {
-    const w = Math.max(780, Math.floor(window.screen.availWidth * 0.6));
-    const h = Math.max(640, Math.floor(window.screen.availHeight * 0.7));
+    const w = Math.max(660, Math.floor(window.screen.availWidth * 0.55));
+    const h = Math.max(540, Math.floor(window.screen.availHeight * 0.65));
     const left = Math.floor((window.screen.availWidth - w) / 2);
     const top = Math.floor((window.screen.availHeight - h) / 2);
     try {

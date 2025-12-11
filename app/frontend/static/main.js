@@ -196,8 +196,8 @@ function renderPreviewContent(doc, container) {
 function openPopupForRow(id) {
     if (!id) return;
     const url = `/viewer?id=${id}`;
-    const w = Math.max(720, Math.floor(window.screen.availWidth * 0.62));
-    const h = Math.max(640, Math.floor(window.screen.availHeight * 0.72));
+    const w = Math.max(640, Math.floor(window.screen.availWidth * 0.5));
+    const h = Math.max(560, Math.floor(window.screen.availHeight * 0.6));
     const left = Math.floor((window.screen.availWidth - w) / 2);
     const top = Math.floor((window.screen.availHeight - h) / 2);
     window.open(

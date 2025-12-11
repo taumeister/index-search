@@ -2,7 +2,7 @@
 
 ## v003 - Druck & Pop-up
 - Druck öffnet direkt den Druckdialog über ein eingebettetes Iframe (Preview + Viewer), ohne neues Browserfenster.
-- Pop-up/Viewer deutlich kleiner (ca. 60%/70% des Bildschirms), PDF-Toolbar minimiert.
+- Pop-up/Viewer verkleinert (ca. 50–55% des Bildschirms, Mindestgröße reduziert), PDF-Toolbar minimiert.
 - Viewer enthält jetzt einen Druck-Button; Download/Schließen bleiben erhalten.
 
 ## v002 - UI-Feinschliff & Suche
