@@ -1,5 +1,8 @@
 # Release-Notizen
 
+## v011 - Feste Typ-Auswahl
+- Typ-Filter zeigt immer alle unterstützten Endungen (.pdf/.rtf/.msg/.txt), unabhängig von aktuellen Treffern.
+
 ## v010 - Extension-Filter korrigiert
 - Endungsfilter sendet die echte Suffix-Schreibweise (inkl. Punkt), Filter greifen wieder auf .pdf/.msg/.rtf/.txt.
 

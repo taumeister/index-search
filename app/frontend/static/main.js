@@ -11,6 +11,7 @@ const dateFormatter = new Intl.DateTimeFormat("de-DE", {
     hour: "2-digit",
     minute: "2-digit",
 });
+const SUPPORTED_EXTENSIONS = ["", ".pdf", ".rtf", ".msg", ".txt"];
 
 applySavedPreviewWidth();
 
@@ -365,17 +366,12 @@ function closeContextMenu() {
 window.addEventListener("load", setupResizableColumns);
 
 function populateFilters(results) {
-    const exts = new Set();
-    results.forEach((r) => {
-        if (r.extension) exts.add(r.extension);
-    });
     const extSelect = document.getElementById("ext-filter");
     const currentExt = extSelect.value;
-    const extOptions = ['<option value="">Typ (alle / Reset)</option>'].concat(
-        Array.from(exts)
-            .sort((a, b) => a.localeCompare(b))
-            .map((x) => `<option value="${x}">${x}</option>`)
-    );
+    const extOptions = SUPPORTED_EXTENSIONS.map((x) => {
+        if (!x) return '<option value="">Typ (alle / Reset)</option>';
+        return `<option value="${x}">${x}</option>`;
+    });
     extSelect.innerHTML = extOptions.join("");
     extSelect.value = currentExt;
 }
