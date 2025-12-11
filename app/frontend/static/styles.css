@@ -7,7 +7,7 @@
 body {
     margin: 0;
     font-family: "Segoe UI", Tahoma, sans-serif;
-    font-size: 14px;
+    font-size: 13px;
     background: #f7f9fb;
     color: #1f2933;
 }
@@ -60,15 +60,7 @@ main {
     padding: 8px;
     height: calc(100vh - 88px);
     box-sizing: border-box;
-    display: grid;
-    grid-template-columns: 1fr;
-    grid-template-rows: 1fr;
-    gap: 12px;
-    align-items: stretch;
-}
-
-#layout.preview-open {
-    grid-template-columns: minmax(0, 1fr) var(--panel-width);
+    position: relative;
 }
 
 .results {
@@ -159,7 +151,12 @@ tr.active {
     overflow: hidden;
     border: 1px solid var(--border);
     min-height: 0;
-    position: relative;
+    position: fixed;
+    top: 92px;
+    right: 12px;
+    bottom: 16px;
+    width: var(--panel-width);
+    z-index: 50;
 }
 
 .preview.hidden {

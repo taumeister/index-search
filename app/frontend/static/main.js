@@ -91,12 +91,10 @@ async function openPreview(id, showPanel = false) {
 
 function showPreviewPanel() {
     document.getElementById("preview-panel").classList.remove("hidden");
-    document.getElementById("layout").classList.add("preview-open");
 }
 
 function closePreviewPanel() {
     document.getElementById("preview-panel").classList.add("hidden");
-    document.getElementById("layout").classList.remove("preview-open");
     markActiveRow(null);
     currentDocId = null;
 }

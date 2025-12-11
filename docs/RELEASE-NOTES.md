@@ -1,5 +1,10 @@
 # Release-Notizen
 
+## v006 - Stabilere Tabelle & Preview-Overlay
+- Preview-Panel überlagert die Tabelle jetzt ohne Spaltenbreiten zu verschieben.
+- Schrift minimal verkleinert; Standardbreiten bleiben gesetzt (Name, Auszug, Geändert, Größe, Typ, Pfad).
+- Datumsformat weiterhin vereinheitlicht (de-DE, 2-stellig) für ruhige Spalten.
+
 ## v005 - Tabellenlayout & Datum
 - Spalten neu angeordnet (Name, Auszug, Geändert, Größe, Typ, Pfad) mit einheitlichen Standardbreiten und kleineren Schriften.
 - Datumsformat vereinheitlicht (de-DE mit Datum+Uhrzeit fester Breite) für stabilere Spaltenbreite.
