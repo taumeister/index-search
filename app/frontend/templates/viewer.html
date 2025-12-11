@@ -1,0 +1,25 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <title>Viewer</title>
+    <link rel="stylesheet" href="/static/styles.css">
+    <link rel="stylesheet" href="/static/viewer.css">
+</head>
+<body>
+    <header>
+        <div class="title" id="title">Dokument</div>
+        <div class="actions">
+            <button id="print-btn">Drucken</button>
+            <a id="download-link" class="button" target="_blank" rel="noopener">Download</a>
+            <button onclick="window.close()">Schließen</button>
+        </div>
+    </header>
+    <main>
+        <div class="viewer-panel">
+            <div class="content full" id="content"></div>
+        </div>
+    </main>
+    <script src="/static/viewer.js"></script>
+</body>
+</html>

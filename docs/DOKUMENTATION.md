@@ -50,6 +50,7 @@
 - Tabelle: Spalten sortierbar (Dateiname, Typ, Größe, Geändert) und per sichtbarem Handle in der Breite anpassbar (Persistenz via Storage), Kontextmenü mit Preview/Pop-up/Download/Druck.
 - PDF-Preview via pdf.js Iframe, MSG mit Header/Body, RTF/TXT als Text.
 - Download-Link öffnet Originaldatei.
+- Pop-up/Viewer: kleinere Fenstergröße (ca. 60%/70% des Bildschirms), Druck-Button, minimierte Toolbar; Print öffnet den Dialog ohne neues Browser-Tab.
 
 ## Tests
 - `pytest` deckt Config-Validierung, DB/FTS-Funktion, Indexlauf und API-Suche ab.

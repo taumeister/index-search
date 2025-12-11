@@ -196,8 +196,8 @@ function renderPreviewContent(doc, container) {
 function openPopupForRow(id) {
     if (!id) return;
     const url = `/viewer?id=${id}`;
-    const w = Math.floor(window.screen.availWidth * 0.72);
-    const h = Math.floor(window.screen.availHeight * 0.78);
+    const w = Math.max(720, Math.floor(window.screen.availWidth * 0.62));
+    const h = Math.max(640, Math.floor(window.screen.availHeight * 0.72));
     const left = Math.floor((window.screen.availWidth - w) / 2);
     const top = Math.floor((window.screen.availHeight - h) / 2);
     window.open(
@@ -209,26 +209,25 @@ function openPopupForRow(id) {
 
 function printDocument(id) {
     if (!id) return;
-    const url = `/api/document/${id}/file`;
-    const win = window.open(url, "_blank");
-    if (!win) return;
-    let printed = false;
-    const triggerPrint = () => {
-        if (printed) return;
-        printed = true;
+    const url = `/api/document/${id}/file#toolbar=0&navpanes=0&view=FitH`;
+    const iframe = document.createElement("iframe");
+    iframe.style.position = "fixed";
+    iframe.style.right = "-9999px";
+    iframe.style.width = "1px";
+    iframe.style.height = "1px";
+    iframe.src = url;
+    const cleanup = () => setTimeout(() => iframe.remove(), 800);
+    iframe.onload = () => {
         try {
-            win.focus();
-            win.print();
+            iframe.contentWindow.focus();
+            iframe.contentWindow.print();
         } catch (err) {
             console.error("Print fehlgeschlagen", err);
+        } finally {
+            cleanup();
         }
     };
-    if (win.document?.readyState === "complete") {
-        setTimeout(triggerPrint, 120);
-    } else {
-        win.addEventListener("load", () => setTimeout(triggerPrint, 150));
-        setTimeout(triggerPrint, 1200);
-    }
+    document.body.appendChild(iframe);
 }
 
 function setupPopup() {
