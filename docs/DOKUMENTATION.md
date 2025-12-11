@@ -39,12 +39,15 @@
 ## Web-API
 - `GET /`: Hauptseite.
 - `GET /api/search`: Parameter `q`, optional `source`, `extension`, `limit`, `offset`; liefert Treffer mit Snippet.
+- Suchlogik: Mehrere Wörter werden als AND kombiniert, Tokens werden als Prefix (`wort*`) gesucht; leere Suche zeigt alle Treffer.
 - `GET /api/document/{id}`: Metadaten + Volltext.
 - `GET /api/document/{id}/file`: Originaldatei (Download/Inline).
 - `GET /api/admin/status`: Gesamtanzahl, letzter Lauf, Historie.
 
 ## Frontend
 - Layout: Suche oben, Trefferliste links, Preview rechts (umschaltbar auf Popup).
+- Preview-Panel: Breite per Griff verstellbar (Session-Scoped gespeichert), enthält Download-, Druck- und Pop-up-Aktionen; Schließen per Klick außerhalb/Escape.
+- Tabelle: Spalten sortierbar (Dateiname, Typ, Größe, Geändert) und per sichtbarem Handle in der Breite anpassbar (Persistenz via Storage), Kontextmenü mit Preview/Pop-up/Download/Druck.
 - PDF-Preview via pdf.js Iframe, MSG mit Header/Body, RTF/TXT als Text.
 - Download-Link öffnet Originaldatei.
 
