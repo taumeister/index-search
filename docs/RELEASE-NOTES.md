@@ -1,5 +1,9 @@
 # Release-Notizen
 
+## v008 - Fixierte Leisten
+- Kopfzeile (Suchleiste) bleibt beim Scrollen sichtbar.
+- Spaltenkopf der Tabelle bleibt weiterhin fixiert; Scrollen der Treffer bleibt möglich.
+
 ## v007 - Preview bündig & transparent
 - Preview-Overlay dockt bündig an die Tabellenkante an und verschiebt Spalten nicht mehr.
 - Semi-transparenter Hintergrund (leicht durchscheinend), Position passt sich beim Resizen an.

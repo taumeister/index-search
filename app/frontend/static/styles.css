@@ -17,6 +17,9 @@ header {
     color: #fff;
     padding: 10px 16px;
     box-shadow: 0 2px 6px rgba(0,0,0,0.1);
+    position: sticky;
+    top: 0;
+    z-index: 200;
 }
 
 h1 {
