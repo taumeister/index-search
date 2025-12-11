@@ -4,6 +4,13 @@ let sortState = { key: null, dir: "asc" };
 let resizingColumn = false;
 let resizingPreview = false;
 const PANEL_WIDTH_KEY = "previewWidth";
+const dateFormatter = new Intl.DateTimeFormat("de-DE", {
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+});
 
 applySavedPreviewWidth();
 
@@ -39,14 +46,17 @@ function renderResults(results) {
         const rowId = row.id || row.doc_id;
         tr.dataset.id = rowId;
         const sizeLabel = typeof row.size_bytes === "number" ? `${(row.size_bytes / 1024).toFixed(1)} KB` : "–";
-        const mtimeLabel = row.mtime ? new Date(row.mtime * 1000).toLocaleString() : "–";
+        const mtimeLabel = row.mtime ? dateFormatter.format(new Date(row.mtime * 1000)) : "–";
+        const pathLabel = row.path || "";
+        const nameLabel = row.filename || "";
+        const snippetHtml = row.snippet || "";
         tr.innerHTML = `
-            <td>${row.filename}</td>
-            <td>${row.extension}</td>
-            <td>${sizeLabel}</td>
+            <td title="${nameLabel}">${nameLabel}</td>
+            <td class="snippet" title="${stripTags(snippetHtml)}">${snippetHtml}</td>
             <td>${mtimeLabel}</td>
-            <td title="${row.path}">${row.path}</td>
-            <td class="snippet">${row.snippet || ""}</td>
+            <td>${sizeLabel}</td>
+            <td>${row.extension}</td>
+            <td title="${pathLabel}">${pathLabel}</td>
         `;
         if (currentDocId && String(currentDocId) === String(rowId)) {
             tr.classList.add("active");
@@ -193,11 +203,17 @@ function renderPreviewContent(doc, container) {
     container.appendChild(pre);
 }
 
+function stripTags(html) {
+    const tmp = document.createElement("div");
+    tmp.innerHTML = html || "";
+    return tmp.textContent || "";
+}
+
 function openPopupForRow(id) {
     if (!id) return;
     const url = `/viewer?id=${id}`;
-    const w = Math.max(640, Math.floor(window.screen.availWidth * 0.5));
-    const h = Math.max(560, Math.floor(window.screen.availHeight * 0.6));
+    const w = Math.max(520, Math.floor(window.screen.availWidth * 0.45));
+    const h = Math.max(480, Math.floor(window.screen.availHeight * 0.58));
     const left = Math.floor((window.screen.availWidth - w) / 2);
     const top = Math.floor((window.screen.availHeight - h) / 2);
     window.open(
@@ -255,7 +271,11 @@ function setupResizableColumns() {
     const stored = JSON.parse(localStorage.getItem("colWidths") || "{}");
     headerRow.querySelectorAll("th").forEach((th, index) => {
         th.style.position = "relative";
-        if (stored[index]) th.style.width = stored[index];
+        if (stored[index]) {
+            th.style.width = stored[index];
+        } else if (th.dataset.width) {
+            th.style.width = th.dataset.width;
+        }
         const handle = document.createElement("div");
         handle.className = "resize-handle";
         let startX = 0;

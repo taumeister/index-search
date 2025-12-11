@@ -7,6 +7,7 @@
 body {
     margin: 0;
     font-family: "Segoe UI", Tahoma, sans-serif;
+    font-size: 14px;
     background: #f7f9fb;
     color: #1f2933;
 }
@@ -87,7 +88,7 @@ table {
 }
 
 th, td {
-    padding: 7px 9px;
+    padding: 6px 8px;
     border-bottom: 1px solid #e5e7eb;
     text-align: left;
     vertical-align: top;
@@ -117,6 +118,36 @@ tr:hover {
 
 tr.active {
     background: #dde7f5;
+}
+
+#results-table th:nth-child(1),
+#results-table td:nth-child(1) {
+    max-width: 50ch;
+}
+
+#results-table th:nth-child(2),
+#results-table td:nth-child(2) {
+    max-width: 70ch;
+}
+
+#results-table th:nth-child(3),
+#results-table td:nth-child(3) {
+    max-width: 19ch;
+}
+
+#results-table th:nth-child(4),
+#results-table td:nth-child(4) {
+    max-width: 12ch;
+}
+
+#results-table th:nth-child(5),
+#results-table td:nth-child(5) {
+    max-width: 10ch;
+}
+
+#results-table th:nth-child(6),
+#results-table td:nth-child(6) {
+    max-width: 30ch;
 }
 
 .preview {

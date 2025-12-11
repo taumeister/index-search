@@ -1,6 +1,8 @@
 # Release-Notizen
 
-## v004 - Jahresfilter gefixt
+## v005 - Tabellenlayout & Datum
+- Spalten neu angeordnet (Name, Auszug, Geändert, Größe, Typ, Pfad) mit einheitlichen Standardbreiten und kleineren Schriften.
+- Datumsformat vereinheitlicht (de-DE mit Datum+Uhrzeit fester Breite) für stabilere Spaltenbreite.
 - Jahresfilter (z. B. 2024/2025) liefern jetzt korrekt die Dokumente des jeweiligen Jahres (Parameterübergabe für Zeitbereiche korrigiert).
 
 ## v003 - Druck & Pop-up
