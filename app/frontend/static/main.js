@@ -91,6 +91,7 @@ async function openPreview(id, showPanel = false) {
 
 function showPreviewPanel() {
     document.getElementById("preview-panel").classList.remove("hidden");
+    positionPreview();
 }
 
 function closePreviewPanel() {
@@ -118,6 +119,7 @@ function clampPanelWidth(px) {
 function setPanelWidth(px) {
     const value = clampPanelWidth(px);
     document.documentElement.style.setProperty("--panel-width", `${value}px`);
+    positionPreview();
 }
 
 function applySavedPreviewWidth() {
@@ -126,6 +128,21 @@ function applySavedPreviewWidth() {
     const parsed = parseFloat(saved);
     if (!Number.isFinite(parsed)) return;
     setPanelWidth(parsed);
+}
+
+function positionPreview() {
+    const panel = document.getElementById("preview-panel");
+    const results = document.getElementById("results-pane");
+    if (!panel || !results || panel.classList.contains("hidden")) return;
+    const rect = results.getBoundingClientRect();
+    const panelWidth = getPanelWidthPx();
+    const left = Math.max(rect.right - panelWidth, rect.left + 8);
+    panel.style.width = `${panelWidth}px`;
+    panel.style.left = `${left}px`;
+    panel.style.right = "auto";
+    panel.style.top = `${rect.top}px`;
+    const height = Math.max(200, window.innerHeight - rect.top - 12);
+    panel.style.height = `${height}px`;
 }
 
 function markActiveRow(id) {
@@ -144,6 +161,7 @@ function setupPreviewResizer() {
         const delta = startX - e.clientX;
         const newWidth = startWidth + delta;
         setPanelWidth(newWidth);
+        positionPreview();
     };
 
     const stopDrag = () => {
@@ -410,3 +428,5 @@ document.addEventListener("keydown", (e) => {
         closeContextMenu();
     }
 });
+
+window.addEventListener("resize", positionPreview);

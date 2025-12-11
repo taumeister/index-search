@@ -1,5 +1,10 @@
 # Release-Notizen
 
+## v007 - Preview bündig & transparent
+- Preview-Overlay dockt bündig an die Tabellenkante an und verschiebt Spalten nicht mehr.
+- Semi-transparenter Hintergrund (leicht durchscheinend), Position passt sich beim Resizen an.
+- Schrift minimal verkleinert; Standardbreiten bleiben gesetzt (Name, Auszug, Geändert, Größe, Typ, Pfad).
+
 ## v006 - Stabilere Tabelle & Preview-Overlay
 - Preview-Panel überlagert die Tabelle jetzt ohne Spaltenbreiten zu verschieben.
 - Schrift minimal verkleinert; Standardbreiten bleiben gesetzt (Name, Auszug, Geändert, Größe, Typ, Pfad).

@@ -143,7 +143,7 @@ tr.active {
 }
 
 .preview {
-    background: #fff;
+    background: rgba(255,255,255,0.94);
     border-radius: 8px;
     box-shadow: 0 1px 3px rgba(0,0,0,0.06);
     display: flex;
@@ -152,11 +152,12 @@ tr.active {
     border: 1px solid var(--border);
     min-height: 0;
     position: fixed;
-    top: 92px;
-    right: 12px;
-    bottom: 16px;
+    top: 0;
+    right: 0;
+    bottom: 0;
     width: var(--panel-width);
     z-index: 50;
+    backdrop-filter: blur(2px);
 }
 
 .preview.hidden {
