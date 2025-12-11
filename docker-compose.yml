@@ -8,8 +8,8 @@ services:
       - "8010:8000"
     volumes:
       - ./:/app
-      # Host-Dateisystem read-only unter /hostfs verfügbar machen, Pfade aus der Config können unverändert genutzt werden
-      - /:/hostfs:ro
+      # Exakter Host-Pfad muss per ENV INDEX_ROOT gesetzt werden und dem Pfad in der Config entsprechen, z.B. INDEX_ROOT=/home/tom/projekte/INDEX
+      - ${INDEX_ROOT:?Set INDEX_ROOT to the host path used in config}:${INDEX_ROOT:?Set INDEX_ROOT to the host path used in config}:ro
     environment:
       - TZ=Europe/Berlin
     restart: unless-stopped
