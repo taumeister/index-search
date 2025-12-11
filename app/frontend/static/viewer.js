@@ -1,6 +1,6 @@
 function sizeWindow() {
-    const w = Math.max(660, Math.floor(window.screen.availWidth * 0.55));
-    const h = Math.max(540, Math.floor(window.screen.availHeight * 0.65));
+    const w = Math.max(540, Math.floor(window.screen.availWidth * 0.5));
+    const h = Math.max(480, Math.floor(window.screen.availHeight * 0.6));
     const left = Math.floor((window.screen.availWidth - w) / 2);
     const top = Math.floor((window.screen.availHeight - h) / 2);
     try {
@@ -22,13 +22,14 @@ async function loadDoc() {
         return;
     }
     const doc = await res.json();
+    window.__currentDoc = doc;
     render(doc);
     sizeWindow();
 }
 
 function render(doc) {
     document.getElementById("title").textContent = doc.filename || "Dokument";
-    document.getElementById("download-link").href = `/api/document/${doc.id}/file?download=1`;
+    document.getElementById("download-link").dataset.docid = doc.id;
 
     const container = document.getElementById("content");
     container.innerHTML = "";
@@ -65,8 +66,8 @@ function render(doc) {
 }
 
 function printCurrent() {
-    const params = new URLSearchParams(window.location.search);
-    const id = params.get("id");
+    const doc = window.__currentDoc;
+    const id = doc?.id;
     if (!id) return;
     const url = `/api/document/${id}/file#toolbar=0&navpanes=0&view=FitH`;
     const iframe = document.createElement("iframe");
@@ -76,10 +77,12 @@ function printCurrent() {
     iframe.style.height = "1px";
     iframe.src = url;
     const cleanup = () => setTimeout(() => iframe.remove(), 800);
+    let printed = false;
     iframe.onload = () => {
         try {
             iframe.contentWindow.focus();
             iframe.contentWindow.print();
+            printed = true;
         } catch (err) {
             console.error("Print fehlgeschlagen", err);
         } finally {
@@ -87,12 +90,64 @@ function printCurrent() {
         }
     };
     document.body.appendChild(iframe);
+
+    // Fallback: kleines Fenster öffnen, drucken, wieder schließen
+    setTimeout(() => {
+        if (printed) return;
+        const win = window.open(url, "_blank", "width=600,height=700,toolbar=no,location=no,menubar=no,resizable=yes,scrollbars=yes");
+        if (!win) return;
+        const closeWin = () => {
+            try {
+                win.close();
+            } catch (_) {
+                /* ignore */
+            }
+        };
+        const tryPrint = () => {
+            try {
+                win.focus();
+                win.print();
+            } catch (err) {
+                console.error("Print fallback fehlgeschlagen", err);
+            } finally {
+                setTimeout(closeWin, 300);
+            }
+        };
+        win.addEventListener("load", () => setTimeout(tryPrint, 200));
+        setTimeout(tryPrint, 1200);
+    }, 800);
 }
 
 function bindActions() {
     const btn = document.getElementById("print-btn");
     if (btn) {
         btn.addEventListener("click", printCurrent);
+    }
+    const dl = document.getElementById("download-link");
+    if (dl) {
+        dl.addEventListener("click", async (e) => {
+            e.preventDefault();
+            const doc = window.__currentDoc;
+            const id = doc?.id;
+            if (!id) return;
+            try {
+                const resp = await fetch(`/api/document/${id}/file`);
+                if (!resp.ok) throw new Error(`Download fehlgeschlagen (${resp.status})`);
+                const blob = await resp.blob();
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement("a");
+                a.href = url;
+                a.download = doc.filename || `dokument-${id}`;
+                document.body.appendChild(a);
+                a.click();
+                setTimeout(() => {
+                    a.remove();
+                    URL.revokeObjectURL(url);
+                }, 500);
+            } catch (err) {
+                console.error(err);
+            }
+        });
     }
 }
 

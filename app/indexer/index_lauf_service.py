@@ -67,11 +67,14 @@ def run_index_lauf(config: CentralConfig) -> Dict[str, int]:
             for name in filenames:
                 path = Path(dirpath) / name
                 if path.suffix.lower() in SUPPORTED_EXTENSIONS:
-                    to_process.append((path, source))
+                    to_process.append((path, path, source))
 
     scanned_paths = []
     with concurrent.futures.ThreadPoolExecutor(max_workers=config.indexer.worker_count) as pool:
-        futures = [pool.submit(process_file, path, source, config, run_id) for path, source in to_process]
+        futures = [
+            pool.submit(process_file, real_path, original_path, source, config, run_id)
+            for real_path, original_path, source in to_process
+        ]
         for future in concurrent.futures.as_completed(futures):
             result = future.result()
             counters["scanned"] += 1
@@ -110,22 +113,22 @@ def run_index_lauf(config: CentralConfig) -> Dict[str, int]:
     return counters
 
 
-def process_file(path: Path, source: str, config: CentralConfig, run_id: int) -> Dict[str, str]:
+def process_file(real_path: Path, original_path: Path, source: str, config: CentralConfig, run_id: int) -> Dict[str, str]:
     try:
-        stat = path.stat()
+        stat = real_path.stat()
     except FileNotFoundError:
-        return {"status": "error", "path": str(path)}
+        return {"status": "error", "path": str(original_path)}
 
     max_size = config.indexer.max_file_size_mb
     if max_size and stat.st_size > max_size * 1024 * 1024:
         logger.info("Übersprungen (zu groß): %s", path)
         return {"status": "skipped", "path": str(path)}
 
-    ext = path.suffix.lower()
+    ext = real_path.suffix.lower()
     meta = DocumentMeta(
         source=source,
-        path=str(path),
-        filename=path.name,
+        path=str(original_path),
+        filename=original_path.name,
         extension=ext,
         size_bytes=stat.st_size,
         ctime=stat.st_ctime,
@@ -137,29 +140,29 @@ def process_file(path: Path, source: str, config: CentralConfig, run_id: int) ->
 
     try:
         with db.get_conn() as conn:
-            existing = db.get_document_by_path(conn, str(path))
+            existing = db.get_document_by_path(conn, str(original_path))
             if existing and existing["size_bytes"] == stat.st_size and existing["mtime"] == stat.st_mtime:
-                return {"status": "unchanged", "path": str(path)}
+                return {"status": "unchanged", "path": str(original_path)}
 
-        fill_content(meta, path, ext)
+        fill_content(meta, real_path, ext)
         status = "added"
         with db.get_conn() as conn:
             if existing:
                 status = "updated"
             db.upsert_document(conn, meta)
-        return {"status": status, "path": str(path)}
+        return {"status": status, "path": str(original_path)}
     except Exception as exc:  # pragma: no cover - Schutz gegen Einzeldateifehler
-        logger.error("Fehler bei %s: %s", path, exc)
+        logger.error("Fehler bei %s: %s", original_path, exc)
         with db.get_conn() as conn:
             db.record_file_error(
                 conn,
                 run_id=run_id,
-                path=str(path),
+                path=str(original_path),
                 error_type=type(exc).__name__,
                 message=str(exc),
                 created_at=datetime.now(timezone.utc).isoformat(),
             )
-        return {"status": "error", "path": str(path)}
+        return {"status": "error", "path": str(original_path)}
 
 
 def fill_content(meta: DocumentMeta, path: Path, ext: str) -> None:
