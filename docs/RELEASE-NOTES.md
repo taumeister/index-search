@@ -1,5 +1,8 @@
 # Release-Notizen
 
+## v010 - Extension-Filter korrigiert
+- Endungsfilter sendet die echte Suffix-Schreibweise (inkl. Punkt), Filter greifen wieder auf .pdf/.msg/.rtf/.txt.
+
 ## v009 - MSG-Extraktion repariert
 - Namenskonflikt behoben: `.msg`-Dateien werden wieder korrekt extrahiert (kein `'function' object has no attribute Message`).
 

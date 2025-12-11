@@ -19,7 +19,7 @@ async function search() {
     const ext = document.getElementById("ext-filter").value;
     const time = document.getElementById("time-filter").value;
     const params = new URLSearchParams({ q });
-    if (ext) params.append("extension", ext.replace(".", "").toLowerCase());
+    if (ext) params.append("extension", ext.toLowerCase());
     if (time) params.append("time_filter", time);
     if (sortState.key) {
         params.append("sort_key", sortState.key);
