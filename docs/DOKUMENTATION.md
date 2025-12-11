@@ -54,4 +54,4 @@
 ## Betrieb
 - Start (lokal): `uvicorn app.main:app --reload`.
 - Indexlauf (manuell): `python -m app.indexer.index_lauf_service` kann ergänzt werden; aktuell Start über `run_index_lauf(config)` aus Code oder Cron/Timer.
-- Container: siehe `Dockerfile`/`docker-compose.yml` (Port 8010 -> 8000). Datenpfade per Volume mounten, z. B. `HOST_INDEX_PATH=/home/tom/projekte/INDEX` und in der Config `roots=/data/INDEX:label`.
+- Container: siehe `Dockerfile`/`docker-compose.yml` (Port 8010 -> 8000). Das Host-Dateisystem wird read-only unter `/hostfs` gemountet; du kannst in der Config echte Host-Pfade angeben (z. B. `/home/...`). Falls der Pfad im Container fehlt, wird automatisch `/hostfs/<pfad>` verwendet.
