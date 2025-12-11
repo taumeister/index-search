@@ -176,7 +176,7 @@ def fill_content(meta: DocumentMeta, path: Path, ext: str) -> None:
         meta.content = extractors.read_text_file(path)
         meta.title_or_subject = meta.filename
     elif ext == ".msg":
-        msg = extractors.extract_msg(path)
+        msg = extractors.extract_msg_file(path)
         meta.content = msg["content"]
         meta.title_or_subject = msg["title_or_subject"]
         meta.msg_from = msg["msg_from"]

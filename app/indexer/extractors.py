@@ -8,9 +8,9 @@ from pypdf import PdfReader
 from striprtf.striprtf import rtf_to_text
 
 try:
-    import extract_msg
+    import extract_msg as extract_msg_lib
 except ImportError:  # pragma: no cover
-    extract_msg = None
+    extract_msg_lib = None
 
 
 def read_text_file(path: Path, max_bytes: Optional[int] = None) -> str:
@@ -33,10 +33,10 @@ def extract_rtf(path: Path) -> str:
     return rtf_to_text(raw)
 
 
-def extract_msg(path: Path) -> dict:
-    if extract_msg is None:
+def extract_msg_file(path: Path) -> dict:
+    if extract_msg_lib is None:
         raise RuntimeError("extract-msg ist nicht installiert")
-    msg = extract_msg.Message(str(path))
+    msg = extract_msg_lib.Message(str(path))
     msg_subject = msg.subject or ""
     msg_from = msg.sender or ""
     msg_to = ", ".join(msg.to or [])

@@ -1,5 +1,8 @@
 # Release-Notizen
 
+## v009 - MSG-Extraktion repariert
+- Namenskonflikt behoben: `.msg`-Dateien werden wieder korrekt extrahiert (kein `'function' object has no attribute Message`).
+
 ## v008 - Fixierte Leisten
 - Kopfzeile (Suchleiste) bleibt beim Scrollen sichtbar.
 - Spaltenkopf der Tabelle bleibt weiterhin fixiert; Scrollen der Treffer bleibt möglich.
