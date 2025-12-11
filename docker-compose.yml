@@ -5,7 +5,7 @@ services:
     build: .
     container_name: index-search-web
     ports:
-      - "8000:8000"
+      - "8010:8000"
     volumes:
       - ./:/app
     environment:

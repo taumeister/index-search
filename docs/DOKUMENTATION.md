@@ -54,4 +54,4 @@
 ## Betrieb
 - Start (lokal): `uvicorn app.main:app --reload`.
 - Indexlauf (manuell): `python -m app.indexer.index_lauf_service` kann ergänzt werden; aktuell Start über `run_index_lauf(config)` aus Code oder Cron/Timer.
-- Container: siehe `Dockerfile`/`docker-compose.yml` (unten).
+- Container: siehe `Dockerfile`/`docker-compose.yml` (unten, Port 8010 -> 8000).
