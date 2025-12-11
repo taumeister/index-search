@@ -161,6 +161,8 @@ def search_documents(
     limit: int = 50,
     offset: int = 0,
     filters: Optional[Dict[str, Any]] = None,
+    sort_key: Optional[str] = None,
+    sort_dir: Optional[str] = None,
 ) -> List[sqlite3.Row]:
     filters = filters or {}
     where_clauses = []
@@ -171,16 +173,23 @@ def search_documents(
     if "extension" in filters:
         where_clauses.append("d.extension = ?")
         params.append(filters["extension"])
-    if "date_from" in filters:
-        where_clauses.append("d.mtime >= ?")
-        params.append(filters["date_from"])
-    if "date_to" in filters:
-        where_clauses.append("d.mtime <= ?")
-        params.append(filters["date_to"])
+    if "time_filter" in filters:
+        clause, value = _time_filter_clause(filters["time_filter"])
+        if clause:
+            where_clauses.append(clause)
+            if isinstance(value, (tuple, list)):
+                params.extend(value)
+            else:
+                params.append(value)
 
     where_sql = " AND ".join(where_clauses)
     if where_sql:
         where_sql = "AND " + where_sql
+
+    order_by = "ORDER BY bm25(documents_fts)"
+    if sort_key in {"filename", "source", "extension", "size_bytes", "mtime"}:
+        direction = "DESC" if sort_dir == "desc" else "ASC"
+        order_by = f"ORDER BY d.{sort_key} {direction}"
 
     cursor = conn.execute(
         f"""
@@ -189,12 +198,41 @@ def search_documents(
         JOIN documents d ON d.id = documents_fts.doc_id
         WHERE documents_fts MATCH ?
         {where_sql}
-        ORDER BY bm25(documents_fts)
+        {order_by}
         LIMIT ? OFFSET ?;
         """,
         [query, *params, limit, offset],
     )
     return cursor.fetchall()
+
+
+def _time_filter_clause(key: str) -> Tuple[Optional[str], Optional[Any]]:
+    from datetime import datetime, timedelta, timezone
+
+    now = datetime.now(timezone.utc)
+    key = key.lower()
+    if key == "today":
+        start = datetime(now.year, now.month, now.day, tzinfo=timezone.utc)
+        return "d.mtime >= ?", start.timestamp()
+    if key == "yesterday":
+        start = datetime(now.year, now.month, now.day, tzinfo=timezone.utc) - timedelta(days=1)
+        end = datetime(now.year, now.month, now.day, tzinfo=timezone.utc)
+        return "(d.mtime >= ? AND d.mtime < ?)", (start.timestamp(), end.timestamp())
+    if key == "last7":
+        start = now - timedelta(days=7)
+        return "d.mtime >= ?", start.timestamp()
+    if key == "last30":
+        start = now - timedelta(days=30)
+        return "d.mtime >= ?", start.timestamp()
+    if key == "last365":
+        start = now - timedelta(days=365)
+        return "d.mtime >= ?", start.timestamp()
+    if key.isdigit() and len(key) == 4:
+        year = int(key)
+        start = datetime(year, 1, 1, tzinfo=timezone.utc)
+        end = datetime(year + 1, 1, 1, tzinfo=timezone.utc)
+        return "(d.mtime >= ? AND d.mtime < ?)", (start.timestamp(), end.timestamp())
+    return None, None
 
 
 def get_document(conn: sqlite3.Connection, doc_id: int) -> Optional[sqlite3.Row]:

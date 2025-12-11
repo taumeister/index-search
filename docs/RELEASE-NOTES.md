@@ -1,8 +1,11 @@
 # Release-Notizen
 
+## v004 - Jahresfilter gefixt
+- Jahresfilter (z. B. 2024/2025) liefern jetzt korrekt die Dokumente des jeweiligen Jahres (Parameterübergabe für Zeitbereiche korrigiert).
+
 ## v003 - Druck & Pop-up
 - Druck öffnet direkt den Druckdialog über ein eingebettetes Iframe (Preview + Viewer), ohne neues Browserfenster.
-- Pop-up/Viewer verkleinert (ca. 50–55% des Bildschirms, Mindestgröße reduziert), PDF-Toolbar minimiert.
+- Pop-up/Viewer weiter verkleinert (ca. 45–55% des Bildschirms, kleinere Mindestgrößen), PDF-Toolbar minimiert, weniger Rahmen.
 - Viewer enthält jetzt einen Druck-Button; Download/Schließen bleiben erhalten.
 
 ## v002 - UI-Feinschliff & Suche
