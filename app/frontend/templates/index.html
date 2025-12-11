@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <title>Index-Suche</title>
+    <link rel="stylesheet" href="/static/styles.css">
+    <script>
+        window.defaultPreview = "{{ default_preview }}";
+        window.snippetLength = {{ snippet_length }};
+    </script>
+</head>
+<body>
+    <header>
+        <h1>Dokumenten-Volltextsuche</h1>
+        <div class="search-bar">
+            <input id="search-input" type="text" placeholder="Suche wie im Explorer..." />
+            <button id="search-btn">Suchen</button>
+            <div class="filters">
+                <input id="source-filter" placeholder="Quelle" />
+                <input id="ext-filter" placeholder="Typ (z.B. pdf)" />
+            </div>
+        </div>
+    </header>
+    <main>
+        <section class="results">
+            <table id="results-table">
+                <thead>
+                    <tr>
+                        <th>Dateiname</th>
+                        <th>Quelle</th>
+                        <th>Typ</th>
+                        <th>Größe</th>
+                        <th>Geändert</th>
+                        <th>Pfad</th>
+                        <th>Snippet</th>
+                    </tr>
+                </thead>
+                <tbody></tbody>
+            </table>
+        </section>
+        <section class="preview" id="preview-panel">
+            <div class="preview-header">
+                <span>Preview</span>
+                <button id="open-popup">Pop-up</button>
+                <a id="download-link" target="_blank" rel="noopener">Download</a>
+            </div>
+            <div id="preview-content"></div>
+        </section>
+    </main>
+
+    <div id="preview-popup" class="modal hidden">
+        <div class="modal-content">
+            <button id="close-popup">Schließen</button>
+            <div id="popup-body"></div>
+        </div>
+    </div>
+
+    <script src="/static/main.js"></script>
+</body>
+</html>

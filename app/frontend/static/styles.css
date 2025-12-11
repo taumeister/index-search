@@ -1,0 +1,149 @@
+body {
+    margin: 0;
+    font-family: "Segoe UI", Tahoma, sans-serif;
+    background: linear-gradient(180deg, #f3f5f9 0%, #ffffff 60%);
+    color: #1f2933;
+}
+
+header {
+    background: #1b3a5d;
+    color: #fff;
+    padding: 16px 24px;
+    box-shadow: 0 2px 6px rgba(0,0,0,0.1);
+}
+
+h1 {
+    margin: 0 0 8px 0;
+    font-weight: 600;
+}
+
+.search-bar {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
+.search-bar input {
+    padding: 10px 12px;
+    border: 1px solid #d1d5db;
+    border-radius: 6px;
+    min-width: 200px;
+    box-shadow: inset 0 1px 2px rgba(0,0,0,0.04);
+}
+
+.search-bar button {
+    background: #2d6cdf;
+    color: #fff;
+    border: none;
+    padding: 10px 16px;
+    border-radius: 6px;
+    cursor: pointer;
+}
+
+main {
+    display: grid;
+    grid-template-columns: 1.4fr 1fr;
+    gap: 12px;
+    padding: 12px;
+    height: calc(100vh - 120px);
+    box-sizing: border-box;
+}
+
+.results {
+    background: #fff;
+    border-radius: 8px;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+    overflow: auto;
+}
+
+table {
+    width: 100%;
+    border-collapse: collapse;
+}
+
+th, td {
+    padding: 10px;
+    border-bottom: 1px solid #e5e7eb;
+    text-align: left;
+    vertical-align: top;
+}
+
+th {
+    background: #f7f9fb;
+    position: sticky;
+    top: 0;
+    z-index: 1;
+}
+
+tr:hover {
+    background: #eef2f7;
+}
+
+.preview {
+    background: #fff;
+    border-radius: 8px;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+}
+
+.preview-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 10px 12px;
+    background: #f7f9fb;
+    border-bottom: 1px solid #e5e7eb;
+}
+
+.preview-header button, .preview-header a {
+    background: #e5e7eb;
+    border: none;
+    padding: 6px 10px;
+    border-radius: 4px;
+    text-decoration: none;
+    color: #111827;
+}
+
+#preview-content, #popup-body {
+    padding: 12px;
+    overflow: auto;
+    height: 100%;
+}
+
+.snippet mark {
+    background: #ffecb3;
+    color: #92400e;
+}
+
+.modal {
+    position: fixed;
+    top: 0; left: 0; right:0; bottom:0;
+    background: rgba(0,0,0,0.35);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.modal.hidden { display: none; }
+
+.modal-content {
+    background: #fff;
+    border-radius: 8px;
+    width: 80%;
+    height: 80%;
+    padding: 10px;
+    display: flex;
+    flex-direction: column;
+}
+
+#close-popup {
+    align-self: flex-end;
+}
+
+iframe.pdf-frame {
+    width: 100%;
+    height: 80vh;
+    border: none;
+}
