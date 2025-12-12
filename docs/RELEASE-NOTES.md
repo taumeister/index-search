@@ -1,5 +1,8 @@
 # Release-Notizen
 
+## v014 - Status stabil nach Reset
+- Admin-Status/Fehler-Endpunkte initialisieren die DB bei fehlenden Tabellen (kein 500 nach Index-Reset).
+
 ## v013 - Stabiler Indexer & Dashboard-Fehler
 - Indexer: Single-Writer-Queue (ein DB-Writer), `busy_timeout`, lädt bestehende Metadaten, vermeidet Locks bei mehreren Worker-Threads.
 - Reset löscht DB-Dateien wie bisher; Fehlerliste jetzt paginiert im Dashboard.

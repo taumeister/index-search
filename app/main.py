@@ -120,6 +120,7 @@ def create_app(config: Optional[CentralConfig] = None) -> FastAPI:
 
     @app.get("/api/admin/status")
     def admin_status():
+        db.init_db()
         with db.get_conn() as conn:
             status = db.get_status(conn)
             return status
@@ -176,9 +177,11 @@ def create_app(config: Optional[CentralConfig] = None) -> FastAPI:
 
     @app.get("/api/admin/errors")
     def admin_errors(limit: int = 50, offset: int = 0):
+        db.init_db()
         with db.get_conn() as conn:
             rows = db.list_errors(conn, limit=limit, offset=offset)
-            return {"errors": [dict(r) for r in rows]}
+            total = db.error_count(conn)
+            return {"errors": [dict(r) for r in rows], "total": total}
 
     def walk_tree(base: Path, max_depth: int = 4):
         def helper(p: Path, depth: int):
