@@ -76,3 +76,6 @@
 - DB-Modus auf DELETE-Journal gesetzt, Writer committet nach jedem Item (keine leeren Ergebnisse mehr).
 - Stop-Button aktiviert (setzt Stop-Flag), Reset/Lauf bleiben getrennt; Preflight-Resultat im Dashboard.
 - Single-Writer-Queue bleibt bestehen; letzte Indizierung: 474/474 PDFs erfolgreich, Suche liefert Treffer.
+
+## v019 - Stop-API fix
+- Stop-Endpoint aktiviert (Import), Tests: Indexlauf 474/474, Suche liefert Ergebnisse.

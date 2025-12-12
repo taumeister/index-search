@@ -15,7 +15,7 @@ from app import api
 from app import config_db
 from app.config_loader import CentralConfig, ensure_dirs, load_config
 from app.db import datenbank as db
-from app.indexer.index_lauf_service import run_index_lauf
+from app.indexer.index_lauf_service import run_index_lauf, stop_event
 
 logging.basicConfig(level=logging.INFO)
 index_lock = threading.Lock()
