@@ -1,5 +1,10 @@
 # Release-Notizen
 
+## v013 - Stabiler Indexer & Dashboard-Fehler
+- Indexer: Single-Writer-Queue (ein DB-Writer), `busy_timeout`, lädt bestehende Metadaten, vermeidet Locks bei mehreren Worker-Threads.
+- Reset löscht DB-Dateien wie bisher; Fehlerliste jetzt paginiert im Dashboard.
+- Fehler-API liefert Total, Dashboard hat Paging (50er Schritte).
+
 ## v012 - Dashboard & Config-DB
 - Neue Dashboard-Seite (`/dashboard`) mit Root-Verwaltung, Status, Fehlerliste, Index-Start/Reset.
 - Konfiguration liegt nun in `config/config.db` (Settings + Roots), verwaltet über UI/API; `central_config.ini` wird nicht mehr benötigt.

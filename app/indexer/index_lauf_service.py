@@ -6,6 +6,8 @@ from email.message import EmailMessage
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
+import queue
+import threading
 
 from app.config_loader import CentralConfig
 from app.db import datenbank as db
@@ -38,6 +40,7 @@ def run_index_lauf(config: CentralConfig) -> Dict[str, int]:
 
     with db.get_conn() as conn:
         run_id = db.record_index_run_start(conn, start_time)
+        existing_meta = db.list_existing_meta(conn)
 
     root_entries = config.paths.roots
     if not root_entries:
@@ -69,26 +72,118 @@ def run_index_lauf(config: CentralConfig) -> Dict[str, int]:
                 if path.suffix.lower() in SUPPORTED_EXTENSIONS:
                     to_process.append((path, path, source))
 
-    scanned_paths = []
+    counters["scanned"] = len(to_process)
+
+    work_queue: "queue.Queue[Optional[Dict]]" = queue.Queue(maxsize=200)
+    scanned_paths: set[str] = set()
+
+    def writer():
+        conn = db.connect()
+        local_existing = dict(existing_meta)
+        nonlocal scanned_paths
+        try:
+            while True:
+                item = work_queue.get()
+                if item is None:
+                    break
+                kind = item.get("type")
+                if kind == "error":
+                    scanned_paths.add(item["path"])
+                    db.record_file_error(
+                        conn,
+                        run_id=run_id,
+                        path=item["path"],
+                        error_type=item["error_type"],
+                        message=item["message"],
+                        created_at=datetime.now(timezone.utc).isoformat(),
+                    )
+                    counters["errors"] += 1
+                elif kind == "unchanged":
+                    scanned_paths.add(item["path"])
+                elif kind == "document":
+                    meta: DocumentMeta = item["meta"]
+                    scanned_paths.add(meta.path)
+                    existing = local_existing.get(meta.path)
+                    if existing and existing[0] == meta.size_bytes and existing[1] == meta.mtime:
+                        continue
+                    try:
+                        db.upsert_document(conn, meta)
+                        local_existing[meta.path] = (meta.size_bytes, meta.mtime)
+                        if existing:
+                            counters["updated"] += 1
+                        else:
+                            counters["added"] += 1
+                    except Exception as exc:
+                        db.record_file_error(
+                            conn,
+                            run_id=run_id,
+                            path=meta.path,
+                            error_type=type(exc).__name__,
+                            message=str(exc),
+                            created_at=datetime.now(timezone.utc).isoformat(),
+                        )
+                        counters["errors"] += 1
+                work_queue.task_done()
+        finally:
+            conn.close()
+
+    writer_thread = threading.Thread(target=writer, daemon=True)
+    writer_thread.start()
+
+    def process_file_task(real_path: Path, original_path: Path, source: str) -> None:
+        try:
+            stat = real_path.stat()
+        except FileNotFoundError:
+            work_queue.put({"type": "error", "path": str(original_path), "error_type": "FileNotFound", "message": "not found"})
+            return
+
+        max_size = config.indexer.max_file_size_mb
+        if max_size and stat.st_size > max_size * 1024 * 1024:
+            work_queue.put({"type": "unchanged", "path": str(original_path)})
+            return
+
+        ext = real_path.suffix.lower()
+        meta = DocumentMeta(
+            source=source,
+            path=str(original_path),
+            filename=original_path.name,
+            extension=ext,
+            size_bytes=stat.st_size,
+            ctime=stat.st_ctime,
+            mtime=stat.st_mtime,
+            atime=stat.st_atime if hasattr(stat, "st_atime") else None,
+            owner=get_owner(stat),
+            last_editor=get_owner(stat),
+        )
+        existing = existing_meta.get(str(original_path))
+        if existing and existing[0] == meta.size_bytes and existing[1] == meta.mtime:
+            work_queue.put({"type": "unchanged", "path": str(original_path)})
+            return
+
+        try:
+            fill_content(meta, real_path, ext)
+            work_queue.put({"type": "document", "meta": meta})
+        except Exception as exc:
+            logger.error("Fehler bei %s: %s", original_path, exc)
+            work_queue.put(
+                {
+                    "type": "error",
+                    "path": str(original_path),
+                    "error_type": type(exc).__name__,
+                    "message": str(exc),
+                }
+            )
+
     with concurrent.futures.ThreadPoolExecutor(max_workers=config.indexer.worker_count) as pool:
         futures = [
-            pool.submit(process_file, real_path, original_path, source, config, run_id)
+            pool.submit(process_file_task, real_path, original_path, source)
             for real_path, original_path, source in to_process
         ]
-        for future in concurrent.futures.as_completed(futures):
-            result = future.result()
-            counters["scanned"] += 1
-            if result["status"] == "added":
-                counters["added"] += 1
-            elif result["status"] == "updated":
-                counters["updated"] += 1
-            elif result["status"] == "unchanged":
-                pass
-            else:
-                counters["errors"] += 1
-            scanned_paths.append(result["path"])
+        concurrent.futures.wait(futures)
 
-    # Entferne fehlende Dateien
+    work_queue.put(None)
+    writer_thread.join()
+
     with db.get_conn() as conn:
         existing_paths = db.list_paths_by_sources(conn, [src for _, src in root_entries])
         missing = set(existing_paths) - set(scanned_paths)

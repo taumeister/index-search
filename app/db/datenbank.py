@@ -34,6 +34,7 @@ def connect() -> sqlite3.Connection:
     conn = sqlite3.connect(DB_PATH)
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA journal_mode=WAL;")
+    conn.execute("PRAGMA busy_timeout=10000;")
     conn.execute("PRAGMA foreign_keys=ON;")
     return conn
 
@@ -327,3 +328,12 @@ def list_errors(conn: sqlite3.Connection, limit: int = 50, offset: int = 0) -> L
         (limit, offset),
     )
     return cursor.fetchall()
+
+
+def error_count(conn: sqlite3.Connection) -> int:
+    return conn.execute("SELECT COUNT(*) FROM file_errors").fetchone()[0]
+
+
+def list_existing_meta(conn: sqlite3.Connection) -> Dict[str, Tuple[float, float]]:
+    cursor = conn.execute("SELECT path, size_bytes, mtime FROM documents")
+    return {row["path"]: (row["size_bytes"], row["mtime"]) for row in cursor.fetchall()}

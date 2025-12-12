@@ -58,10 +58,17 @@
             </table>
             <h2>Fehler</h2>
             <div class="error-list" id="errors"></div>
+            <div class="actions">
+                <button id="prev-errors">Zurück</button>
+                <button id="next-errors">Weiter</button>
+                <span id="errors-info"></span>
+            </div>
         </section>
     </div>
     <script>
         const state = { baseRoot: "", tree: [], roots: [] };
+        let errorOffset = 0;
+        const errorLimit = 50;
 
         async function fetchJSON(url, opts={}) {
             const res = await fetch(url, opts);
@@ -152,7 +159,7 @@
         }
 
         async function loadErrors() {
-            const data = await fetchJSON("/api/admin/errors?limit=50");
+            const data = await fetchJSON(`/api/admin/errors?limit=${errorLimit}&offset=${errorOffset}`);
             const box = document.getElementById("errors");
             box.innerHTML = "";
             (data.errors || []).forEach((e) => {
@@ -161,6 +168,10 @@
                 div.textContent = `${e.created_at}: ${e.path} — ${e.error_type} (${e.message})`;
                 box.appendChild(div);
             });
+            const info = document.getElementById("errors-info");
+            info.textContent = `${Math.min(data.total, errorOffset + 1)} - ${Math.min(data.total, errorOffset + errorLimit)} / ${data.total || 0}`;
+            document.getElementById("prev-errors").disabled = errorOffset <= 0;
+            document.getElementById("next-errors").disabled = errorOffset + errorLimit >= (data.total || 0);
         }
 
         async function triggerRun(fullReset=false) {
@@ -188,6 +199,15 @@
 
         refreshAll();
         setInterval(loadStatus, 5000);
+
+        document.getElementById("prev-errors").addEventListener("click", () => {
+            errorOffset = Math.max(0, errorOffset - errorLimit);
+            loadErrors();
+        });
+        document.getElementById("next-errors").addEventListener("click", () => {
+            errorOffset = errorOffset + errorLimit;
+            loadErrors();
+        });
     </script>
 </body>
 </html>
