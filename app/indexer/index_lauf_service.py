@@ -16,6 +16,8 @@ from app.indexer import extractors
 
 logger = logging.getLogger("indexer")
 
+stop_event = threading.Event()
+
 
 SUPPORTED_EXTENSIONS = {".pdf", ".rtf", ".msg", ".txt"}
 
@@ -32,6 +34,7 @@ def setup_logging(config: CentralConfig) -> None:
 
 
 def run_index_lauf(config: CentralConfig) -> Dict[str, int]:
+    stop_event.clear()
     db.init_db()
     setup_logging(config)
 
@@ -72,8 +75,6 @@ def run_index_lauf(config: CentralConfig) -> Dict[str, int]:
                 if path.suffix.lower() in SUPPORTED_EXTENSIONS:
                     to_process.append((path, path, source))
 
-    counters["scanned"] = len(to_process)
-
     work_queue: "queue.Queue[Optional[Dict]]" = queue.Queue(maxsize=200)
     scanned_paths: set[str] = set()
 
@@ -88,20 +89,25 @@ def run_index_lauf(config: CentralConfig) -> Dict[str, int]:
                     break
                 kind = item.get("type")
                 if kind == "error":
+                    counters["scanned"] += 1
                     scanned_paths.add(item["path"])
-                    db.record_file_error(
-                        conn,
-                        run_id=run_id,
-                        path=item["path"],
-                        error_type=item["error_type"],
-                        message=item["message"],
-                        created_at=datetime.now(timezone.utc).isoformat(),
-                    )
-                    counters["errors"] += 1
+                    try:
+                        db.record_file_error(
+                            conn,
+                            run_id=run_id,
+                            path=item["path"],
+                            error_type=item["error_type"],
+                            message=item["message"],
+                            created_at=datetime.now(timezone.utc).isoformat(),
+                        )
+                    finally:
+                        counters["errors"] += 1
                 elif kind == "unchanged":
+                    counters["scanned"] += 1
                     scanned_paths.add(item["path"])
                 elif kind == "document":
                     meta: DocumentMeta = item["meta"]
+                    counters["scanned"] += 1
                     scanned_paths.add(meta.path)
                     existing = local_existing.get(meta.path)
                     if existing and existing[0] == meta.size_bytes and existing[1] == meta.mtime:
@@ -114,16 +120,28 @@ def run_index_lauf(config: CentralConfig) -> Dict[str, int]:
                         else:
                             counters["added"] += 1
                     except Exception as exc:
-                        db.record_file_error(
-                            conn,
-                            run_id=run_id,
-                            path=meta.path,
-                            error_type=type(exc).__name__,
-                            message=str(exc),
-                            created_at=datetime.now(timezone.utc).isoformat(),
-                        )
-                        counters["errors"] += 1
+                        try:
+                            db.record_file_error(
+                                conn,
+                                run_id=run_id,
+                                path=meta.path,
+                                error_type=type(exc).__name__,
+                                message=str(exc),
+                                created_at=datetime.now(timezone.utc).isoformat(),
+                            )
+                        finally:
+                            counters["errors"] += 1
+                        # Attempt to reopen connection if broken
+                        try:
+                            conn.close()
+                        except Exception:
+                            pass
+                        conn = db.connect()
                 work_queue.task_done()
+                try:
+                    conn.commit()
+                except Exception:
+                    pass
         finally:
             conn.close()
 
@@ -131,6 +149,8 @@ def run_index_lauf(config: CentralConfig) -> Dict[str, int]:
     writer_thread.start()
 
     def process_file_task(real_path: Path, original_path: Path, source: str) -> None:
+        if stop_event.is_set():
+            return
         try:
             stat = real_path.stat()
         except FileNotFoundError:
@@ -162,6 +182,8 @@ def run_index_lauf(config: CentralConfig) -> Dict[str, int]:
 
         try:
             fill_content(meta, real_path, ext)
+            if stop_event.is_set():
+                return
             work_queue.put({"type": "document", "meta": meta})
         except Exception as exc:
             logger.error("Fehler bei %s: %s", original_path, exc)
@@ -190,7 +212,7 @@ def run_index_lauf(config: CentralConfig) -> Dict[str, int]:
         removed_count = db.remove_documents_by_paths(conn, missing)
         counters["removed"] = removed_count
 
-    status = "completed" if counters["errors"] == 0 else "completed_with_errors"
+    status = "stopped" if stop_event.is_set() else ("completed" if counters["errors"] == 0 else "completed_with_errors")
     with db.get_conn() as conn:
         db.record_index_run_finish(
             conn,

@@ -71,3 +71,8 @@
 
 ## v017 - Such-Fix (ORDER BY)
 - Leere/`*`-Suchen nutzen kein bm25 mehr, wenn kein FTS-Join erfolgt (kein `no such column documents_fts` mehr).
+
+## v018 - Stabiler Indexlauf & Stop
+- DB-Modus auf DELETE-Journal gesetzt, Writer committet nach jedem Item (keine leeren Ergebnisse mehr).
+- Stop-Button aktiviert (setzt Stop-Flag), Reset/Lauf bleiben getrennt; Preflight-Resultat im Dashboard.
+- Single-Writer-Queue bleibt bestehen; letzte Indizierung: 474/474 PDFs erfolgreich, Suche liefert Treffer.

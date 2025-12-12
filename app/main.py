@@ -205,8 +205,9 @@ def create_app(config: Optional[CentralConfig] = None) -> FastAPI:
 
     @app.post("/api/admin/index/stop")
     def stop_index():
-        # Not implemented (placeholder)
-        return JSONResponse({"status": "not_implemented"}, status_code=501)
+        stop_event.set()
+        # writer will flush and status will be "stopped"
+        return {"status": "stopping"}
 
     @app.get("/api/admin/preflight")
     def preflight():

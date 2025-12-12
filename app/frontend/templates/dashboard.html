@@ -42,7 +42,7 @@
         <section class="panel">
             <div class="actions">
                 <button id="start-run">Index starten</button>
-                <button id="stop-run" disabled title="Stop noch nicht implementiert">Index stoppen</button>
+                <button id="stop-run">Index stoppen</button>
                 <button id="preflight">Preflight (zählen)</button>
                 <button id="reset-run" class="destructive">Index leeren (ohne Start)</button>
                 <button id="reset-run-start" class="destructive">Index leeren &amp; neu starten</button>
@@ -242,6 +242,9 @@
             if (confirm("Index leeren und direkt neu starten?")) {
                 await fetchJSON(`/api/admin/index/reset_run`, { method: "POST" });
             }
+        });
+        document.getElementById("stop-run").addEventListener("click", async () => {
+            await fetchJSON(`/api/admin/index/stop`, { method: "POST" });
         });
         document.getElementById("add-root").addEventListener("click", async () => {
             const path = document.getElementById("new-path").value.trim();
