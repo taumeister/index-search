@@ -65,6 +65,6 @@
 
 ## v016 - Actions & Preflight
 - Buttons vereinheitlicht, Reset trennt sich vom Laufstart (leert nur).
-- Neue Actions: Index starten, Stop-Placeholder, Preflight-Zählung, Reset ohne Start.
-- Preflight zählt Dateien pro Endung unter aktiven Roots.
+- Neue Actions: Index starten, Stop-Placeholder, Preflight-Zählung, Reset ohne Start, Reset & Laufstart.
+- Preflight zählt Dateien pro Endung unter aktiven Roots und zeigt Ergebnis im Dashboard.
 - Suche: Leere Query liefert wieder Treffer (MATCH wird übersprungen).

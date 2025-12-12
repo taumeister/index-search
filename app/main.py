@@ -74,6 +74,7 @@ def create_app(config: Optional[CentralConfig] = None) -> FastAPI:
         limit: int = 200,
         offset: int = 0,
     ):
+        db.init_db()
         with db.get_conn() as conn:
             filters = {}
             if source:
@@ -183,6 +184,24 @@ def create_app(config: Optional[CentralConfig] = None) -> FastAPI:
         finally:
             index_lock.release()
         return {"status": "reset"}
+
+    @app.post("/api/admin/index/reset_run")
+    def reset_and_run():
+        if not index_lock.acquire(blocking=False):
+            return JSONResponse({"status": "busy"}, status_code=409)
+        def runner():
+            try:
+                for suffix in ["data/index.db", "data/index.db-wal", "data/index.db-shm"]:
+                    p = Path(suffix)
+                    if p.exists():
+                        p.unlink()
+                db.init_db()
+                cfg = load_config()
+                run_index_lauf(cfg)
+            finally:
+                index_lock.release()
+        threading.Thread(target=runner, daemon=True).start()
+        return {"status": "started_after_reset"}
 
     @app.post("/api/admin/index/stop")
     def stop_index():

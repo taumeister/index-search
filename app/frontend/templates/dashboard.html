@@ -45,8 +45,10 @@
                 <button id="stop-run" disabled title="Stop noch nicht implementiert">Index stoppen</button>
                 <button id="preflight">Preflight (zählen)</button>
                 <button id="reset-run" class="destructive">Index leeren (ohne Start)</button>
+                <button id="reset-run-start" class="destructive">Index leeren &amp; neu starten</button>
             </div>
             <div class="chips" id="ext-counts"></div>
+            <div id="preflight-result" style="font-size:13px;color:#374151;"></div>
             <h2>Roots</h2>
             <div class="roots-list" id="roots"></div>
             <div style="margin-top:8px;">
@@ -233,7 +235,13 @@
         });
         document.getElementById("preflight").addEventListener("click", async () => {
             const data = await fetchJSON("/api/admin/preflight");
-            alert(`Preflight:\nPDF: ${data.counts[".pdf"]}\nRTF: ${data.counts[".rtf"]}\nMSG: ${data.counts[".msg"]}\nTXT: ${data.counts[".txt"]}`);
+            const box = document.getElementById("preflight-result");
+            box.textContent = `Preflight: PDF ${data.counts[".pdf"]} | RTF ${data.counts[".rtf"]} | MSG ${data.counts[".msg"]} | TXT ${data.counts[".txt"]}`;
+        });
+        document.getElementById("reset-run-start").addEventListener("click", async () => {
+            if (confirm("Index leeren und direkt neu starten?")) {
+                await fetchJSON(`/api/admin/index/reset_run`, { method: "POST" });
+            }
         });
         document.getElementById("add-root").addEventListener("click", async () => {
             const path = document.getElementById("new-path").value.trim();
