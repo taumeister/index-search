@@ -21,11 +21,16 @@
         button.destructive { background: #fef2f2; color: #991b1b; border: 1px solid #fca5a5; }
         .error-list { max-height: 260px; overflow: auto; }
         .error-item { border-bottom: 1px solid #e5e7eb; padding: 4px 0; }
+        .button-link { padding: 8px 12px; background: #e5e7eb; border-radius: 6px; text-decoration: none; color: #111827; border: 1px solid #cbd5e1; }
+        .toggle { cursor: pointer; margin-right: 4px; color: #4b5563; }
     </style>
 </head>
 <body>
     <header>
         <h1>System &amp; Index</h1>
+        <div style="margin-left:auto;">
+            <a href="/" class="button-link">Zur Suche</a>
+        </div>
     </header>
     <div class="system-layout">
         <section class="panel">
@@ -76,22 +81,43 @@
             return res.json();
         }
 
-        function renderTree(nodes, container) {
-            const ul = document.createElement("ul");
-            nodes.forEach((n) => {
-                const li = document.createElement("li");
-                li.textContent = n.name;
-                li.title = n.path;
-                li.addEventListener("click", (e) => {
-                    e.stopPropagation();
-                    document.getElementById("new-path").value = n.path;
-                });
-                if (n.children && n.children.length) {
-                    li.appendChild(renderTree(n.children, document.createElement("div")));
+        async function loadChildren(path, ul) {
+            const data = await fetchJSON(`/api/admin/tree?parent=${encodeURIComponent(path || "")}`);
+            return data.children || [];
+        }
+
+        function createNode(n, depth=0) {
+            const li = document.createElement("li");
+            const toggle = document.createElement("span");
+            toggle.className = "toggle";
+            toggle.textContent = n.has_children ? "▶" : "";
+            toggle.addEventListener("click", async (e) => {
+                e.stopPropagation();
+                if (!n.has_children) return;
+                if (li.dataset.expanded === "true") {
+                    li.dataset.expanded = "false";
+                    toggle.textContent = "▶";
+                    const childUl = li.querySelector("ul");
+                    if (childUl) childUl.remove();
+                } else {
+                    li.dataset.expanded = "true";
+                    toggle.textContent = "▼";
+                    const childUl = document.createElement("ul");
+                    const children = await loadChildren(n.path, childUl);
+                    children.forEach((c) => childUl.appendChild(createNode(c, depth + 1)));
+                    li.appendChild(childUl);
                 }
-                ul.appendChild(li);
             });
-            return ul;
+            const label = document.createElement("span");
+            label.textContent = n.name;
+            label.title = n.path;
+            label.addEventListener("click", (e) => {
+                e.stopPropagation();
+                document.getElementById("new-path").value = n.path;
+            });
+            li.appendChild(toggle);
+            li.appendChild(label);
+            return li;
         }
 
         async function loadTree() {
@@ -100,7 +126,15 @@
             document.getElementById("base-root").textContent = data.base;
             const container = document.getElementById("tree");
             container.innerHTML = "";
-            container.appendChild(renderTree(data.tree, container));
+            const rootBtn = document.createElement("button");
+            rootBtn.textContent = data.base;
+            rootBtn.addEventListener("click", () => {
+                document.getElementById("new-path").value = data.base;
+            });
+            container.appendChild(rootBtn);
+            const ul = document.createElement("ul");
+            (data.children || []).forEach((c) => ul.appendChild(createNode(c, 0)));
+            container.appendChild(ul);
         }
 
         async function loadRoots() {
@@ -135,6 +169,12 @@
             });
         }
 
+        function fmtDate(s) {
+            if (!s) return "";
+            const d = new Date(s);
+            return d.toLocaleString("de-DE", { year:"numeric", month:"2-digit", day:"2-digit", hour:"2-digit", minute:"2-digit" });
+        }
+
         async function loadStatus() {
             const data = await fetchJSON("/api/admin/status");
             const b = document.getElementById("status-body");
@@ -153,7 +193,7 @@
             runs.innerHTML = "";
             (data.recent_runs || []).forEach((r) => {
                 const tr = document.createElement("tr");
-                tr.innerHTML = `<td>${r.started_at || ""}</td><td>${r.status || ""}</td><td>${r.scanned_files || ""}</td><td>${r.added || ""}</td><td>${r.errors || ""}</td>`;
+                tr.innerHTML = `<td>${fmtDate(r.started_at)} - ${fmtDate(r.finished_at)}</td><td>${r.status || ""}</td><td>${r.scanned_files || ""}</td><td>${r.added || ""}</td><td>${r.errors || ""}</td>`;
                 runs.appendChild(tr);
             });
         }

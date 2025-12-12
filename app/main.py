@@ -183,28 +183,22 @@ def create_app(config: Optional[CentralConfig] = None) -> FastAPI:
             total = db.error_count(conn)
             return {"errors": [dict(r) for r in rows], "total": total}
 
-    def walk_tree(base: Path, max_depth: int = 4):
-        def helper(p: Path, depth: int):
-            if depth > max_depth:
-                return []
-            try:
-                entries = sorted([e for e in p.iterdir() if e.is_dir()])
-            except Exception:
-                return []
-            nodes = []
-            for entry in entries:
-                children = helper(entry, depth + 1)
-                nodes.append({"name": entry.name, "path": str(entry), "children": children})
-            return nodes
-        return helper(base, 0)
+    def list_children(path: Path) -> list:
+        try:
+            return [
+                {"name": entry.name, "path": str(entry), "has_children": any(child.is_dir() for child in entry.iterdir())}
+                for entry in sorted([e for e in path.iterdir() if e.is_dir()])
+            ]
+        except Exception:
+            return []
 
     @app.get("/api/admin/tree")
-    def admin_tree(max_depth: int = 4):
+    def admin_tree(parent: Optional[str] = Query(None)):
         base_root = Path(config_db.get_setting("base_data_root", "/data"))
         if not base_root.exists():
-            return {"base": str(base_root), "tree": []}
-        tree = walk_tree(base_root, max_depth=max_depth)
-        return {"base": str(base_root), "tree": tree}
+            return {"base": str(base_root), "children": []}
+        target = Path(parent) if parent else base_root
+        return {"base": str(base_root), "parent": str(target), "children": list_children(target)}
 
     return app
 

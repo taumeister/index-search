@@ -58,3 +58,7 @@
 - Explorer-ähnliche Weboberfläche mit Preview (PDF via pdf.js, MSG strukturiert, RTF/TXT als Text).
 - Zentrale Konfiguration mit Validator, Beispiel-INI.
 - Container-Setup (Standard-Port 8010, Host-Pfad per INDEX_ROOT read-only gemountet), Tests (Config, DB, Indexer, API), Dokumentation.
+## v015 - UX-Verbesserungen Dashboard/Suche
+- Buttons wechselseitig zwischen Suche und Dashboard.
+- Laufzeiten im Dashboard menschenlesbar (Datum/Uhrzeit, Start–Ende).
+- Fehlerliste paginiert bleibt erhalten; Explorer lazy-load mit manuellem Aufklappen, Basis-Root direkt klickbar.
