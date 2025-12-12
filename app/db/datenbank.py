@@ -192,18 +192,31 @@ def search_documents(
         direction = "DESC" if sort_dir == "desc" else "ASC"
         order_by = f"ORDER BY d.{sort_key} {direction}"
 
-    cursor = conn.execute(
-        f"""
-        SELECT d.*, snippet(documents_fts, 1, '<mark>', '</mark>', '...', 10) AS snippet
-        FROM documents_fts
-        JOIN documents d ON d.id = documents_fts.doc_id
-        WHERE documents_fts MATCH ?
-        {where_sql}
-        {order_by}
-        LIMIT ? OFFSET ?;
-        """,
-        [query, *params, limit, offset],
-    )
+    if query.strip() == "*":
+        cursor = conn.execute(
+            f"""
+            SELECT d.*, '' AS snippet
+            FROM documents d
+            WHERE 1=1
+            {where_sql}
+            {order_by}
+            LIMIT ? OFFSET ?;
+            """,
+            [*params, limit, offset],
+        )
+    else:
+        cursor = conn.execute(
+            f"""
+            SELECT d.*, snippet(documents_fts, 1, '<mark>', '</mark>', '...', 10) AS snippet
+            FROM documents_fts
+            JOIN documents d ON d.id = documents_fts.doc_id
+            WHERE documents_fts MATCH ?
+            {where_sql}
+            {order_by}
+            LIMIT ? OFFSET ?;
+            """,
+            [query, *params, limit, offset],
+        )
     return cursor.fetchall()
 
 

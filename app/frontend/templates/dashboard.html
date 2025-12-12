@@ -41,8 +41,10 @@
         </section>
         <section class="panel">
             <div class="actions">
-                <button id="start-run">Indexlauf starten</button>
-                <button id="reset-run" class="destructive">Index leeren &amp; neu aufbauen</button>
+                <button id="start-run">Index starten</button>
+                <button id="stop-run" disabled title="Stop noch nicht implementiert">Index stoppen</button>
+                <button id="preflight">Preflight (zählen)</button>
+                <button id="reset-run" class="destructive">Index leeren (ohne Start)</button>
             </div>
             <div class="chips" id="ext-counts"></div>
             <h2>Roots</h2>
@@ -222,8 +224,16 @@
         }
 
         document.getElementById("start-run").addEventListener("click", () => triggerRun(false));
-        document.getElementById("reset-run").addEventListener("click", () => {
-            if (confirm("Index leeren und neu aufbauen?")) triggerRun(true);
+        document.getElementById("reset-run").addEventListener("click", async () => {
+            if (confirm("Index leeren? Dies startet keinen neuen Lauf.")) {
+                await fetchJSON(`/api/admin/index/reset`, { method: "POST" });
+                loadStatus();
+                loadErrors();
+            }
+        });
+        document.getElementById("preflight").addEventListener("click", async () => {
+            const data = await fetchJSON("/api/admin/preflight");
+            alert(`Preflight:\nPDF: ${data.counts[".pdf"]}\nRTF: ${data.counts[".rtf"]}\nMSG: ${data.counts[".msg"]}\nTXT: ${data.counts[".txt"]}`);
         });
         document.getElementById("add-root").addEventListener("click", async () => {
             const path = document.getElementById("new-path").value.trim();

@@ -156,11 +156,6 @@ def create_app(config: Optional[CentralConfig] = None) -> FastAPI:
             return "busy"
         def runner():
             try:
-                if full_reset:
-                    for suffix in ["data/index.db", "data/index.db-wal", "data/index.db-shm"]:
-                        p = Path(suffix)
-                        if p.exists():
-                            p.unlink()
                 cfg = load_config()
                 run_index_lauf(cfg)
             finally:
@@ -174,6 +169,37 @@ def create_app(config: Optional[CentralConfig] = None) -> FastAPI:
         if status == "busy":
             return JSONResponse({"status": "busy"}, status_code=409)
         return {"status": status}
+
+    @app.post("/api/admin/index/reset")
+    def reset_index():
+        if not index_lock.acquire(blocking=False):
+            return JSONResponse({"status": "busy"}, status_code=409)
+        try:
+            for suffix in ["data/index.db", "data/index.db-wal", "data/index.db-shm"]:
+                p = Path(suffix)
+                if p.exists():
+                    p.unlink()
+            db.init_db()
+        finally:
+            index_lock.release()
+        return {"status": "reset"}
+
+    @app.post("/api/admin/index/stop")
+    def stop_index():
+        # Not implemented (placeholder)
+        return JSONResponse({"status": "not_implemented"}, status_code=501)
+
+    @app.get("/api/admin/preflight")
+    def preflight():
+        cfg = load_config()
+        exts = {".pdf": 0, ".rtf": 0, ".msg": 0, ".txt": 0}
+        for root, _label in cfg.paths.roots:
+            for dirpath, _, filenames in os.walk(root):
+                for name in filenames:
+                    s = Path(name).suffix.lower()
+                    if s in exts:
+                        exts[s] += 1
+        return {"counts": exts, "roots": [str(r[0]) for r in cfg.paths.roots]}
 
     @app.get("/api/admin/errors")
     def admin_errors(limit: int = 50, offset: int = 0):

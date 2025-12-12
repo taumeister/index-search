@@ -26,6 +26,15 @@ h1 {
     margin: 0 0 8px 0;
     font-weight: 600;
 }
+.button-link {
+    padding: 8px 12px;
+    background: #e5e7eb;
+    border-radius: 6px;
+    text-decoration: none;
+    color: #111827;
+    border: 1px solid #cbd5e1;
+    font-size: 14px;
+}
 
 .search-bar {
     display: flex;

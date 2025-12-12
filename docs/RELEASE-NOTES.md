@@ -62,3 +62,9 @@
 - Buttons wechselseitig zwischen Suche und Dashboard.
 - Laufzeiten im Dashboard menschenlesbar (Datum/Uhrzeit, Start–Ende).
 - Fehlerliste paginiert bleibt erhalten; Explorer lazy-load mit manuellem Aufklappen, Basis-Root direkt klickbar.
+
+## v016 - Actions & Preflight
+- Buttons vereinheitlicht, Reset trennt sich vom Laufstart (leert nur).
+- Neue Actions: Index starten, Stop-Placeholder, Preflight-Zählung, Reset ohne Start.
+- Preflight zählt Dateien pro Endung unter aktiven Roots.
+- Suche: Leere Query liefert wieder Treffer (MATCH wird übersprungen).
