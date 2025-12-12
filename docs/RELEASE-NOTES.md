@@ -1,5 +1,10 @@
 # Release-Notizen
 
+## v012 - Dashboard & Config-DB
+- Neue Dashboard-Seite (`/dashboard`) mit Root-Verwaltung, Status, Fehlerliste, Index-Start/Reset.
+- Konfiguration liegt nun in `config/config.db` (Settings + Roots), verwaltet über UI/API; `central_config.ini` wird nicht mehr benötigt.
+- Basis-Explorer zeigt gemountete Unterordner, Roots können aktiviert/deaktiviert/gelöscht werden; Status auto-refresh alle 5s.
+
 ## v011 - Feste Typ-Auswahl
 - Typ-Filter zeigt immer alle unterstützten Endungen (.pdf/.rtf/.msg/.txt), unabhängig von aktuellen Treffern.
 

@@ -303,7 +303,8 @@ def get_status(conn: sqlite3.Connection) -> Dict[str, Any]:
     recent_runs = conn.execute(
         "SELECT * FROM index_runs ORDER BY started_at DESC LIMIT 10"
     ).fetchall()
-    return {"total_docs": total_docs, "last_run": last_run, "recent_runs": recent_runs}
+    ext_counts = conn.execute("SELECT extension, COUNT(*) AS c FROM documents GROUP BY extension").fetchall()
+    return {"total_docs": total_docs, "last_run": last_run, "recent_runs": recent_runs, "ext_counts": ext_counts}
 
 
 def list_paths_by_sources(conn: sqlite3.Connection, sources: List[str]) -> List[str]:
@@ -314,3 +315,15 @@ def list_paths_by_sources(conn: sqlite3.Connection, sources: List[str]) -> List[
         sources,
     )
     return [row[0] for row in cursor.fetchall()]
+
+
+def list_errors(conn: sqlite3.Connection, limit: int = 50, offset: int = 0) -> List[sqlite3.Row]:
+    cursor = conn.execute(
+        """
+        SELECT * FROM file_errors
+        ORDER BY created_at DESC
+        LIMIT ? OFFSET ?
+        """,
+        (limit, offset),
+    )
+    return cursor.fetchall()

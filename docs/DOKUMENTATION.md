@@ -22,12 +22,10 @@
 - Logging: `index_runs` (Laufstatus) und `file_errors`.
 - WAL-Mode aktiviert.
 
-## Konfiguration (`config/central_config.ini`)
-- `[paths] roots`: Liste von Pfaden oder `pfad:label`. Ohne Label wird der letzte Ordnername als `source` genutzt. Leere Liste erlaubt.
-- `[indexer]`: `worker_count` (1–8, Default 2), `run_interval_cron` (optional), `max_file_size_mb` (optional).
-- `[smtp]`: Host/Port/TLS/Auth/From/To. Wenn leer, kein Mailversand (Start trotzdem möglich).
-- `[ui]`: `default_preview` (`panel`/`popup`), `snippet_length`.
-- `[logging]`: Level, Log-Verzeichnis, Rotation (MB).
+## Konfiguration (`config/config.db`)
+- SQLite-basierte Konfiguration mit Tabellen `settings` (Basiswerte) und `roots` (Quellen).
+- Defaults werden beim Start angelegt (`base_data_root=/data`, `worker_count=2`, `snippet_length=240`, Logging etc.).
+- Verwaltung erfolgt über das Dashboard (`/dashboard`): Roots hinzufügen/entfernen/aktivieren, Indexlauf starten, Reset auslösen.
 
 ## Indexer
 - Change-Detection: Vergleicht `size_bytes` + `mtime`; nur geänderte/neue Dateien werden extrahiert.
@@ -38,11 +36,16 @@
 
 ## Web-API
 - `GET /`: Hauptseite.
+- `GET /dashboard`: System/Dashboard mit Roots/Status.
 - `GET /api/search`: Parameter `q`, optional `source`, `extension`, `limit`, `offset`; liefert Treffer mit Snippet.
 - Suchlogik: Mehrere Wörter werden als AND kombiniert, Tokens werden als Prefix (`wort*`) gesucht; leere Suche zeigt alle Treffer.
 - `GET /api/document/{id}`: Metadaten + Volltext.
 - `GET /api/document/{id}/file`: Originaldatei (Download/Inline).
 - `GET /api/admin/status`: Gesamtanzahl, letzter Lauf, Historie.
+- `GET/POST/DELETE /api/admin/roots`: Roots verwalten (aktiv, Pfad, Label).
+- `POST /api/admin/index/run`: Indexlauf starten, optional Reset.
+- `GET /api/admin/errors`: Fehlerliste.
+- `GET /api/admin/tree`: Verzeichnisbaum unter `base_data_root`.
 
 ## Frontend
 - Layout: Suche oben, Trefferliste links, Preview rechts (umschaltbar auf Popup).

@@ -3,18 +3,22 @@ from pathlib import Path
 from typing import Optional
 
 import uvicorn
-from fastapi import Depends, FastAPI, HTTPException, Query
-from fastapi.responses import FileResponse, HTMLResponse
+from fastapi import Depends, FastAPI, HTTPException, Query, Request
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
-from fastapi import Request
 import mimetypes
+import threading
+import os
 
 from app import api
+from app import config_db
 from app.config_loader import CentralConfig, ensure_dirs, load_config
 from app.db import datenbank as db
+from app.indexer.index_lauf_service import run_index_lauf
 
 logging.basicConfig(level=logging.INFO)
+index_lock = threading.Lock()
 
 
 def get_config() -> CentralConfig:
@@ -50,6 +54,10 @@ def create_app(config: Optional[CentralConfig] = None) -> FastAPI:
             "index.html",
             {"request": request, "default_preview": config.ui.default_preview, "snippet_length": config.ui.snippet_length},
         )
+
+    @app.get("/dashboard", response_class=HTMLResponse)
+    def dashboard(request: Request):
+        return templates.TemplateResponse("dashboard.html", {"request": request})
 
     @app.get("/viewer", response_class=HTMLResponse)
     def viewer(request: Request, id: int = Query(...)):
@@ -115,6 +123,85 @@ def create_app(config: Optional[CentralConfig] = None) -> FastAPI:
         with db.get_conn() as conn:
             status = db.get_status(conn)
             return status
+
+    @app.get("/api/admin/roots")
+    def admin_roots():
+        roots = [
+            {"id": rid, "path": path, "label": label, "active": active}
+            for path, label, rid, active in config_db.list_roots(active_only=False)
+        ]
+        return {"roots": roots, "base_data_root": config_db.get_setting("base_data_root", "/data")}
+
+    @app.post("/api/admin/roots")
+    def add_root(path: str = Query(...), label: Optional[str] = Query(None), active: bool = Query(True)):
+        base = config_db.get_setting("base_data_root", "/data")
+        if base and not str(path).startswith(base):
+            raise HTTPException(status_code=400, detail=f"Pfad muss unter {base} liegen")
+        rid = config_db.add_root(path, label, active)
+        return {"id": rid}
+
+    @app.delete("/api/admin/roots/{root_id}")
+    def delete_root(root_id: int):
+        config_db.delete_root(root_id)
+        return {"status": "ok"}
+
+    @app.post("/api/admin/roots/{root_id}/activate")
+    def activate_root(root_id: int, active: bool = Query(True)):
+        config_db.update_root_active(root_id, active)
+        return {"status": "ok"}
+
+    def _start_index(full_reset: bool = False) -> str:
+        if not index_lock.acquire(blocking=False):
+            return "busy"
+        def runner():
+            try:
+                if full_reset:
+                    for suffix in ["data/index.db", "data/index.db-wal", "data/index.db-shm"]:
+                        p = Path(suffix)
+                        if p.exists():
+                            p.unlink()
+                cfg = load_config()
+                run_index_lauf(cfg)
+            finally:
+                index_lock.release()
+        threading.Thread(target=runner, daemon=True).start()
+        return "started"
+
+    @app.post("/api/admin/index/run")
+    def trigger_index(full_reset: bool = Query(False)):
+        status = _start_index(full_reset)
+        if status == "busy":
+            return JSONResponse({"status": "busy"}, status_code=409)
+        return {"status": status}
+
+    @app.get("/api/admin/errors")
+    def admin_errors(limit: int = 50, offset: int = 0):
+        with db.get_conn() as conn:
+            rows = db.list_errors(conn, limit=limit, offset=offset)
+            return {"errors": [dict(r) for r in rows]}
+
+    def walk_tree(base: Path, max_depth: int = 4):
+        def helper(p: Path, depth: int):
+            if depth > max_depth:
+                return []
+            try:
+                entries = sorted([e for e in p.iterdir() if e.is_dir()])
+            except Exception:
+                return []
+            nodes = []
+            for entry in entries:
+                children = helper(entry, depth + 1)
+                nodes.append({"name": entry.name, "path": str(entry), "children": children})
+            return nodes
+        return helper(base, 0)
+
+    @app.get("/api/admin/tree")
+    def admin_tree(max_depth: int = 4):
+        base_root = Path(config_db.get_setting("base_data_root", "/data"))
+        if not base_root.exists():
+            return {"base": str(base_root), "tree": []}
+        tree = walk_tree(base_root, max_depth=max_depth)
+        return {"base": str(base_root), "tree": tree}
 
     return app
 

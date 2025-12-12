@@ -1,0 +1,193 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <title>System</title>
+    <link rel="stylesheet" href="/static/styles.css">
+    <style>
+        body { background: #f0f3f8; }
+        .system-layout { display: grid; grid-template-columns: 280px 1fr; gap: 12px; padding: 12px; }
+        .panel { background: #fff; border: 1px solid #d7dde7; border-radius: 8px; padding: 10px; box-shadow: 0 1px 3px rgba(0,0,0,0.08); }
+        .panel h2 { margin: 4px 0 8px 0; font-size: 16px; }
+        .tree ul { list-style: none; padding-left: 14px; margin: 0; }
+        .tree li { cursor: pointer; padding: 2px 0; }
+        .roots-list { display: flex; flex-direction: column; gap: 6px; }
+        .root-item { border: 1px solid #d7dde7; border-radius: 6px; padding: 6px 8px; display: flex; justify-content: space-between; align-items: center; }
+        .chips { display: flex; gap: 6px; flex-wrap: wrap; }
+        .chip { background: #e5e7eb; border-radius: 12px; padding: 2px 8px; font-size: 12px; }
+        table.status { width: 100%; border-collapse: collapse; }
+        table.status th, table.status td { border-bottom: 1px solid #e5e7eb; padding: 6px 8px; text-align: left; }
+        .actions { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 8px; }
+        button.destructive { background: #fef2f2; color: #991b1b; border: 1px solid #fca5a5; }
+        .error-list { max-height: 260px; overflow: auto; }
+        .error-item { border-bottom: 1px solid #e5e7eb; padding: 4px 0; }
+    </style>
+</head>
+<body>
+    <header>
+        <h1>System &amp; Index</h1>
+    </header>
+    <div class="system-layout">
+        <section class="panel">
+            <h2>Basis-Ordner</h2>
+            <div id="base-root"></div>
+            <h3>Explorer</h3>
+            <div class="tree" id="tree"></div>
+        </section>
+        <section class="panel">
+            <div class="actions">
+                <button id="start-run">Indexlauf starten</button>
+                <button id="reset-run" class="destructive">Index leeren &amp; neu aufbauen</button>
+            </div>
+            <div class="chips" id="ext-counts"></div>
+            <h2>Roots</h2>
+            <div class="roots-list" id="roots"></div>
+            <div style="margin-top:8px;">
+                <input type="text" id="new-path" placeholder="Pfad aus Explorer wählen oder tippen" style="width:60%;">
+                <input type="text" id="new-label" placeholder="Label" style="width:20%;">
+                <button id="add-root">Hinzufügen</button>
+            </div>
+            <h2>Status</h2>
+            <table class="status">
+                <tbody id="status-body"></tbody>
+            </table>
+            <h2>Letzte Läufe</h2>
+            <table class="status">
+                <thead><tr><th>Start</th><th>Status</th><th>Scanned</th><th>Added</th><th>Errors</th></tr></thead>
+                <tbody id="runs-body"></tbody>
+            </table>
+            <h2>Fehler</h2>
+            <div class="error-list" id="errors"></div>
+        </section>
+    </div>
+    <script>
+        const state = { baseRoot: "", tree: [], roots: [] };
+
+        async function fetchJSON(url, opts={}) {
+            const res = await fetch(url, opts);
+            if (!res.ok) throw new Error(await res.text());
+            return res.json();
+        }
+
+        function renderTree(nodes, container) {
+            const ul = document.createElement("ul");
+            nodes.forEach((n) => {
+                const li = document.createElement("li");
+                li.textContent = n.name;
+                li.title = n.path;
+                li.addEventListener("click", (e) => {
+                    e.stopPropagation();
+                    document.getElementById("new-path").value = n.path;
+                });
+                if (n.children && n.children.length) {
+                    li.appendChild(renderTree(n.children, document.createElement("div")));
+                }
+                ul.appendChild(li);
+            });
+            return ul;
+        }
+
+        async function loadTree() {
+            const data = await fetchJSON("/api/admin/tree");
+            state.baseRoot = data.base;
+            document.getElementById("base-root").textContent = data.base;
+            const container = document.getElementById("tree");
+            container.innerHTML = "";
+            container.appendChild(renderTree(data.tree, container));
+        }
+
+        async function loadRoots() {
+            const data = await fetchJSON("/api/admin/roots");
+            state.roots = data.roots;
+            const list = document.getElementById("roots");
+            list.innerHTML = "";
+            data.roots.forEach((r) => {
+                const div = document.createElement("div");
+                div.className = "root-item";
+                div.innerHTML = `<span>${r.label} — ${r.path}</span>
+                <span>
+                    <button data-act="${r.id}" data-active="${!r.active}">${r.active ? "Deaktivieren" : "Aktivieren"}</button>
+                    <button data-del="${r.id}">Löschen</button>
+                </span>`;
+                list.appendChild(div);
+            });
+            list.querySelectorAll("button[data-act]").forEach(btn => {
+                btn.addEventListener("click", async () => {
+                    const id = btn.dataset.act;
+                    const active = btn.dataset.active === "true";
+                    await fetchJSON(`/api/admin/roots/${id}/activate?active=${active}`, { method: "POST" });
+                    loadRoots();
+                });
+            });
+            list.querySelectorAll("button[data-del]").forEach(btn => {
+                btn.addEventListener("click", async () => {
+                    const id = btn.dataset.del;
+                    await fetchJSON(`/api/admin/roots/${id}`, { method: "DELETE" });
+                    loadRoots();
+                });
+            });
+        }
+
+        async function loadStatus() {
+            const data = await fetchJSON("/api/admin/status");
+            const b = document.getElementById("status-body");
+            b.innerHTML = `
+                <tr><td>Dokumente gesamt</td><td>${data.total_docs}</td></tr>
+            `;
+            const ext = document.getElementById("ext-counts");
+            ext.innerHTML = "";
+            (data.ext_counts || []).forEach((row) => {
+                const chip = document.createElement("span");
+                chip.className = "chip";
+                chip.textContent = `${row.extension || "?"}: ${row.c}`;
+                ext.appendChild(chip);
+            });
+            const runs = document.getElementById("runs-body");
+            runs.innerHTML = "";
+            (data.recent_runs || []).forEach((r) => {
+                const tr = document.createElement("tr");
+                tr.innerHTML = `<td>${r.started_at || ""}</td><td>${r.status || ""}</td><td>${r.scanned_files || ""}</td><td>${r.added || ""}</td><td>${r.errors || ""}</td>`;
+                runs.appendChild(tr);
+            });
+        }
+
+        async function loadErrors() {
+            const data = await fetchJSON("/api/admin/errors?limit=50");
+            const box = document.getElementById("errors");
+            box.innerHTML = "";
+            (data.errors || []).forEach((e) => {
+                const div = document.createElement("div");
+                div.className = "error-item";
+                div.textContent = `${e.created_at}: ${e.path} — ${e.error_type} (${e.message})`;
+                box.appendChild(div);
+            });
+        }
+
+        async function triggerRun(fullReset=false) {
+            const res = await fetch(`/api/admin/index/run?full_reset=${fullReset}`, { method: "POST" });
+            if (res.status === 409) {
+                alert("Indexlauf läuft bereits");
+            }
+        }
+
+        document.getElementById("start-run").addEventListener("click", () => triggerRun(false));
+        document.getElementById("reset-run").addEventListener("click", () => {
+            if (confirm("Index leeren und neu aufbauen?")) triggerRun(true);
+        });
+        document.getElementById("add-root").addEventListener("click", async () => {
+            const path = document.getElementById("new-path").value.trim();
+            const label = document.getElementById("new-label").value.trim();
+            if (!path) return;
+            await fetchJSON(`/api/admin/roots?path=${encodeURIComponent(path)}&label=${encodeURIComponent(label)}`, { method: "POST" });
+            loadRoots();
+        });
+
+        async function refreshAll() {
+            await Promise.all([loadTree(), loadRoots(), loadStatus(), loadErrors()]);
+        }
+
+        refreshAll();
+        setInterval(loadStatus, 5000);
+    </script>
+</body>
+</html>

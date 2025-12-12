@@ -5,6 +5,7 @@ from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
 from pydantic import BaseModel, EmailStr, ValidationError, field_validator
+from app import config_db
 
 
 class PathsConfig(BaseModel):
@@ -130,7 +131,7 @@ class CentralConfig:
     smtp: Optional[SMTPConfig]
     ui: UIConfig
     logging: LoggingConfig
-    raw: configparser.ConfigParser
+    raw: Optional[configparser.ConfigParser]
 
 
 def _read_ini(path: Path) -> configparser.ConfigParser:
@@ -142,42 +143,34 @@ def _read_ini(path: Path) -> configparser.ConfigParser:
 
 
 def load_config(path: Path = Path("config/central_config.ini")) -> CentralConfig:
-    parser = _read_ini(path)
+    # Prefer SQLite config DB; fall back to INI for backward compatibility.
+    config_db.ensure_db()
 
-    def get(section: str, option: str, fallback: Optional[str] = None) -> str:
-        return parser.get(section, option, fallback=fallback) if parser.has_option(section, option) else (fallback or "")
+    # Roots from config DB
+    roots_list = [(Path(p), label) for p, label, _id, _active in config_db.list_roots(active_only=True)]
+    paths_cfg = PathsConfig(roots=roots_list)
 
-    paths_cfg = PathsConfig.from_raw(get("paths", "roots", ""))
+    # Settings from config DB
+    def setting(key: str, default: str) -> str:
+        val = config_db.get_setting(key, None)
+        return val if val is not None else default
+
     indexer_cfg = IndexerConfig(
-        worker_count=int(get("indexer", "worker_count", "2") or 2),
-        run_interval_cron=get("indexer", "run_interval_cron", None) or None,
-        max_file_size_mb=int(get("indexer", "max_file_size_mb", "0") or 0) or None,
+        worker_count=int(setting("worker_count", "2") or 2),
+        run_interval_cron=None,
+        max_file_size_mb=int(setting("max_file_size_mb", "") or 0) or None,
     )
 
-    smtp_cfg: Optional[SMTPConfig] = None
-    if parser.has_section("smtp"):
-        smtp_enabled = get("smtp", "host")
-        if smtp_enabled:
-            recipients_raw = get("smtp", "to", "")
-            recipients = [email.strip() for email in recipients_raw.split(",") if email.strip()]
-            smtp_cfg = SMTPConfig(
-                host=smtp_enabled,
-                port=int(get("smtp", "port", "587")),
-                use_tls=get("smtp", "use_tls", "true").lower() in {"1", "true", "yes", "on"},
-                username=get("smtp", "username", None) or None,
-                password=get("smtp", "password", None) or None,
-                sender=get("smtp", "from", ""),
-                recipients=recipients,
-            )
+    smtp_cfg: Optional[SMTPConfig] = None  # not configured via DB aktuell
 
     ui_cfg = UIConfig(
-        default_preview=get("ui", "default_preview", "panel") or "panel",
-        snippet_length=int(get("ui", "snippet_length", "240") or 240),
+        default_preview=setting("default_preview", "panel") or "panel",
+        snippet_length=int(setting("snippet_length", "240") or 240),
     )
     logging_cfg = LoggingConfig(
-        level=get("logging", "level", "INFO") or "INFO",
-        log_dir=Path(get("logging", "log_dir", "logs") or "logs"),
-        rotation_mb=int(get("logging", "rotation_mb", "10") or 10),
+        level=setting("logging_level", "INFO") or "INFO",
+        log_dir=Path(setting("log_dir", "logs") or "logs"),
+        rotation_mb=int(setting("rotation_mb", "10") or 10),
     )
 
     return CentralConfig(
@@ -186,7 +179,7 @@ def load_config(path: Path = Path("config/central_config.ini")) -> CentralConfig
         smtp=smtp_cfg,
         ui=ui_cfg,
         logging=logging_cfg,
-        raw=parser,
+        raw=None,
     )
 
 
