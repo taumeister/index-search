@@ -68,3 +68,6 @@
 - Neue Actions: Index starten, Stop-Placeholder, Preflight-Zählung, Reset ohne Start, Reset & Laufstart.
 - Preflight zählt Dateien pro Endung unter aktiven Roots und zeigt Ergebnis im Dashboard.
 - Suche: Leere Query liefert wieder Treffer (MATCH wird übersprungen).
+
+## v017 - Such-Fix (ORDER BY)
+- Leere/`*`-Suchen nutzen kein bm25 mehr, wenn kein FTS-Join erfolgt (kein `no such column documents_fts` mehr).

@@ -193,13 +193,14 @@ def search_documents(
         order_by = f"ORDER BY d.{sort_key} {direction}"
 
     if query.strip() == "*":
+        order_by_nofts = order_by if order_by.startswith("ORDER BY d.") else "ORDER BY d.mtime DESC"
         cursor = conn.execute(
             f"""
             SELECT d.*, '' AS snippet
             FROM documents d
             WHERE 1=1
             {where_sql}
-            {order_by}
+            {order_by_nofts}
             LIMIT ? OFFSET ?;
             """,
             [*params, limit, offset],
