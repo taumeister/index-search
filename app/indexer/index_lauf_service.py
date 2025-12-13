@@ -58,11 +58,24 @@ def setup_logging(config: CentralConfig) -> None:
     log_dir = config.logging.log_dir
     log_dir.mkdir(parents=True, exist_ok=True)
     log_file = log_dir / "indexer.log"
-    logging.basicConfig(
-        level=getattr(logging, config.logging.level),
-        format="%(asctime)s [%(levelname)s] %(message)s",
-        handlers=[logging.FileHandler(log_file), logging.StreamHandler()],
-    )
+    try:
+        log_file.touch(exist_ok=True)
+    except Exception:
+        pass
+    level = getattr(logging, config.logging.level, logging.INFO)
+    idx_logger = logging.getLogger("indexer")
+    idx_logger.setLevel(level)
+    idx_logger.propagate = False
+    # replace handlers to avoid duplicates and to ignore prior basicConfig
+    for h in list(idx_logger.handlers):
+        idx_logger.removeHandler(h)
+    fmt = logging.Formatter("%(asctime)s [%(levelname)s] %(message)s")
+    file_handler = logging.FileHandler(log_file)
+    file_handler.setFormatter(fmt)
+    stream_handler = logging.StreamHandler()
+    stream_handler.setFormatter(fmt)
+    idx_logger.addHandler(file_handler)
+    idx_logger.addHandler(stream_handler)
 
 
 def _persist_live_status(snapshot: LiveStatus) -> None:
@@ -101,6 +114,7 @@ def update_live_status(
     status: Optional[str] = None,
     message: Optional[str] = None,
     finished: bool = False,
+    total_files: Optional[int] = None,
 ) -> None:
     global live_status
     now_ts = time.time()
@@ -114,6 +128,8 @@ def update_live_status(
         live_status.removed = counters.get("removed", live_status.removed)
         live_status.errors = counters.get("errors", live_status.errors)
         live_status.skipped = counters.get("skipped", live_status.skipped)
+        if total_files is not None:
+            live_status.total_files = total_files
         if current_path is not None:
             live_status.current_path = current_path
         if status:
@@ -154,7 +170,7 @@ def run_index_lauf(config: CentralConfig) -> Dict[str, int]:
 
     with db.get_conn() as conn:
         run_id = db.record_index_run_start(conn, start_time)
-        existing_meta = db.list_existing_meta(conn)
+        db.reset_scanned_paths(conn, run_id)
         save_run_id(run_id)
 
     root_entries = config.paths.roots
@@ -177,22 +193,11 @@ def run_index_lauf(config: CentralConfig) -> Dict[str, int]:
             )
         return counters
 
-    to_process: List[Tuple[Path, str]] = []
-    for root, source in root_entries:
-        if not root.exists():
-            logger.error("Wurzelpfad nicht gefunden: %s", root)
-            counters["errors"] += 1
-            continue
-        for dirpath, _, filenames in os.walk(root):
-            for name in filenames:
-                path = Path(dirpath) / name
-                if path.suffix.lower() in SUPPORTED_EXTENSIONS:
-                    to_process.append((path, path, source))
-
-    init_live_status(run_id, start_time, len(to_process))
+    total_files = 0
+    logger.info("Indexlauf #%s gestartet, Roots: %s", run_id, ", ".join([str(r[0]) for r in root_entries]))
+    init_live_status(run_id, start_time, total_files)
 
     work_queue: "queue.Queue[Optional[Dict]]" = queue.Queue(maxsize=200)
-    scanned_paths: set[str] = set()
     last_status_write = 0.0
 
     def flush_live_status(current_path: Optional[str] = None, force: bool = False) -> None:
@@ -205,23 +210,25 @@ def run_index_lauf(config: CentralConfig) -> Dict[str, int]:
 
     def writer():
         conn = db.connect()
-        local_existing = dict(existing_meta)
-        nonlocal scanned_paths
         try:
+            conn.execute("PRAGMA synchronous=NORMAL;")
+            conn.execute("PRAGMA temp_store=MEMORY;")
             while True:
                 item = work_queue.get()
                 if item is None:
                     break
                 kind = item.get("type")
+                path_str = item.get("path") if item else None
                 if kind == "error":
                     counters["scanned"] += 1
                     counters["skipped"] += 1
-                    scanned_paths.add(item["path"])
+                    if path_str:
+                        db.add_scanned_path(conn, run_id, path_str)
                     try:
                         db.record_file_error(
                             conn,
                             run_id=run_id,
-                            path=item["path"],
+                            path=path_str or "",
                             error_type=item["error_type"],
                             message=item["message"],
                             created_at=datetime.now(timezone.utc).isoformat(),
@@ -231,19 +238,16 @@ def run_index_lauf(config: CentralConfig) -> Dict[str, int]:
                 elif kind == "unchanged":
                     counters["scanned"] += 1
                     counters["skipped"] += 1
-                    scanned_paths.add(item["path"])
+                    if path_str:
+                        db.add_scanned_path(conn, run_id, path_str)
                 elif kind == "document":
                     meta: DocumentMeta = item["meta"]
                     counters["scanned"] += 1
-                    scanned_paths.add(meta.path)
-                    existing = local_existing.get(meta.path)
-                    if existing and existing[0] == meta.size_bytes and existing[1] == meta.mtime:
-                        counters["skipped"] += 1
-                        continue
+                    if meta.path:
+                        db.add_scanned_path(conn, run_id, meta.path)
                     try:
                         db.upsert_document(conn, meta)
-                        local_existing[meta.path] = (meta.size_bytes, meta.mtime)
-                        if existing:
+                        if item.get("existing"):
                             counters["updated"] += 1
                         else:
                             counters["added"] += 1
@@ -265,17 +269,29 @@ def run_index_lauf(config: CentralConfig) -> Dict[str, int]:
                         except Exception:
                             pass
                         conn = db.connect()
+                        conn.execute("PRAGMA synchronous=NORMAL;")
+                        conn.execute("PRAGMA temp_store=MEMORY;")
                 work_queue.task_done()
                 try:
                     conn.commit()
                 except Exception:
                     pass
-                flush_live_status(item.get("path") if item else None)
+                flush_live_status(path_str if path_str else None)
         finally:
             conn.close()
 
     writer_thread = threading.Thread(target=writer, daemon=True)
     writer_thread.start()
+
+    thread_local = threading.local()
+
+    def get_thread_conn():
+        conn = getattr(thread_local, "conn", None)
+        if conn is None:
+            conn = db.connect()
+            conn.execute("PRAGMA query_only=1;")
+            thread_local.conn = conn
+        return conn
 
     def process_file_task(real_path: Path, original_path: Path, source: str) -> None:
         if stop_event.is_set():
@@ -304,16 +320,22 @@ def run_index_lauf(config: CentralConfig) -> Dict[str, int]:
             owner=get_owner(stat),
             last_editor=get_owner(stat),
         )
-        existing = existing_meta.get(str(original_path))
-        if existing and existing[0] == meta.size_bytes and existing[1] == meta.mtime:
-            work_queue.put({"type": "unchanged", "path": str(original_path)})
-            return
+        try:
+            conn = get_thread_conn()
+            cur = conn.execute("SELECT size_bytes, mtime FROM documents WHERE path = ?", (str(original_path),))
+            existing_row = cur.fetchone()
+            if existing_row and existing_row[0] == meta.size_bytes and existing_row[1] == meta.mtime:
+                work_queue.put({"type": "unchanged", "path": str(original_path)})
+                return
+            meta_existing = bool(existing_row)
+        except Exception:
+            meta_existing = False
 
         try:
             fill_content(meta, real_path, ext)
             if stop_event.is_set():
                 return
-            work_queue.put({"type": "document", "meta": meta})
+            work_queue.put({"type": "document", "meta": meta, "existing": meta_existing})
         except Exception as exc:
             logger.error("Fehler bei %s: %s", original_path, exc)
             work_queue.put(
@@ -327,25 +349,57 @@ def run_index_lauf(config: CentralConfig) -> Dict[str, int]:
         finally:
             touch_heartbeat()
 
+    def iter_files():
+        for root, source in root_entries:
+            if not root.exists():
+                logger.error("Wurzelpfad nicht gefunden: %s", root)
+                counters["errors"] += 1
+                continue
+            for dirpath, _, filenames in os.walk(root):
+                for name in filenames:
+                    path = Path(dirpath) / name
+                    if path.suffix.lower() in SUPPORTED_EXTENSIONS:
+                        yield path, path, source
+
+    max_outstanding = max(32, config.indexer.worker_count * 8)
+    futures: List[concurrent.futures.Future] = []
     with concurrent.futures.ThreadPoolExecutor(max_workers=config.indexer.worker_count) as pool:
-        futures = [
-            pool.submit(process_file_task, real_path, original_path, source)
-            for real_path, original_path, source in to_process
-        ]
-        concurrent.futures.wait(futures)
+        for real_path, original_path, source in iter_files():
+            if stop_event.is_set():
+                break
+            total_files += 1
+            while len(futures) >= max_outstanding:
+                done, not_done = concurrent.futures.wait(futures, return_when=concurrent.futures.FIRST_COMPLETED)
+                futures = list(not_done)
+                for _ in done:
+                    pass
+            futures.append(pool.submit(process_file_task, real_path, original_path, source))
+        update_live_status(counters, total_files=total_files)
+        for fut in concurrent.futures.as_completed(futures):
+            fut.result()
 
     work_queue.put(None)
     writer_thread.join()
     flush_live_status(force=True)
 
     with db.get_conn() as conn:
-        existing_paths = db.list_paths_by_sources(conn, [src for _, src in root_entries])
-        missing = set(existing_paths) - set(scanned_paths)
-        removed_count = db.remove_documents_by_paths(conn, missing)
+        removed_count = db.remove_documents_not_scanned(conn, run_id, [src for _, src in root_entries])
         counters["removed"] = removed_count
+        db.cleanup_scanned_paths(conn, run_id)
 
     status = "stopped" if stop_event.is_set() else ("completed" if counters["errors"] == 0 else "completed_with_errors")
     update_live_status(counters, status=status, finished=True)
+    logger.info(
+        "Indexlauf #%s beendet mit Status %s | gescannt=%s, added=%s, updated=%s, removed=%s, errors=%s, skipped=%s",
+        run_id,
+        status,
+        counters["scanned"],
+        counters["added"],
+        counters["updated"],
+        counters["removed"],
+        counters["errors"],
+        counters["skipped"],
+    )
     with db.get_conn() as conn:
         db.record_index_run_finish(
             conn,

@@ -102,6 +102,12 @@ def init_db() -> None:
                 created_at TEXT NOT NULL,
                 FOREIGN KEY(run_id) REFERENCES index_runs(id) ON DELETE CASCADE
             );
+
+            CREATE TABLE IF NOT EXISTS scanned_paths (
+                run_id INTEGER NOT NULL,
+                path TEXT NOT NULL,
+                PRIMARY KEY(run_id, path)
+            );
             """
         )
 
@@ -330,6 +336,40 @@ def list_paths_by_sources(conn: sqlite3.Connection, sources: List[str]) -> List[
         sources,
     )
     return [row[0] for row in cursor.fetchall()]
+
+
+def add_scanned_path(conn: sqlite3.Connection, run_id: int, path: str) -> None:
+    conn.execute(
+        "INSERT OR IGNORE INTO scanned_paths (run_id, path) VALUES (?, ?)",
+        (run_id, path),
+    )
+
+
+def reset_scanned_paths(conn: sqlite3.Connection, run_id: int) -> None:
+    conn.execute("DELETE FROM scanned_paths WHERE run_id = ?", (run_id,))
+
+
+def remove_documents_not_scanned(conn: sqlite3.Connection, run_id: int, sources: List[str]) -> int:
+    if not sources:
+        return 0
+    placeholders = ",".join("?" * len(sources))
+    cursor = conn.execute(
+        f"""
+        SELECT id FROM documents
+        WHERE source IN ({placeholders})
+        AND path NOT IN (SELECT path FROM scanned_paths WHERE run_id = ?)
+        """,
+        [*sources, run_id],
+    )
+    ids = [row[0] for row in cursor.fetchall()]
+    if ids:
+        conn.execute(f"DELETE FROM documents WHERE id IN ({','.join('?' * len(ids))})", ids)
+        conn.execute(f"DELETE FROM documents_fts WHERE doc_id IN ({','.join('?' * len(ids))})", ids)
+    return len(ids)
+
+
+def cleanup_scanned_paths(conn: sqlite3.Connection, run_id: int) -> None:
+    conn.execute("DELETE FROM scanned_paths WHERE run_id = ?", (run_id,))
 
 
 def list_errors(conn: sqlite3.Connection, limit: int = 50, offset: int = 0) -> List[sqlite3.Row]:
