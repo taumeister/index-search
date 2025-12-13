@@ -4,13 +4,16 @@ import logging
 import os
 import smtplib
 import time
+import warnings
+from collections import deque
 from dataclasses import dataclass, asdict
 from email.message import EmailMessage
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Deque, Dict, List, Optional, Tuple
 import queue
 import threading
+from logging.handlers import RotatingFileHandler
 
 from app.config_loader import CentralConfig
 from app.db import datenbank as db
@@ -28,6 +31,10 @@ HEARTBEAT_FILE = Path("data/index.heartbeat")
 LIVE_STATUS_FILE = Path("data/index.live.json")
 LIVE_STATUS_LOCK = threading.Lock()
 live_status: Optional["LiveStatus"] = None
+WARN_CONTEXT = threading.local()
+LOG_BUFFER_MAX = 2000
+LOG_BUFFER: Deque[Tuple[int, str]] = deque()
+LOG_SEQ = 0
 
 
 @dataclass
@@ -54,6 +61,44 @@ class LiveStatus:
         return data
 
 
+class LiveBufferHandler(logging.Handler):
+    def emit(self, record: logging.LogRecord) -> None:
+        try:
+            msg = self.format(record)
+        except Exception:
+            return
+        if not msg.endswith("\n"):
+            msg += "\n"
+        push_log_line(msg)
+
+
+def push_log_line(line: str) -> None:
+    global LOG_SEQ
+    LOG_SEQ += 1
+    LOG_BUFFER.append((LOG_SEQ, line))
+    while len(LOG_BUFFER) > LOG_BUFFER_MAX:
+        LOG_BUFFER.popleft()
+
+
+def get_log_tail(limit: int = 200) -> Dict[str, Any]:
+    limit = max(1, min(limit, LOG_BUFFER_MAX))
+    items = list(LOG_BUFFER)[-limit:]
+    lines = [line for _, line in items]
+    start_seq = items[0][0] if items else 0
+    total = LOG_SEQ
+    return {"lines": lines, "from": start_seq - 1 if start_seq else 0, "total": total}
+
+
+def get_log_since(seq: int, limit: int = 500) -> Dict[str, Any]:
+    limit = max(1, min(limit, LOG_BUFFER_MAX))
+    items = [item for item in LOG_BUFFER if item[0] > seq]
+    items = items[:limit]
+    lines = [line for _, line in items]
+    start_seq = items[0][0] if items else seq
+    total = LOG_SEQ
+    return {"lines": lines, "from": start_seq - 1 if items else seq, "total": total}
+
+
 def setup_logging(config: CentralConfig) -> None:
     log_dir = config.logging.log_dir
     log_dir.mkdir(parents=True, exist_ok=True)
@@ -70,12 +115,33 @@ def setup_logging(config: CentralConfig) -> None:
     for h in list(idx_logger.handlers):
         idx_logger.removeHandler(h)
     fmt = logging.Formatter("%(asctime)s [%(levelname)s] %(message)s")
-    file_handler = logging.FileHandler(log_file)
+    file_handler = RotatingFileHandler(log_file, maxBytes=10 * 1024 * 1024, backupCount=3)
     file_handler.setFormatter(fmt)
     stream_handler = logging.StreamHandler()
     stream_handler.setFormatter(fmt)
-    idx_logger.addHandler(file_handler)
-    idx_logger.addHandler(stream_handler)
+    buffer_handler = LiveBufferHandler()
+    buffer_handler.setFormatter(fmt)
+
+    for handler in (file_handler, stream_handler, buffer_handler):
+        idx_logger.addHandler(handler)
+
+    # capture warnings and third-party logs into the same file
+    logging.captureWarnings(True)
+    warn_logger = logging.getLogger("py.warnings")
+    warn_logger.setLevel(level)
+    warn_logger.propagate = False
+    for h in list(warn_logger.handlers):
+        warn_logger.removeHandler(h)
+    for handler in (file_handler, buffer_handler):
+        warn_logger.addHandler(handler)
+    root = logging.getLogger()
+    if file_handler not in root.handlers:
+        root.addHandler(file_handler)
+    def showwarning(message, category, filename, lineno, file=None, line=None):
+        path = getattr(WARN_CONTEXT, "path", None)
+        base = Path(path or filename)
+        logger.warning("%s %s %s", category.__name__, base, base.name)
+    warnings.showwarning = showwarning
 
 
 def _persist_live_status(snapshot: LiveStatus) -> None:
@@ -213,6 +279,7 @@ def run_index_lauf(config: CentralConfig) -> Dict[str, int]:
         try:
             conn.execute("PRAGMA synchronous=NORMAL;")
             conn.execute("PRAGMA temp_store=MEMORY;")
+            processed = 0
             while True:
                 item = work_queue.get()
                 if item is None:
@@ -332,12 +399,13 @@ def run_index_lauf(config: CentralConfig) -> Dict[str, int]:
             meta_existing = False
 
         try:
+            WARN_CONTEXT.path = str(original_path)
             fill_content(meta, real_path, ext)
             if stop_event.is_set():
                 return
             work_queue.put({"type": "document", "meta": meta, "existing": meta_existing})
         except Exception as exc:
-            logger.error("Fehler bei %s: %s", original_path, exc)
+            logger.error("%s %s %s", type(exc).__name__, original_path, original_path.name)
             work_queue.put(
                 {
                     "type": "error",
@@ -347,6 +415,7 @@ def run_index_lauf(config: CentralConfig) -> Dict[str, int]:
                 }
             )
         finally:
+            WARN_CONTEXT.path = None
             touch_heartbeat()
 
     def iter_files():
@@ -368,6 +437,8 @@ def run_index_lauf(config: CentralConfig) -> Dict[str, int]:
             if stop_event.is_set():
                 break
             total_files += 1
+            if total_files == 1 or total_files % 200 == 0:
+                update_live_status(counters, total_files=total_files)
             while len(futures) >= max_outstanding:
                 done, not_done = concurrent.futures.wait(futures, return_when=concurrent.futures.FIRST_COMPLETED)
                 futures = list(not_done)

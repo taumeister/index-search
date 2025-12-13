@@ -17,7 +17,14 @@ from app import api
 from app import config_db
 from app.config_loader import CentralConfig, ensure_dirs, load_config
 from app.db import datenbank as db
-from app.indexer.index_lauf_service import run_index_lauf, stop_event, load_run_id, get_live_status
+from app.indexer.index_lauf_service import (
+    run_index_lauf,
+    stop_event,
+    load_run_id,
+    get_live_status,
+    get_log_tail,
+    get_log_since,
+)
 
 logging.basicConfig(level=logging.INFO)
 index_lock = threading.Lock()
@@ -344,48 +351,28 @@ def create_app(config: Optional[CentralConfig] = None) -> FastAPI:
     def admin_indexer_log(
         offset: int = 0,
         limit: int = LOG_PAGE_SIZE,
-        since: Optional[int] = Query(None, description="Zeilennummer, ab der gelesen wird (0-basiert)"),
+        since: Optional[int] = Query(None, description="Zeilennummer/Seq, ab der gelesen wird"),
         tail: Optional[int] = Query(None, description="Letzte N Zeilen zurückgeben"),
         _auth: bool = Depends(require_secret),
     ):
         """
-        Liefert das Indexer-Log mit neuestem Eintrag zuletzt (tail). Offset zählt vom Ende (0 = letzte Zeilen).
+        Liefert das Indexer-Log aus dem Live-Puffer (neuestes zuletzt).
         """
-        log_path = Path("logs/indexer.log")
-        lines: list[str] = []
-        total = 0
-        from_line = 0
-        if log_path.exists():
-            with log_path.open("r", encoding="utf-8", errors="ignore") as f:
-                all_lines = f.readlines()
-                total = len(all_lines)
-                if since is not None:
-                    from_line = max(0, min(int(since), total))
-                    start = from_line
-                    end = total
-                elif tail is not None:
-                    tail_value = min(max(1, int(tail)), 2000)
-                    start = max(0, total - tail_value)
-                    end = total
-                    from_line = start
-                else:
-                    if limit <= 0 or limit > 1000:
-                        limit = LOG_PAGE_SIZE
-                    if offset < 0:
-                        offset = 0
-                    start = max(0, total - offset - limit)
-                    end = max(0, total - offset)
-                    from_line = start
-                lines = all_lines[start:end]
-        has_more_newer = (since is None and offset > 0) or False
-        has_more_older = total > from_line + len(lines)
-        return {
-            "lines": lines,
-            "has_more_newer": has_more_newer,
-            "has_more_older": has_more_older,
-            "total": total,
-            "from": from_line,
-        }
+        try:
+            if since is not None:
+                data = get_log_since(int(since), limit or LOG_PAGE_SIZE)
+            else:
+                tail_value = tail if tail is not None else (limit or LOG_PAGE_SIZE)
+                data = get_log_tail(tail_value)
+            return {
+                "lines": data["lines"],
+                "has_more_newer": False,
+                "has_more_older": False,
+                "total": data["total"],
+                "from": data["from"],
+            }
+        except Exception:
+            return {"lines": [], "has_more_newer": False, "has_more_older": False, "total": 0, "from": 0}
 
     @app.get("/api/admin/indexer_status")
     def admin_indexer_status(_auth: bool = Depends(require_secret)):
