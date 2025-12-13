@@ -11,6 +11,9 @@
 ## v022 - Fixierter Tabellenkopf auch bei Seitenscroll
 - Seitenaufbau nutzt flex, die Trefferliste scrollt innen; Tabellenkopf bleibt sichtbar wie der Header.
 
+## v023 - Scrollen wiederhergestellt
+- Körper scrollt wieder; Listenbereich kann wieder gescrollt werden, Tabellenkopf bleibt sticky.
+
 ## v014 - Status stabil nach Reset
 - Admin-Status/Fehler-Endpunkte initialisieren die DB bei fehlenden Tabellen (kein 500 nach Index-Reset).
 
