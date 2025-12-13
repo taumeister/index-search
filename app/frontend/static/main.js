@@ -4,6 +4,11 @@ let sortState = { key: null, dir: "asc" };
 let resizingColumn = false;
 let resizingPreview = false;
 const PANEL_WIDTH_KEY = "previewWidth";
+const APP_ZOOM_KEY = "appZoom";
+const DEFAULT_ZOOM = 1;
+const MIN_ZOOM = 0.6;
+const MAX_ZOOM = 1.6;
+const ZOOM_STEP = 0.1;
 const dateFormatter = new Intl.DateTimeFormat("de-DE", {
     year: "numeric",
     month: "2-digit",
@@ -14,6 +19,7 @@ const dateFormatter = new Intl.DateTimeFormat("de-DE", {
 const SUPPORTED_EXTENSIONS = ["", ".pdf", ".rtf", ".msg", ".txt"];
 
 applySavedPreviewWidth();
+bootstrapZoom();
 
 async function search() {
     const q = document.getElementById("search-input").value;
@@ -364,6 +370,7 @@ function closeContextMenu() {
 }
 
 window.addEventListener("load", setupResizableColumns);
+initZoomControls();
 
 function populateFilters(results) {
     const extSelect = document.getElementById("ext-filter");
@@ -426,3 +433,82 @@ document.addEventListener("keydown", (e) => {
 });
 
 window.addEventListener("resize", positionPreview);
+
+function clampZoom(value) {
+    return Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, value));
+}
+
+function readSavedZoom() {
+    try {
+        const raw = localStorage.getItem(APP_ZOOM_KEY);
+        const parsed = parseFloat(raw);
+        if (Number.isFinite(parsed)) {
+            return clampZoom(parsed);
+        }
+    } catch (_) {
+        /* ignore */
+    }
+    return DEFAULT_ZOOM;
+}
+
+function getActiveZoom() {
+    const raw = getComputedStyle(document.documentElement).getPropertyValue("--app-zoom");
+    const parsed = parseFloat(raw);
+    if (Number.isFinite(parsed)) return clampZoom(parsed);
+    return readSavedZoom();
+}
+
+function applyZoom(value, { persist = true } = {}) {
+    const clamped = clampZoom(value);
+    document.documentElement.style.setProperty("--app-zoom", clamped);
+    if (persist) {
+        try {
+            localStorage.setItem(APP_ZOOM_KEY, String(clamped));
+        } catch (_) {
+            /* ignore */
+        }
+    }
+    updateZoomDisplay(clamped);
+    positionPreview();
+    return clamped;
+}
+
+function updateZoomDisplay(value) {
+    const label = document.getElementById("zoom-display");
+    if (!label) return;
+    label.textContent = `${Math.round(value * 100)}%`;
+}
+
+function initZoomControls() {
+    const initialZoom = readSavedZoom();
+    applyZoom(initialZoom, { persist: false });
+
+    const zoomIn = document.getElementById("zoom-in");
+    const zoomOut = document.getElementById("zoom-out");
+    const zoomReset = document.getElementById("zoom-reset");
+
+    const adjustZoom = (delta) => {
+        const next = clampZoom(getActiveZoom() + delta);
+        applyZoom(next);
+    };
+
+    if (zoomIn) {
+        zoomIn.addEventListener("click", () => adjustZoom(ZOOM_STEP));
+    }
+    if (zoomOut) {
+        zoomOut.addEventListener("click", () => adjustZoom(-ZOOM_STEP));
+    }
+    if (zoomReset) {
+        zoomReset.addEventListener("click", () => applyZoom(DEFAULT_ZOOM));
+    }
+
+    window.addEventListener("storage", (e) => {
+        if (e.key === APP_ZOOM_KEY) {
+            applyZoom(readSavedZoom(), { persist: false });
+        }
+    });
+}
+
+function bootstrapZoom() {
+    applyZoom(readSavedZoom(), { persist: false });
+}

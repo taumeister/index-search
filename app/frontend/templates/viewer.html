@@ -3,6 +3,21 @@
 <head>
     <meta charset="UTF-8">
     <title>Viewer</title>
+    <script>
+        (function applySavedZoomEarly() {
+            const KEY = "appZoom";
+            const DEFAULT_ZOOM = 1;
+            const clamp = (v) => Math.min(1.6, Math.max(0.6, v));
+            try {
+                const raw = localStorage.getItem(KEY);
+                const parsed = parseFloat(raw);
+                const zoom = Number.isFinite(parsed) ? clamp(parsed) : DEFAULT_ZOOM;
+                document.documentElement.style.setProperty("--app-zoom", zoom);
+            } catch (err) {
+                document.documentElement.style.setProperty("--app-zoom", DEFAULT_ZOOM);
+            }
+        })();
+    </script>
     <link rel="stylesheet" href="/static/styles.css">
     <link rel="stylesheet" href="/static/viewer.css">
 </head>

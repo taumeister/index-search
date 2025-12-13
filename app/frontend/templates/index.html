@@ -3,6 +3,21 @@
 <head>
     <meta charset="UTF-8">
     <title>Index-Suche</title>
+    <script>
+        (function applySavedZoomEarly() {
+            const KEY = "appZoom";
+            const DEFAULT_ZOOM = 1;
+            const clamp = (v) => Math.min(1.6, Math.max(0.6, v));
+            try {
+                const raw = localStorage.getItem(KEY);
+                const parsed = parseFloat(raw);
+                const zoom = Number.isFinite(parsed) ? clamp(parsed) : DEFAULT_ZOOM;
+                document.documentElement.style.setProperty("--app-zoom", zoom);
+            } catch (err) {
+                document.documentElement.style.setProperty("--app-zoom", DEFAULT_ZOOM);
+            }
+        })();
+    </script>
     <link rel="stylesheet" href="/static/styles.css">
     <script>
         window.defaultPreview = "{{ default_preview }}";
@@ -33,6 +48,12 @@
                     <option value="2023">2023</option>
                     <option value="2022">2022</option>
                 </select>
+            </div>
+            <div class="zoom-controls" aria-label="Zoom">
+                <button type="button" id="zoom-out" title="Zoom verkleinern">-</button>
+                <span id="zoom-display" class="zoom-display">100%</span>
+                <button type="button" id="zoom-in" title="Zoom vergrößern">+</button>
+                <button type="button" id="zoom-reset" title="Zoom zurücksetzen">Reset</button>
             </div>
         </div>
     </header>

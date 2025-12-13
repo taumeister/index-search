@@ -1,3 +1,10 @@
+const APP_ZOOM_KEY = "appZoom";
+const DEFAULT_ZOOM = 1;
+const MIN_ZOOM = 0.6;
+const MAX_ZOOM = 1.6;
+
+bootstrapZoom();
+
 function sizeWindow() {
     const w = Math.max(540, Math.floor(window.screen.availWidth * 0.5));
     const h = Math.max(480, Math.floor(window.screen.availHeight * 0.6));
@@ -153,3 +160,33 @@ function bindActions() {
 
 loadDoc();
 bindActions();
+
+function clampZoom(value) {
+    return Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, value));
+}
+
+function readSavedZoom() {
+    try {
+        const raw = localStorage.getItem(APP_ZOOM_KEY);
+        const parsed = parseFloat(raw);
+        if (Number.isFinite(parsed)) return clampZoom(parsed);
+    } catch (_) {
+        /* ignore */
+    }
+    return DEFAULT_ZOOM;
+}
+
+function applyZoom(value) {
+    const clamped = clampZoom(value);
+    document.documentElement.style.setProperty("--app-zoom", clamped);
+    return clamped;
+}
+
+function bootstrapZoom() {
+    applyZoom(readSavedZoom());
+    window.addEventListener("storage", (e) => {
+        if (e.key === APP_ZOOM_KEY) {
+            applyZoom(readSavedZoom());
+        }
+    });
+}
