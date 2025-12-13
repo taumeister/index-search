@@ -35,7 +35,7 @@ def seed_defaults(conn: sqlite3.Connection) -> None:
         "worker_count": "2",
         "max_file_size_mb": "",
         "default_preview": "panel",
-        "snippet_length": "240",
+        "snippet_length": "160",
         "logging_level": "INFO",
         "log_dir": "logs",
         "rotation_mb": "10",

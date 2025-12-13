@@ -1,5 +1,10 @@
 # Release-Notizen
 
+## v030 - Paginierte Suche & Limits
+- API liefert nur Top-N (Limit 200, max. 500) und `has_more`; Abfragen werden bei zu kurzen Suchbegriffen abgewehrt.
+- Frontend: Debounce mit Abbruch laufender Requests, „Mehr laden“-Button mit Offset/Limit; leere oder zu kurze Queries zeigen Hinweise.
+- Snippet-Default verkürzt (160 Zeichen) und Datenmenge pro Treffer reduziert für schnellere Antworten.
+
 ## v029 - Snippet-Highlight & Preview-Kontext
 - Suchtreffer zeigen wieder farbige Markierungen direkt im Snippet, bleiben dabei einzeilig und kompakt.
 - Ergebnisliste: Dateiname klar hervorgehoben, Pfad dezenter; leere Trefferliste zeigt einen kurzen Hinweis.

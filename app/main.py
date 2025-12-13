@@ -115,6 +115,9 @@ def create_app(config: Optional[CentralConfig] = None) -> FastAPI:
     ensure_dirs(config)
     db.init_db()
 
+    MAX_SEARCH_LIMIT = 500
+    MIN_QUERY_LENGTH = 2
+
     app = FastAPI(title="Index-Suche")
     templates = Jinja2Templates(directory="app/frontend/templates")
     app.mount("/static", StaticFiles(directory="app/frontend/static"), name="static")
@@ -158,6 +161,13 @@ def create_app(config: Optional[CentralConfig] = None) -> FastAPI:
         offset: int = 0,
         _auth: bool = Depends(require_secret),
     ):
+        raw_q = (q or "").strip()
+        if raw_q and len(raw_q) < MIN_QUERY_LENGTH:
+            return {"results": [], "has_more": False, "message": f"Suchbegriff zu kurz (min. {MIN_QUERY_LENGTH} Zeichen)"}
+
+        safe_limit = max(1, min(MAX_SEARCH_LIMIT, int(limit or 0)))
+        safe_offset = max(0, int(offset or 0))
+
         db.init_db()
         with db.get_conn() as conn:
             filters = {}
@@ -167,16 +177,19 @@ def create_app(config: Optional[CentralConfig] = None) -> FastAPI:
                 filters["extension"] = extension.lower()
             if time_filter:
                 filters["time_filter"] = time_filter
+            fetch_limit = safe_limit + 1  # eine mehr holen, um has_more zu erkennen
             rows = db.search_documents(
                 conn,
                 build_match_query(q),
-                limit=limit,
-                offset=offset,
+                limit=fetch_limit,
+                offset=safe_offset,
                 filters=filters,
                 sort_key=sort_key,
                 sort_dir=sort_dir,
             )
-            return {"results": [dict(row) for row in rows]}
+            has_more = len(rows) > safe_limit
+            rows = rows[:safe_limit]
+            return {"results": [dict(row) for row in rows], "has_more": has_more}
 
     @app.get("/api/document/{doc_id}")
     def document_details(doc_id: int, _auth: bool = Depends(require_secret)):

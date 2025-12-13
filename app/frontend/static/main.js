@@ -1,5 +1,6 @@
 let currentDocId = null;
 let searchTimer = null;
+let currentSearchController = null;
 let sortState = { key: null, dir: "asc" };
 let resizingColumn = false;
 let resizingPreview = false;
@@ -9,6 +10,12 @@ const DEFAULT_ZOOM = 1;
 const MIN_ZOOM = 0.6;
 const MAX_ZOOM = 1.6;
 const ZOOM_STEP = 0.1;
+const SEARCH_LIMIT = 200;
+const MIN_QUERY_LENGTH = 2;
+const SEARCH_DEBOUNCE_MS = 400;
+let searchOffset = 0;
+let searchHasMore = false;
+let searchLoading = false;
 const dateFormatter = new Intl.DateTimeFormat("de-DE", {
     year: "numeric",
     month: "2-digit",
@@ -30,11 +37,30 @@ function escapeHtml(str) {
 applySavedPreviewWidth();
 bootstrapZoom();
 
-async function search() {
-    const q = document.getElementById("search-input").value;
+async function search({ append = false } = {}) {
+    const q = document.getElementById("search-input").value || "";
+    const trimmed = q.trim();
     const ext = document.getElementById("ext-filter").value;
     const time = document.getElementById("time-filter").value;
-    const params = new URLSearchParams({ q });
+
+    if (!append) {
+        searchOffset = 0;
+        searchHasMore = false;
+    }
+
+    if (trimmed && trimmed.length < MIN_QUERY_LENGTH) {
+        searchHasMore = false;
+        renderMessageRow(`Mindestens ${MIN_QUERY_LENGTH} Zeichen eingeben.`);
+        updateLoadMoreButton();
+        return;
+    }
+
+    if (currentSearchController) {
+        currentSearchController.abort();
+    }
+    currentSearchController = new AbortController();
+
+    const params = new URLSearchParams({ q, limit: SEARCH_LIMIT, offset: append ? searchOffset : 0 });
     if (ext) params.append("extension", ext.toLowerCase());
     if (time) params.append("time_filter", time);
     if (sortState.key) {
@@ -42,25 +68,56 @@ async function search() {
         params.append("sort_dir", sortState.dir);
     }
 
-    const res = await fetch(`/api/search?${params.toString()}`);
-    const data = await res.json();
-    renderResults(data.results || []);
-    populateFilters(data.results || []);
-    updateSortIndicators();
+    searchLoading = true;
+    updateLoadMoreButton();
+
+    try {
+        const res = await fetch(`/api/search?${params.toString()}`, { signal: currentSearchController.signal });
+        if (!res.ok) {
+            searchHasMore = false;
+            renderMessageRow("Suche fehlgeschlagen.");
+            return;
+        }
+        const data = await res.json();
+        const rows = data.results || [];
+        searchHasMore = Boolean(data.has_more);
+        if (data.message && !rows.length) {
+            searchHasMore = false;
+            renderMessageRow(data.message);
+            updateLoadMoreButton();
+            return;
+        }
+        renderResults(rows, { append });
+        searchOffset = append ? searchOffset + rows.length : rows.length;
+        if (!append) {
+            populateFilters(rows);
+        }
+        updateSortIndicators();
+    } catch (err) {
+        if (err.name === "AbortError") return;
+        searchHasMore = false;
+        renderMessageRow("Suche abgebrochen oder fehlgeschlagen.");
+    } finally {
+        if (currentSearchController && currentSearchController.signal.aborted) {
+            // nichts
+        }
+        searchLoading = false;
+        updateLoadMoreButton();
+    }
 }
 
 function debounceSearch() {
     if (searchTimer) clearTimeout(searchTimer);
-    searchTimer = setTimeout(search, 250);
+    searchTimer = setTimeout(() => search({ append: false }), SEARCH_DEBOUNCE_MS);
 }
 
-function renderResults(results) {
+function renderResults(results, { append = false } = {}) {
     const tbody = document.querySelector("#results-table tbody");
-    tbody.innerHTML = "";
-    if (!results.length) {
-        const empty = document.createElement("tr");
-        empty.innerHTML = `<td class="empty-row" colspan="6">Keine Treffer gefunden.</td>`;
-        tbody.appendChild(empty);
+    if (!append) {
+        tbody.innerHTML = "";
+    }
+    if (!results.length && !append) {
+        renderMessageRow("Keine Treffer gefunden.");
         return;
     }
 
@@ -95,6 +152,20 @@ function renderResults(results) {
         tr.addEventListener("contextmenu", (e) => showContextMenu(e, rowId));
         tbody.appendChild(tr);
     });
+}
+
+function renderMessageRow(text) {
+    const tbody = document.querySelector("#results-table tbody");
+    if (tbody) {
+        tbody.innerHTML = `<tr><td class="empty-row" colspan="6">${escapeHtml(text)}</td></tr>`;
+    }
+}
+
+function updateLoadMoreButton() {
+    const btn = document.getElementById("load-more");
+    if (!btn) return;
+    btn.disabled = searchLoading;
+    btn.classList.toggle("hidden", !searchHasMore);
 }
 
 async function openPreview(id, showPanel = false) {
@@ -364,8 +435,16 @@ function setupPopup() {
 
 // Search & filter bindings
 document.getElementById("search-input").addEventListener("input", debounceSearch);
-document.getElementById("ext-filter").addEventListener("change", search);
-document.getElementById("time-filter").addEventListener("change", search);
+document.getElementById("ext-filter").addEventListener("change", () => search({ append: false }));
+document.getElementById("time-filter").addEventListener("change", () => search({ append: false }));
+const loadMoreBtn = document.getElementById("load-more");
+if (loadMoreBtn) {
+    loadMoreBtn.addEventListener("click", () => {
+        if (searchHasMore && !searchLoading) {
+            search({ append: true });
+        }
+    });
+}
 
 setupPopup();
 setupPreviewResizer();
