@@ -159,10 +159,10 @@ def load_config(path: Path = Path("config/central_config.ini")) -> CentralConfig
             max_file_size_mb=parser.getint("indexer", "max_file_size_mb", fallback=None),
         )
         smtp_cfg = None
-    ui_cfg = UIConfig(
-        default_preview=parser.get("ui", "default_preview", fallback="panel"),
-        snippet_length=parser.getint("ui", "snippet_length", fallback=160),
-    )
+        ui_cfg = UIConfig(
+            default_preview=parser.get("ui", "default_preview", fallback="panel"),
+            snippet_length=parser.getint("ui", "snippet_length", fallback=160),
+        )
         logging_cfg = LoggingConfig(
             level=parser.get("logging", "level", fallback="INFO"),
             log_dir=Path(parser.get("logging", "log_dir", fallback="logs")),
