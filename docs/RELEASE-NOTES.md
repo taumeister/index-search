@@ -17,6 +17,9 @@
 ## v024 - Sticky Kopf bei internem Scroll
 - Body wieder als Flex-Layout mit internem Scroll im Ergebnisbereich; Tabellenkopf bleibt fixiert, während die Ergebnisliste scrollt.
 
+## v025 - Tabellenkopf bleibt stabil
+- Sticky-Spaltenkopf funktioniert jetzt wie erwartet beim Scrollen der Trefferliste.
+
 ## v014 - Status stabil nach Reset
 - Admin-Status/Fehler-Endpunkte initialisieren die DB bei fehlenden Tabellen (kein 500 nach Index-Reset).
 

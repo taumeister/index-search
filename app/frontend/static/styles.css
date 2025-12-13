@@ -172,6 +172,7 @@ main {
     flex: 1;
     display: flex;
     flex-direction: column;
+    position: relative;
 }
 
 table {
@@ -199,6 +200,13 @@ th {
     user-select: none;
     cursor: default;
     padding-right: 18px;
+}
+
+.results table thead {
+    position: sticky;
+    top: 0;
+    z-index: 3;
+    background: #f7f9fb;
 }
 
 th.sortable {
