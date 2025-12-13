@@ -2,49 +2,29 @@ import configparser
 import dataclasses
 import os
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple
+from typing import Optional
 
-from pydantic import BaseModel, EmailStr, ValidationError, field_validator
+from pydantic import BaseModel, field_validator
+
 from app import config_db
 
 
 class PathsConfig(BaseModel):
-    roots: List[Tuple[Path, str]] = []
+    roots: list[tuple[Path, str]] = []
 
     @classmethod
-    def from_raw(cls, raw: str) -> "PathsConfig":
-        """
-        Accepts a comma separated list of paths or path:label pairs.
-        If no label is provided the last directory name is used.
-        """
-        if not raw.strip():
-            return cls(roots=[])
-        entries: List[Tuple[Path, str]] = []
-        for part in raw.split(","):
-            part = part.strip()
-            if not part:
+    def from_raw(cls, value: str) -> "PathsConfig":
+        roots: list[tuple[Path, str]] = []
+        for item in (value or "").split(","):
+            raw = item.strip()
+            if not raw:
                 continue
-            if ":" in part:
-                path_str, label = part.split(":", 1)
-                label = label.strip() or Path(path_str).name
+            if ":" in raw:
+                path_s, label = raw.split(":", 1)
+                roots.append((Path(path_s.strip()), label.strip() or Path(path_s.strip()).name))
             else:
-                path_str, label = part, Path(part).name
-            path = Path(path_str).expanduser()
-            entries.append((path, label))
-        return cls(roots=entries)
-
-    @field_validator("roots")
-    def validate_roots(cls, roots: List[Tuple[Path, str]]) -> List[Tuple[Path, str]]:
-        validated: List[Tuple[Path, str]] = []
-        seen_labels: set[str] = set()
-        for path, label in roots:
-            if not label:
-                raise ValueError(f"Leeres source-Label für Pfad {path}")
-            if label in seen_labels:
-                raise ValueError(f"Doppeltes source-Label: {label}")
-            seen_labels.add(label)
-            validated.append((path, label))
-        return validated
+                roots.append((Path(raw), Path(raw).name))
+        return cls(roots=roots)
 
 
 class IndexerConfig(BaseModel):
@@ -53,69 +33,37 @@ class IndexerConfig(BaseModel):
     max_file_size_mb: Optional[int] = None
 
     @field_validator("worker_count")
-    def validate_workers(cls, value: int) -> int:
-        if value < 1 or value > 8:
-            raise ValueError("worker_count muss zwischen 1 und 8 liegen")
+    def validate_worker(cls, value: int) -> int:
+        if value < 1:
+            raise ValueError("worker_count muss >=1 sein")
         return value
 
     @field_validator("max_file_size_mb")
-    def validate_max_size(cls, value: Optional[int]) -> Optional[int]:
-        if value is not None and value < 1:
-            raise ValueError("max_file_size_mb muss positiv sein")
+    def validate_size(cls, value: Optional[int]) -> Optional[int]:
+        if value is not None and value < 0:
+            raise ValueError("max_file_size_mb darf nicht negativ sein")
         return value
 
 
 class SMTPConfig(BaseModel):
     host: str
     port: int
-    use_tls: bool = True
-    username: Optional[str] = None
-    password: Optional[str] = None
-    sender: EmailStr
-    recipients: List[EmailStr]
-
-    @field_validator("port")
-    def validate_port(cls, value: int) -> int:
-        if value <= 0 or value > 65535:
-            raise ValueError("port muss zwischen 1 und 65535 liegen")
-        return value
-
-    @field_validator("recipients")
-    def validate_recipients(cls, value: List[EmailStr]) -> List[EmailStr]:
-        if not value:
-            raise ValueError("mindestens ein Empfänger erforderlich")
-        return value
+    use_tls: bool
+    username: Optional[str]
+    password: Optional[str]
+    sender: str
+    recipients: list[str]
 
 
 class UIConfig(BaseModel):
     default_preview: str = "panel"
-    snippet_length: int = 240
-
-    @field_validator("default_preview")
-    def validate_preview(cls, value: str) -> str:
-        allowed = {"panel", "popup"}
-        if value not in allowed:
-            raise ValueError(f"default_preview muss in {allowed} liegen")
-        return value
-
-    @field_validator("snippet_length")
-    def validate_snippet(cls, value: int) -> int:
-        if value < 40 or value > 800:
-            raise ValueError("snippet_length muss zwischen 40 und 800 liegen")
-        return value
+    snippet_length: int = 160
 
 
 class LoggingConfig(BaseModel):
     level: str = "INFO"
     log_dir: Path = Path("logs")
     rotation_mb: int = 10
-
-    @field_validator("level")
-    def validate_level(cls, value: str) -> str:
-        allowed = {"DEBUG", "INFO", "WARNING", "ERROR"}
-        if value.upper() not in allowed:
-            raise ValueError(f"log level muss in {allowed} liegen")
-        return value.upper()
 
     @field_validator("rotation_mb")
     def validate_rotation(cls, value: int) -> int:
@@ -135,56 +83,13 @@ class CentralConfig:
     raw: Optional[configparser.ConfigParser] = None
 
 
-def _read_ini(path: Path) -> configparser.ConfigParser:
-    parser = configparser.ConfigParser()
-    if not path.exists():
-        return parser
-    parser.read(path)
-    return parser
-
-
 def load_config(path: Path = Path("config/central_config.ini")) -> CentralConfig:
     """
-    Load configuration from SQLite config DB (default path) or from an INI file.
-    Non-default paths always bypass the config DB to allow isolated configs (e.g. tests).
+    ENV-getriebene Konfiguration für Docker-Betrieb.
     """
-    use_config_db = path == Path("config/central_config.ini") and os.getenv("DISABLE_CONFIG_DB") != "1"
-
-    if not use_config_db:
-        parser = _read_ini(path)
-        paths_raw = parser.get("paths", "roots", fallback="").strip()
-        paths_cfg = PathsConfig.from_raw(paths_raw)
-        indexer_cfg = IndexerConfig(
-            worker_count=parser.getint("indexer", "worker_count", fallback=2),
-            run_interval_cron=parser.get("indexer", "run_interval_cron", fallback=None),
-            max_file_size_mb=parser.getint("indexer", "max_file_size_mb", fallback=None),
-        )
-        smtp_cfg = None
-        ui_cfg = UIConfig(
-            default_preview=parser.get("ui", "default_preview", fallback="panel"),
-            snippet_length=parser.getint("ui", "snippet_length", fallback=160),
-        )
-        logging_cfg = LoggingConfig(
-            level=parser.get("logging", "level", fallback="INFO"),
-            log_dir=Path(parser.get("logging", "log_dir", fallback="logs")),
-            rotation_mb=parser.getint("logging", "rotation_mb", fallback=10),
-        )
-        return CentralConfig(
-            paths=paths_cfg,
-            indexer=indexer_cfg,
-            smtp=smtp_cfg,
-            ui=ui_cfg,
-            logging=logging_cfg,
-            report_enabled=os.getenv("SEND_REPORT_ENABLED", "0") == "1",
-            raw=parser,
-        )
-
-    config_db.ensure_db()
-
-    env_roots = os.getenv("INDEX_ROOTS")
-    roots_list = [(Path(p), label) for p, label, _id, _active in config_db.list_roots(active_only=True)]
+    env_roots = os.getenv("INDEX_ROOTS", "")
+    roots_list: list[tuple[Path, str]] = []
     if env_roots:
-        roots_list = []
         for item in env_roots.split(","):
             raw = item.strip()
             if not raw:
@@ -196,15 +101,14 @@ def load_config(path: Path = Path("config/central_config.ini")) -> CentralConfig
                 roots_list.append((Path(raw), Path(raw).name))
     paths_cfg = PathsConfig(roots=roots_list)
 
-    def setting(key: str, default: str) -> str:
-        val = config_db.get_setting(key, None)
-        return val if val is not None else default
-
+    worker_raw = int(os.getenv("INDEX_WORKER_COUNT", "2") or 2)
+    if worker_raw < 1:
+        raise ValueError("INDEX_WORKER_COUNT muss >=1 sein")
+    max_size_raw = int(os.getenv("INDEX_MAX_FILE_SIZE_MB", "0") or 0)
     indexer_cfg = IndexerConfig(
-        worker_count=int(os.getenv("INDEX_WORKER_COUNT", setting("worker_count", "2") or 2)),
+        worker_count=worker_raw,
         run_interval_cron=None,
-        max_file_size_mb=int(os.getenv("INDEX_MAX_FILE_SIZE_MB", setting("max_file_size_mb", "") or 0) or 0)
-        or None,
+        max_file_size_mb=max_size_raw or None,
     )
 
     smtp_host = os.getenv("SMTP_HOST")
@@ -221,13 +125,13 @@ def load_config(path: Path = Path("config/central_config.ini")) -> CentralConfig
         )
 
     ui_cfg = UIConfig(
-        default_preview=setting("default_preview", "panel") or "panel",
-        snippet_length=int(setting("snippet_length", "160") or 160),
+        default_preview="panel",
+        snippet_length=160,
     )
     logging_cfg = LoggingConfig(
-        level=os.getenv("LOG_LEVEL", setting("logging_level", "INFO") or "INFO"),
-        log_dir=Path(os.getenv("LOG_DIR", setting("log_dir", "logs") or "logs")),
-        rotation_mb=int(os.getenv("LOG_ROTATION_MB", setting("rotation_mb", "10") or 10)),
+        level=os.getenv("LOG_LEVEL", "INFO"),
+        log_dir=Path(os.getenv("LOG_DIR", "logs")),
+        rotation_mb=int(os.getenv("LOG_ROTATION_MB", "10")),
     )
 
     return CentralConfig(
@@ -236,7 +140,7 @@ def load_config(path: Path = Path("config/central_config.ini")) -> CentralConfig
         smtp=smtp_cfg,
         ui=ui_cfg,
         logging=logging_cfg,
-        report_enabled=os.getenv("SEND_REPORT_ENABLED", setting("send_report_enabled", "0")) == "1",
+        report_enabled=os.getenv("SEND_REPORT_ENABLED", "0") == "1",
         raw=None,
     )
 
