@@ -5,6 +5,9 @@
 - Buttons und Eingabefelder schlanker gestaltet.
 - Tabellenkopf bleibt beim Scrollen fixiert; Trefferliste behält Spaltenkopf sichtbar.
 
+## v021 - Dashboard-Header vereinheitlicht
+- System/Dashboard nutzt den kompakten Header-Stil analog zur Suche.
+
 ## v014 - Status stabil nach Reset
 - Admin-Status/Fehler-Endpunkte initialisieren die DB bei fehlenden Tabellen (kein 500 nach Index-Reset).
 
