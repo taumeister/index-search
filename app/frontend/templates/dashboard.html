@@ -106,6 +106,7 @@
         const errorLimit = 50;
         let logOffset = 0;
         const logLimit = 200;
+        let autoLogTimer = null;
 
         async function fetchJSON(url, opts={}) {
             const res = await fetch(url, opts);
@@ -228,6 +229,18 @@
                 tr.innerHTML = `<td>${fmtDate(r.started_at)} - ${fmtDate(r.finished_at)}</td><td>${r.status || ""}</td><td>${r.scanned_files || ""}</td><td>${r.added || ""}</td><td>${r.errors || ""}</td>`;
                 runs.appendChild(tr);
             });
+            await loadIndexerStatus();
+        }
+
+        async function loadIndexerStatus() {
+            const data = await fetchJSON("/api/admin/indexer_status");
+            const hb = data.heartbeat ? `${Math.max(0, Math.floor((Date.now()/1000 - data.heartbeat)))}s` : "–";
+            const run = data.run_id ? `#${data.run_id}` : "kein aktiver Lauf";
+            document.getElementById("status-body").insertAdjacentHTML("beforeend", `<tr><td>Indexer</td><td>${run}, letzte Aktivität: ${hb}</td></tr>`);
+            const versionEl = document.getElementById("version-label");
+            if (versionEl && data.version) {
+                versionEl.textContent = data.version;
+            }
         }
 
         async function loadErrors() {
@@ -252,11 +265,11 @@
                 const data = await fetchJSON(`/api/admin/indexer_log?offset=${logOffset}&limit=${logLimit}`);
                 const div = document.getElementById("indexer-log");
                 div.textContent = (data.lines || []).join("");
-                const start = logOffset + 1;
-                const end = logOffset + (data.lines || []).length;
+                const start = Math.max(1, data.total - (logOffset + (data.lines || []).length) + 1);
+                const end = data.total - logOffset;
                 document.getElementById("log-info").textContent = (data.lines?.length ? `${start} - ${end}` : "Keine Log-Einträge");
-                document.getElementById("prev-log").disabled = logOffset <= 0;
-                document.getElementById("next-log").disabled = !(data.has_more);
+                document.getElementById("prev-log").disabled = !data.has_more_older;
+                document.getElementById("next-log").disabled = !data.has_more_newer;
             } catch (err) {
                 document.getElementById("indexer-log").textContent = `Log laden fehlgeschlagen: ${err}`;
             }
@@ -304,7 +317,7 @@
         }
 
         refreshAll();
-        setInterval(loadStatus, 5000);
+        setInterval(() => { loadStatus(); loadLog(0); }, 10000);
 
         document.getElementById("prev-errors").addEventListener("click", () => {
             errorOffset = Math.max(0, errorOffset - errorLimit);
@@ -314,8 +327,8 @@
             errorOffset = errorOffset + errorLimit;
             loadErrors();
         });
-        document.getElementById("prev-log").addEventListener("click", () => loadLog(1));
-        document.getElementById("next-log").addEventListener("click", () => loadLog(-1));
+        document.getElementById("prev-log").addEventListener("click", () => loadLog(1)); // ältere Einträge
+        document.getElementById("next-log").addEventListener("click", () => loadLog(-1)); // neuere Einträge
         document.getElementById("refresh-log").addEventListener("click", () => loadLog(0));
     </script>
 </body>

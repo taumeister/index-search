@@ -329,19 +329,26 @@ def create_app(config: Optional[CentralConfig] = None) -> FastAPI:
 
     @app.get("/api/admin/indexer_log")
     def admin_indexer_log(offset: int = 0, limit: int = LOG_PAGE_SIZE, _auth: bool = Depends(require_secret)):
+        """
+        Liefert das Indexer-Log mit neuestem Eintrag zuletzt (tail). Offset zählt vom Ende (0 = letzte Zeilen).
+        """
         log_path = Path("logs/indexer.log")
         if limit <= 0 or limit > 1000:
             limit = LOG_PAGE_SIZE
         if offset < 0:
             offset = 0
         lines: list[str] = []
+        total = 0
         if log_path.exists():
             with log_path.open("r", encoding="utf-8", errors="ignore") as f:
                 all_lines = f.readlines()
-                start = max(0, len(all_lines) - offset - limit)
-                end = max(0, len(all_lines) - offset)
+                total = len(all_lines)
+                start = max(0, total - offset - limit)
+                end = max(0, total - offset)
                 lines = all_lines[start:end]
-        return {"lines": lines, "has_more": len(lines) == limit}
+        has_more_newer = offset > 0
+        has_more_older = total > offset + len(lines)
+        return {"lines": lines, "has_more_newer": has_more_newer, "has_more_older": has_more_older, "total": total}
 
     @app.get("/api/admin/indexer_status")
     def admin_indexer_status(_auth: bool = Depends(require_secret)):
@@ -359,7 +366,7 @@ def create_app(config: Optional[CentralConfig] = None) -> FastAPI:
             row = db.get_last_run(conn)
             if row:
                 last_run = dict(row)
-        return {"run_id": run_id, "heartbeat": heartbeat_ts, "last_run": last_run}
+        return {"run_id": run_id, "heartbeat": heartbeat_ts, "last_run": last_run, "version": read_version()}
 
     def list_children(path: Path) -> list:
         try:
