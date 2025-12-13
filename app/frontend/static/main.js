@@ -5,7 +5,6 @@ let resizingColumn = false;
 let resizingPreview = false;
 const PANEL_WIDTH_KEY = "previewWidth";
 const APP_ZOOM_KEY = "appZoom";
-const SECRET_STORAGE_KEY = "appSecret";
 const DEFAULT_ZOOM = 1;
 const MIN_ZOOM = 0.6;
 const MAX_ZOOM = 1.6;
@@ -28,40 +27,10 @@ function escapeHtml(str) {
         .replace(/'/g, "&#39;");
 }
 
-function readCookie(name) {
-    const match = document.cookie.match(new RegExp("(^| )" + name + "=([^;]+)"));
-    return match ? decodeURIComponent(match[2]) : null;
-}
-
-function persistSecret(secret) {
-    if (!secret) return;
-    sessionStorage.setItem(SECRET_STORAGE_KEY, secret);
-    document.cookie = `app_secret=${encodeURIComponent(secret)}; path=/; SameSite=Lax`;
-}
-
-function ensureAppSecret() {
-    let secret = sessionStorage.getItem(SECRET_STORAGE_KEY) || readCookie("app_secret");
-    if (secret) {
-        persistSecret(secret);
-        return secret;
-    }
-    secret = prompt("Bitte App-Secret eingeben");
-    if (secret) {
-        secret = secret.trim();
-        persistSecret(secret);
-        return secret;
-    }
-    alert("Ohne App-Secret sind keine Anfragen möglich.");
-    return null;
-}
-
-ensureAppSecret();
-
 applySavedPreviewWidth();
 bootstrapZoom();
 
 async function search() {
-    if (!ensureAppSecret()) return;
     const q = document.getElementById("search-input").value;
     const ext = document.getElementById("ext-filter").value;
     const time = document.getElementById("time-filter").value;
@@ -120,7 +89,6 @@ function renderResults(results) {
 
 async function openPreview(id, showPanel = false) {
     if (!id) return;
-    if (!ensureAppSecret()) return;
     currentDocId = id;
     markActiveRow(id);
     const res = await fetch(`/api/document/${id}`);
