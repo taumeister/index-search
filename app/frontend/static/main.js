@@ -5,6 +5,7 @@ let resizingColumn = false;
 let resizingPreview = false;
 const PANEL_WIDTH_KEY = "previewWidth";
 const APP_ZOOM_KEY = "appZoom";
+const SECRET_STORAGE_KEY = "appSecret";
 const DEFAULT_ZOOM = 1;
 const MIN_ZOOM = 0.6;
 const MAX_ZOOM = 1.6;
@@ -18,10 +19,49 @@ const dateFormatter = new Intl.DateTimeFormat("de-DE", {
 });
 const SUPPORTED_EXTENSIONS = ["", ".pdf", ".rtf", ".msg", ".txt"];
 
+function escapeHtml(str) {
+    return String(str || "")
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#39;");
+}
+
+function readCookie(name) {
+    const match = document.cookie.match(new RegExp("(^| )" + name + "=([^;]+)"));
+    return match ? decodeURIComponent(match[2]) : null;
+}
+
+function persistSecret(secret) {
+    if (!secret) return;
+    sessionStorage.setItem(SECRET_STORAGE_KEY, secret);
+    document.cookie = `app_secret=${encodeURIComponent(secret)}; path=/; SameSite=Lax`;
+}
+
+function ensureAppSecret() {
+    let secret = sessionStorage.getItem(SECRET_STORAGE_KEY) || readCookie("app_secret");
+    if (secret) {
+        persistSecret(secret);
+        return secret;
+    }
+    secret = prompt("Bitte App-Secret eingeben");
+    if (secret) {
+        secret = secret.trim();
+        persistSecret(secret);
+        return secret;
+    }
+    alert("Ohne App-Secret sind keine Anfragen möglich.");
+    return null;
+}
+
+ensureAppSecret();
+
 applySavedPreviewWidth();
 bootstrapZoom();
 
 async function search() {
+    if (!ensureAppSecret()) return;
     const q = document.getElementById("search-input").value;
     const ext = document.getElementById("ext-filter").value;
     const time = document.getElementById("time-filter").value;
@@ -56,14 +96,14 @@ function renderResults(results) {
         const mtimeLabel = row.mtime ? dateFormatter.format(new Date(row.mtime * 1000)) : "–";
         const pathLabel = row.path || "";
         const nameLabel = row.filename || "";
-        const snippetHtml = row.snippet || "";
+        const snippetText = row.snippet ? stripTags(row.snippet) : "";
         tr.innerHTML = `
-            <td title="${nameLabel}">${nameLabel}</td>
-            <td class="snippet" title="${stripTags(snippetHtml)}">${snippetHtml}</td>
-            <td>${mtimeLabel}</td>
-            <td>${sizeLabel}</td>
-            <td>${row.extension}</td>
-            <td title="${pathLabel}">${pathLabel}</td>
+            <td title="${escapeHtml(nameLabel)}">${escapeHtml(nameLabel)}</td>
+            <td class="snippet" title="${escapeHtml(snippetText)}">${escapeHtml(snippetText)}</td>
+            <td>${escapeHtml(mtimeLabel)}</td>
+            <td>${escapeHtml(sizeLabel)}</td>
+            <td>${escapeHtml(row.extension)}</td>
+            <td title="${escapeHtml(pathLabel)}">${escapeHtml(pathLabel)}</td>
         `;
         if (currentDocId && String(currentDocId) === String(rowId)) {
             tr.classList.add("active");
@@ -80,6 +120,7 @@ function renderResults(results) {
 
 async function openPreview(id, showPanel = false) {
     if (!id) return;
+    if (!ensureAppSecret()) return;
     currentDocId = id;
     markActiveRow(id);
     const res = await fetch(`/api/document/${id}`);

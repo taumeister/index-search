@@ -3,7 +3,8 @@ from pathlib import Path
 from typing import Optional
 
 import uvicorn
-from fastapi import Depends, FastAPI, HTTPException, Query, Request
+import secrets
+from fastapi import Cookie, Depends, FastAPI, HTTPException, Header, Query, Request
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
@@ -23,6 +24,55 @@ index_lock = threading.Lock()
 
 def get_config() -> CentralConfig:
     return load_config()
+
+
+def ensure_app_secret(env_path: Path = Path(".env")) -> str:
+    env_val = os.getenv("APP_SECRET")
+    if env_val:
+        return env_val.strip()
+
+    if env_path.exists():
+        try:
+            for line in env_path.read_text(encoding="utf-8").splitlines():
+                if line.strip().startswith("APP_SECRET="):
+                    value = line.split("=", 1)[1].strip()
+                    if value:
+                        os.environ["APP_SECRET"] = value
+                        return value
+        except Exception:
+            pass
+
+    secret = secrets.token_urlsafe(32)
+    try:
+        existing = env_path.exists() and env_path.stat().st_size > 0
+        with env_path.open("a", encoding="utf-8") as f:
+            if existing:
+                f.write("\n")
+            f.write(f"APP_SECRET={secret}\n")
+    except Exception:
+        pass
+    os.environ["APP_SECRET"] = secret
+    return secret
+
+
+def require_secret(
+    request: Request,
+    x_app_secret: Optional[str] = Header(default=None, alias="X-App-Secret"),
+    authorization: Optional[str] = Header(default=None, alias="Authorization"),
+    app_secret_cookie: Optional[str] = Cookie(default=None, alias="app_secret"),
+):
+    expected = ensure_app_secret()
+    supplied = None
+    if x_app_secret:
+        supplied = x_app_secret.strip()
+    elif authorization and authorization.lower().startswith("bearer "):
+        supplied = authorization[7:].strip()
+    elif app_secret_cookie:
+        supplied = app_secret_cookie.strip()
+
+    if not supplied or supplied != expected:
+        raise HTTPException(status_code=401, detail="Unauthorized")
+    return True
 
 
 def read_version() -> str:
@@ -57,6 +107,7 @@ def build_match_query(raw: str) -> str:
 
 def create_app(config: Optional[CentralConfig] = None) -> FastAPI:
     config = config or load_config()
+    ensure_app_secret()
     ensure_dirs(config)
     db.init_db()
 
@@ -101,6 +152,7 @@ def create_app(config: Optional[CentralConfig] = None) -> FastAPI:
         sort_dir: Optional[str] = None,
         limit: int = 200,
         offset: int = 0,
+        _auth: bool = Depends(require_secret),
     ):
         db.init_db()
         with db.get_conn() as conn:
@@ -123,7 +175,7 @@ def create_app(config: Optional[CentralConfig] = None) -> FastAPI:
             return {"results": [dict(row) for row in rows]}
 
     @app.get("/api/document/{doc_id}")
-    def document_details(doc_id: int):
+    def document_details(doc_id: int, _auth: bool = Depends(require_secret)):
         with db.get_conn() as conn:
             row = db.get_document(conn, doc_id)
             if not row:
@@ -134,7 +186,7 @@ def create_app(config: Optional[CentralConfig] = None) -> FastAPI:
             return data
 
     @app.get("/api/document/{doc_id}/file")
-    def document_file(doc_id: int, download: bool = Query(False, description="Download erzwingen")):
+    def document_file(doc_id: int, download: bool = Query(False, description="Download erzwingen"), _auth: bool = Depends(require_secret)):
         with db.get_conn() as conn:
             row = db.get_document(conn, doc_id)
             if not row:
@@ -148,14 +200,14 @@ def create_app(config: Optional[CentralConfig] = None) -> FastAPI:
             return FileResponse(path, media_type=media_type, headers=headers)
 
     @app.get("/api/admin/status")
-    def admin_status():
+    def admin_status(_auth: bool = Depends(require_secret)):
         db.init_db()
         with db.get_conn() as conn:
             status = db.get_status(conn)
             return status
 
     @app.get("/api/admin/roots")
-    def admin_roots():
+    def admin_roots(_auth: bool = Depends(require_secret)):
         roots = [
             {"id": rid, "path": path, "label": label, "active": active}
             for path, label, rid, active in config_db.list_roots(active_only=False)
@@ -163,7 +215,7 @@ def create_app(config: Optional[CentralConfig] = None) -> FastAPI:
         return {"roots": roots, "base_data_root": config_db.get_setting("base_data_root", "/data")}
 
     @app.post("/api/admin/roots")
-    def add_root(path: str = Query(...), label: Optional[str] = Query(None), active: bool = Query(True)):
+    def add_root(path: str = Query(...), label: Optional[str] = Query(None), active: bool = Query(True), _auth: bool = Depends(require_secret)):
         base = config_db.get_setting("base_data_root", "/data")
         if base and not str(path).startswith(base):
             raise HTTPException(status_code=400, detail=f"Pfad muss unter {base} liegen")
@@ -171,12 +223,12 @@ def create_app(config: Optional[CentralConfig] = None) -> FastAPI:
         return {"id": rid}
 
     @app.delete("/api/admin/roots/{root_id}")
-    def delete_root(root_id: int):
+    def delete_root(root_id: int, _auth: bool = Depends(require_secret)):
         config_db.delete_root(root_id)
         return {"status": "ok"}
 
     @app.post("/api/admin/roots/{root_id}/activate")
-    def activate_root(root_id: int, active: bool = Query(True)):
+    def activate_root(root_id: int, active: bool = Query(True), _auth: bool = Depends(require_secret)):
         config_db.update_root_active(root_id, active)
         return {"status": "ok"}
 
@@ -193,14 +245,14 @@ def create_app(config: Optional[CentralConfig] = None) -> FastAPI:
         return "started"
 
     @app.post("/api/admin/index/run")
-    def trigger_index(full_reset: bool = Query(False)):
+    def trigger_index(full_reset: bool = Query(False), _auth: bool = Depends(require_secret)):
         status = _start_index(full_reset)
         if status == "busy":
             return JSONResponse({"status": "busy"}, status_code=409)
         return {"status": status}
 
     @app.post("/api/admin/index/reset")
-    def reset_index():
+    def reset_index(_auth: bool = Depends(require_secret)):
         if not index_lock.acquire(blocking=False):
             return JSONResponse({"status": "busy"}, status_code=409)
         try:
@@ -214,7 +266,7 @@ def create_app(config: Optional[CentralConfig] = None) -> FastAPI:
         return {"status": "reset"}
 
     @app.post("/api/admin/index/reset_run")
-    def reset_and_run():
+    def reset_and_run(_auth: bool = Depends(require_secret)):
         if not index_lock.acquire(blocking=False):
             return JSONResponse({"status": "busy"}, status_code=409)
         def runner():
@@ -232,13 +284,13 @@ def create_app(config: Optional[CentralConfig] = None) -> FastAPI:
         return {"status": "started_after_reset"}
 
     @app.post("/api/admin/index/stop")
-    def stop_index():
+    def stop_index(_auth: bool = Depends(require_secret)):
         stop_event.set()
         # writer will flush and status will be "stopped"
         return {"status": "stopping"}
 
     @app.get("/api/admin/preflight")
-    def preflight():
+    def preflight(_auth: bool = Depends(require_secret)):
         cfg = load_config()
         exts = {".pdf": 0, ".rtf": 0, ".msg": 0, ".txt": 0}
         for root, _label in cfg.paths.roots:
@@ -250,7 +302,7 @@ def create_app(config: Optional[CentralConfig] = None) -> FastAPI:
         return {"counts": exts, "roots": [str(r[0]) for r in cfg.paths.roots]}
 
     @app.get("/api/admin/errors")
-    def admin_errors(limit: int = 50, offset: int = 0):
+    def admin_errors(limit: int = 50, offset: int = 0, _auth: bool = Depends(require_secret)):
         db.init_db()
         with db.get_conn() as conn:
             rows = db.list_errors(conn, limit=limit, offset=offset)
@@ -267,7 +319,7 @@ def create_app(config: Optional[CentralConfig] = None) -> FastAPI:
             return []
 
     @app.get("/api/admin/tree")
-    def admin_tree(parent: Optional[str] = Query(None)):
+    def admin_tree(parent: Optional[str] = Query(None), _auth: bool = Depends(require_secret)):
         base_root = Path(config_db.get_setting("base_data_root", "/data"))
         if not base_root.exists():
             return {"base": str(base_root), "children": []}

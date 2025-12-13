@@ -2,6 +2,36 @@ const APP_ZOOM_KEY = "appZoom";
 const DEFAULT_ZOOM = 1;
 const MIN_ZOOM = 0.6;
 const MAX_ZOOM = 1.6;
+const SECRET_STORAGE_KEY = "appSecret";
+
+function readCookie(name) {
+    const match = document.cookie.match(new RegExp("(^| )" + name + "=([^;]+)"));
+    return match ? decodeURIComponent(match[2]) : null;
+}
+
+function persistSecret(secret) {
+    if (!secret) return;
+    sessionStorage.setItem(SECRET_STORAGE_KEY, secret);
+    document.cookie = `app_secret=${encodeURIComponent(secret)}; path=/; SameSite=Lax`;
+}
+
+function ensureAppSecret() {
+    let secret = sessionStorage.getItem(SECRET_STORAGE_KEY) || readCookie("app_secret");
+    if (secret) {
+        persistSecret(secret);
+        return secret;
+    }
+    secret = prompt("Bitte App-Secret eingeben");
+    if (secret) {
+        secret = secret.trim();
+        persistSecret(secret);
+        return secret;
+    }
+    alert("Ohne App-Secret sind keine Anfragen möglich.");
+    return null;
+}
+
+ensureAppSecret();
 
 bootstrapZoom();
 
@@ -19,6 +49,7 @@ function sizeWindow() {
 }
 
 async function loadDoc() {
+    if (!ensureAppSecret()) return;
     const params = new URLSearchParams(window.location.search);
     const id = params.get("id");
     if (!id) return;

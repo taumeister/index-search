@@ -5,6 +5,7 @@
 - Indexer: Python-Service, durchsucht konfigurierten Wurzelpfade, extrahiert Text (PDF, RTF, MSG, TXT) und schreibt Metadaten + Volltext in die Datenbank.
 - Frontend: Explorer-ähnliche Oberfläche (Suchfeld, Tabelle, Preview rechts/Popup), PDF via pdf.js, andere Formate als Text/HTML.
 - Konfiguration: zentrale Datei `config/central_config.ini`, wird beim Start validiert.
+- Auth: Alle API-Endpunkte (Suche, Dokument, Admin) verlangen `APP_SECRET`, das aus `.env` gelesen oder beim ersten Start erzeugt wird.
 
 ## Verzeichnisstruktur
 - `app/config_loader.py`: Laden/Validieren der zentralen Konfiguration.

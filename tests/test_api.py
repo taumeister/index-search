@@ -1,4 +1,5 @@
 from pathlib import Path
+import os
 
 from fastapi.testclient import TestClient
 
@@ -8,6 +9,7 @@ from app.main import create_app
 
 
 def test_search_endpoint(tmp_path, monkeypatch):
+    os.environ["APP_SECRET"] = "testsecret"
     monkeypatch.setattr(db, "DB_PATH", tmp_path / "api.db")
     cfg_file = tmp_path / "central_config.ini"
     cfg_file.write_text(
@@ -39,6 +41,10 @@ log_dir = logs
     with db.get_conn() as conn:
         db.upsert_document(conn, meta)
 
-    resp = client.get("/api/search", params={"q": "suche"})
+    resp = client.get(
+        "/api/search",
+        params={"q": "suche"},
+        headers={"X-App-Secret": os.environ["APP_SECRET"]},
+    )
     assert resp.status_code == 200
     assert resp.json()["results"]

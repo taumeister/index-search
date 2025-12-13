@@ -143,14 +143,45 @@ def _read_ini(path: Path) -> configparser.ConfigParser:
 
 
 def load_config(path: Path = Path("config/central_config.ini")) -> CentralConfig:
-    # Prefer SQLite config DB; fall back to INI for backward compatibility.
+    """
+    Load configuration from SQLite config DB (default path) or from an INI file.
+    Non-default paths always bypass the config DB to allow isolated configs (e.g. tests).
+    """
+    use_config_db = path == Path("config/central_config.ini") and os.getenv("DISABLE_CONFIG_DB") != "1"
+
+    if not use_config_db:
+        parser = _read_ini(path)
+        paths_raw = parser.get("paths", "roots", fallback="").strip()
+        paths_cfg = PathsConfig.from_raw(paths_raw)
+        indexer_cfg = IndexerConfig(
+            worker_count=parser.getint("indexer", "worker_count", fallback=2),
+            run_interval_cron=parser.get("indexer", "run_interval_cron", fallback=None),
+            max_file_size_mb=parser.getint("indexer", "max_file_size_mb", fallback=None),
+        )
+        smtp_cfg = None
+        ui_cfg = UIConfig(
+            default_preview=parser.get("ui", "default_preview", fallback="panel"),
+            snippet_length=parser.getint("ui", "snippet_length", fallback=240),
+        )
+        logging_cfg = LoggingConfig(
+            level=parser.get("logging", "level", fallback="INFO"),
+            log_dir=Path(parser.get("logging", "log_dir", fallback="logs")),
+            rotation_mb=parser.getint("logging", "rotation_mb", fallback=10),
+        )
+        return CentralConfig(
+            paths=paths_cfg,
+            indexer=indexer_cfg,
+            smtp=smtp_cfg,
+            ui=ui_cfg,
+            logging=logging_cfg,
+            raw=parser,
+        )
+
     config_db.ensure_db()
 
-    # Roots from config DB
     roots_list = [(Path(p), label) for p, label, _id, _active in config_db.list_roots(active_only=True)]
     paths_cfg = PathsConfig(roots=roots_list)
 
-    # Settings from config DB
     def setting(key: str, default: str) -> str:
         val = config_db.get_setting(key, None)
         return val if val is not None else default
@@ -161,7 +192,7 @@ def load_config(path: Path = Path("config/central_config.ini")) -> CentralConfig
         max_file_size_mb=int(setting("max_file_size_mb", "") or 0) or None,
     )
 
-    smtp_cfg: Optional[SMTPConfig] = None  # not configured via DB aktuell
+    smtp_cfg: Optional[SMTPConfig] = None
 
     ui_cfg = UIConfig(
         default_preview=setting("default_preview", "panel") or "panel",
