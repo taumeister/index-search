@@ -26,6 +26,9 @@
 ## v027 - Versions-Badge sichtbar
 - Versions-Text fällt nicht mehr leer; Badge kontrastreicher dargestellt.
 
+## v028 - Version lädt zuverlässig
+- Versionsanzeige liest `VERSION` jetzt relativ zum Code (robust gegen anderes Working Directory).
+
 ## v014 - Status stabil nach Reset
 - Admin-Status/Fehler-Endpunkte initialisieren die DB bei fehlenden Tabellen (kein 500 nach Index-Reset).
 

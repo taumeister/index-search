@@ -26,11 +26,19 @@ def get_config() -> CentralConfig:
 
 
 def read_version() -> str:
-    try:
-        content = Path("VERSION").read_text(encoding="utf-8").strip()
-        return content or "v?"
-    except Exception:
-        return "v?"
+    candidates = [
+        Path(__file__).resolve().parent.parent / "VERSION",
+        Path.cwd() / "VERSION",
+    ]
+    for path in candidates:
+        try:
+            if path.exists():
+                content = path.read_text(encoding="utf-8").strip()
+                if content:
+                    return content
+        except Exception:
+            continue
+    return "v?"
 
 
 def build_match_query(raw: str) -> str:
