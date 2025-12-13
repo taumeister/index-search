@@ -1,12 +1,14 @@
 import concurrent.futures
+import json
 import logging
 import os
 import smtplib
 import time
+from dataclasses import dataclass, asdict
 from email.message import EmailMessage
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 import queue
 import threading
 
@@ -23,6 +25,33 @@ stop_event = threading.Event()
 SUPPORTED_EXTENSIONS = {".pdf", ".rtf", ".msg", ".txt"}
 RUN_STATUS_FILE = Path("data/index.run")
 HEARTBEAT_FILE = Path("data/index.heartbeat")
+LIVE_STATUS_FILE = Path("data/index.live.json")
+LIVE_STATUS_LOCK = threading.Lock()
+live_status: Optional["LiveStatus"] = None
+
+
+@dataclass
+class LiveStatus:
+    run_id: int
+    started_at: str
+    started_ts: float
+    status: str
+    total_files: int
+    scanned: int
+    added: int
+    updated: int
+    removed: int
+    errors: int
+    skipped: int
+    current_path: Optional[str] = None
+    message: Optional[str] = None
+    finished_at: Optional[str] = None
+    heartbeat: int = 0
+
+    def to_dict(self) -> Dict[str, Any]:
+        data = asdict(self)
+        data["elapsed_seconds"] = max(0, int(time.time() - self.started_ts))
+        return data
 
 
 def setup_logging(config: CentralConfig) -> None:
@@ -36,6 +65,84 @@ def setup_logging(config: CentralConfig) -> None:
     )
 
 
+def _persist_live_status(snapshot: LiveStatus) -> None:
+    try:
+        LIVE_STATUS_FILE.parent.mkdir(parents=True, exist_ok=True)
+        LIVE_STATUS_FILE.write_text(json.dumps(snapshot.to_dict()), encoding="utf-8")
+    except Exception:
+        pass
+
+
+def init_live_status(run_id: int, start_time: str, total_files: int) -> None:
+    global live_status
+    now_ts = time.time()
+    with LIVE_STATUS_LOCK:
+        live_status = LiveStatus(
+            run_id=run_id,
+            started_at=start_time,
+            started_ts=now_ts,
+            status="running",
+            total_files=total_files,
+            scanned=0,
+            added=0,
+            updated=0,
+            removed=0,
+            errors=0,
+            skipped=0,
+            heartbeat=int(now_ts),
+        )
+        snapshot = live_status
+    _persist_live_status(snapshot)
+
+
+def update_live_status(
+    counters: Dict[str, int],
+    current_path: Optional[str] = None,
+    status: Optional[str] = None,
+    message: Optional[str] = None,
+    finished: bool = False,
+) -> None:
+    global live_status
+    now_ts = time.time()
+    snapshot = None
+    with LIVE_STATUS_LOCK:
+        if live_status is None:
+            return
+        live_status.scanned = counters.get("scanned", live_status.scanned)
+        live_status.added = counters.get("added", live_status.added)
+        live_status.updated = counters.get("updated", live_status.updated)
+        live_status.removed = counters.get("removed", live_status.removed)
+        live_status.errors = counters.get("errors", live_status.errors)
+        live_status.skipped = counters.get("skipped", live_status.skipped)
+        if current_path is not None:
+            live_status.current_path = current_path
+        if status:
+            live_status.status = status
+        if message is not None:
+            live_status.message = message
+        if finished and not live_status.finished_at:
+            live_status.finished_at = datetime.now(timezone.utc).isoformat()
+        live_status.heartbeat = int(now_ts)
+        snapshot = live_status
+    if snapshot:
+        _persist_live_status(snapshot)
+        touch_heartbeat()
+
+
+def get_live_status() -> Optional[Dict[str, Any]]:
+    with LIVE_STATUS_LOCK:
+        if live_status:
+            return live_status.to_dict()
+    if LIVE_STATUS_FILE.exists():
+        try:
+            data = json.loads(LIVE_STATUS_FILE.read_text(encoding="utf-8"))
+            if isinstance(data, dict):
+                return data
+        except Exception:
+            return None
+    return None
+
+
 def run_index_lauf(config: CentralConfig) -> Dict[str, int]:
     stop_event.clear()
     db.init_db()
@@ -43,7 +150,7 @@ def run_index_lauf(config: CentralConfig) -> Dict[str, int]:
     touch_heartbeat()
 
     start_time = datetime.now(timezone.utc).isoformat()
-    counters = {"scanned": 0, "added": 0, "updated": 0, "removed": 0, "errors": 0}
+    counters = {"scanned": 0, "added": 0, "updated": 0, "removed": 0, "errors": 0, "skipped": 0}
 
     with db.get_conn() as conn:
         run_id = db.record_index_run_start(conn, start_time)
@@ -53,6 +160,8 @@ def run_index_lauf(config: CentralConfig) -> Dict[str, int]:
     root_entries = config.paths.roots
     if not root_entries:
         logger.warning("Keine roots konfiguriert, Indexlauf beendet")
+        init_live_status(run_id, start_time, 0)
+        update_live_status(counters, status="completed", message="keine Wurzelpfade konfiguriert", finished=True)
         with db.get_conn() as conn:
             db.record_index_run_finish(
                 conn,
@@ -80,8 +189,19 @@ def run_index_lauf(config: CentralConfig) -> Dict[str, int]:
                 if path.suffix.lower() in SUPPORTED_EXTENSIONS:
                     to_process.append((path, path, source))
 
+    init_live_status(run_id, start_time, len(to_process))
+
     work_queue: "queue.Queue[Optional[Dict]]" = queue.Queue(maxsize=200)
     scanned_paths: set[str] = set()
+    last_status_write = 0.0
+
+    def flush_live_status(current_path: Optional[str] = None, force: bool = False) -> None:
+        nonlocal last_status_write
+        now_ts = time.time()
+        if force or now_ts - last_status_write >= 0.5:
+            status_value = "stopping" if stop_event.is_set() else None
+            update_live_status(counters, current_path=current_path, status=status_value)
+            last_status_write = now_ts
 
     def writer():
         conn = db.connect()
@@ -95,6 +215,7 @@ def run_index_lauf(config: CentralConfig) -> Dict[str, int]:
                 kind = item.get("type")
                 if kind == "error":
                     counters["scanned"] += 1
+                    counters["skipped"] += 1
                     scanned_paths.add(item["path"])
                     try:
                         db.record_file_error(
@@ -109,6 +230,7 @@ def run_index_lauf(config: CentralConfig) -> Dict[str, int]:
                         counters["errors"] += 1
                 elif kind == "unchanged":
                     counters["scanned"] += 1
+                    counters["skipped"] += 1
                     scanned_paths.add(item["path"])
                 elif kind == "document":
                     meta: DocumentMeta = item["meta"]
@@ -116,6 +238,7 @@ def run_index_lauf(config: CentralConfig) -> Dict[str, int]:
                     scanned_paths.add(meta.path)
                     existing = local_existing.get(meta.path)
                     if existing and existing[0] == meta.size_bytes and existing[1] == meta.mtime:
+                        counters["skipped"] += 1
                         continue
                     try:
                         db.upsert_document(conn, meta)
@@ -147,7 +270,7 @@ def run_index_lauf(config: CentralConfig) -> Dict[str, int]:
                     conn.commit()
                 except Exception:
                     pass
-                touch_heartbeat()
+                flush_live_status(item.get("path") if item else None)
         finally:
             conn.close()
 
@@ -213,6 +336,7 @@ def run_index_lauf(config: CentralConfig) -> Dict[str, int]:
 
     work_queue.put(None)
     writer_thread.join()
+    flush_live_status(force=True)
 
     with db.get_conn() as conn:
         existing_paths = db.list_paths_by_sources(conn, [src for _, src in root_entries])
@@ -221,6 +345,7 @@ def run_index_lauf(config: CentralConfig) -> Dict[str, int]:
         counters["removed"] = removed_count
 
     status = "stopped" if stop_event.is_set() else ("completed" if counters["errors"] == 0 else "completed_with_errors")
+    update_live_status(counters, status=status, finished=True)
     with db.get_conn() as conn:
         db.record_index_run_finish(
             conn,
@@ -276,8 +401,8 @@ def process_file(real_path: Path, original_path: Path, source: str, config: Cent
 
     max_size = config.indexer.max_file_size_mb
     if max_size and stat.st_size > max_size * 1024 * 1024:
-        logger.info("Übersprungen (zu groß): %s", path)
-        return {"status": "skipped", "path": str(path)}
+        logger.info("Übersprungen (zu groß): %s", original_path)
+        return {"status": "skipped", "path": str(original_path)}
 
     ext = real_path.suffix.lower()
     meta = DocumentMeta(

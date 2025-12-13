@@ -11,12 +11,13 @@ from fastapi.templating import Jinja2Templates
 import mimetypes
 import threading
 import os
+import time
 
 from app import api
 from app import config_db
 from app.config_loader import CentralConfig, ensure_dirs, load_config
 from app.db import datenbank as db
-from app.indexer.index_lauf_service import run_index_lauf, stop_event, load_run_id
+from app.indexer.index_lauf_service import run_index_lauf, stop_event, load_run_id, get_live_status
 
 logging.basicConfig(level=logging.INFO)
 index_lock = threading.Lock()
@@ -222,7 +223,19 @@ def create_app(config: Optional[CentralConfig] = None) -> FastAPI:
         db.init_db()
         with db.get_conn() as conn:
             status = db.get_status(conn)
-            return status
+            ext_counts = [
+                {"extension": row["extension"], "count": row["c"]}
+                for row in status["ext_counts"]
+            ]
+            recent_runs = [dict(r) for r in status["recent_runs"]]
+            last_run = dict(status["last_run"]) if status["last_run"] else None
+            return {
+                "total_docs": int(status["total_docs"]),
+                "ext_counts": ext_counts,
+                "last_run": last_run,
+                "recent_runs": recent_runs,
+                "errors_total": db.error_count(conn),
+            }
 
     @app.get("/api/admin/roots")
     def admin_roots(_auth: bool = Depends(require_secret)):
@@ -328,45 +341,80 @@ def create_app(config: Optional[CentralConfig] = None) -> FastAPI:
             return {"errors": [dict(r) for r in rows], "total": total}
 
     @app.get("/api/admin/indexer_log")
-    def admin_indexer_log(offset: int = 0, limit: int = LOG_PAGE_SIZE, _auth: bool = Depends(require_secret)):
+    def admin_indexer_log(
+        offset: int = 0,
+        limit: int = LOG_PAGE_SIZE,
+        since: Optional[int] = Query(None, description="Zeilennummer, ab der gelesen wird (0-basiert)"),
+        tail: Optional[int] = Query(None, description="Letzte N Zeilen zurückgeben"),
+        _auth: bool = Depends(require_secret),
+    ):
         """
         Liefert das Indexer-Log mit neuestem Eintrag zuletzt (tail). Offset zählt vom Ende (0 = letzte Zeilen).
         """
         log_path = Path("logs/indexer.log")
-        if limit <= 0 or limit > 1000:
-            limit = LOG_PAGE_SIZE
-        if offset < 0:
-            offset = 0
         lines: list[str] = []
         total = 0
+        from_line = 0
         if log_path.exists():
             with log_path.open("r", encoding="utf-8", errors="ignore") as f:
                 all_lines = f.readlines()
                 total = len(all_lines)
-                start = max(0, total - offset - limit)
-                end = max(0, total - offset)
+                if since is not None:
+                    from_line = max(0, min(int(since), total))
+                    start = from_line
+                    end = total
+                elif tail is not None:
+                    tail_value = min(max(1, int(tail)), 2000)
+                    start = max(0, total - tail_value)
+                    end = total
+                    from_line = start
+                else:
+                    if limit <= 0 or limit > 1000:
+                        limit = LOG_PAGE_SIZE
+                    if offset < 0:
+                        offset = 0
+                    start = max(0, total - offset - limit)
+                    end = max(0, total - offset)
+                    from_line = start
                 lines = all_lines[start:end]
-        has_more_newer = offset > 0
-        has_more_older = total > offset + len(lines)
-        return {"lines": lines, "has_more_newer": has_more_newer, "has_more_older": has_more_older, "total": total}
+        has_more_newer = (since is None and offset > 0) or False
+        has_more_older = total > from_line + len(lines)
+        return {
+            "lines": lines,
+            "has_more_newer": has_more_newer,
+            "has_more_older": has_more_older,
+            "total": total,
+            "from": from_line,
+        }
 
     @app.get("/api/admin/indexer_status")
     def admin_indexer_status(_auth: bool = Depends(require_secret)):
-        run_id = load_run_id()
-        heartbeat_ts = None
+        live = get_live_status()
+        run_id = live.get("run_id") if live else load_run_id()
+        heartbeat_ts = live.get("heartbeat") if live else None
         hb_path = Path("data/index.heartbeat")
-        if hb_path.exists():
+        if heartbeat_ts is None and hb_path.exists():
             try:
                 heartbeat_ts = int(hb_path.read_text().strip())
             except Exception:
                 heartbeat_ts = None
+        heartbeat_age = None
+        if heartbeat_ts:
+            heartbeat_age = max(0, int(time.time()) - int(heartbeat_ts))
         db.init_db()
         last_run = None
         with db.get_conn() as conn:
             row = db.get_last_run(conn)
             if row:
                 last_run = dict(row)
-        return {"run_id": run_id, "heartbeat": heartbeat_ts, "last_run": last_run, "version": read_version()}
+        return {
+            "run_id": run_id,
+            "heartbeat": heartbeat_ts,
+            "heartbeat_age": heartbeat_age,
+            "last_run": last_run,
+            "version": read_version(),
+            "live": live,
+        }
 
     def list_children(path: Path) -> list:
         try:

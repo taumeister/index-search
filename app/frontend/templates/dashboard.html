@@ -20,106 +20,452 @@
     </script>
     <link rel="stylesheet" href="/static/styles.css">
     <style>
-        body { background: #f0f3f8; }
-        .system-layout { display: grid; grid-template-columns: 280px 1fr; gap: 12px; padding: 12px; }
-        .panel { background: #fff; border: 1px solid #d7dde7; border-radius: 8px; padding: 10px; box-shadow: 0 1px 3px rgba(0,0,0,0.08); }
-        .panel h2 { margin: 4px 0 8px 0; font-size: 16px; }
-        .tree ul { list-style: none; padding-left: 14px; margin: 0; }
-        .tree li { cursor: pointer; padding: 2px 0; }
-        .roots-list { display: flex; flex-direction: column; gap: 6px; }
-        .root-item { border: 1px solid #d7dde7; border-radius: 6px; padding: 6px 8px; display: flex; justify-content: space-between; align-items: center; }
-        .chips { display: flex; gap: 6px; flex-wrap: wrap; }
-        .chip { background: #e5e7eb; border-radius: 12px; padding: 2px 8px; font-size: 12px; }
-        table.status { width: 100%; border-collapse: collapse; }
-        table.status th, table.status td { border-bottom: 1px solid #e5e7eb; padding: 6px 8px; text-align: left; }
-        .actions { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 8px; }
-        button.destructive { background: #fef2f2; color: #991b1b; border: 1px solid #fca5a5; }
+        :root {
+            --panel: #ffffff;
+            --border: #dce3ef;
+            --bg: #f4f6fb;
+            --muted: #6b7280;
+            --primary: #2563eb;
+            --success: #16a34a;
+            --danger: #b91c1c;
+        }
+        body { background: var(--bg); margin: 0; color: #111827; }
+        header { padding: 14px 16px 6px; }
+        .header-top { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+        .header-actions { display: flex; align-items: center; gap: 10px; }
+        .button-link { padding: 8px 12px; background: #e5e7eb; border-radius: 8px; text-decoration: none; color: #111827; border: 1px solid #cbd5e1; }
+        .system-layout { display: grid; grid-template-columns: 1.5fr 1fr; gap: 12px; padding: 0 14px 20px; align-items: start; }
+        @media (max-width: 1100px) { .system-layout { grid-template-columns: 1fr; } }
+        .panel { background: var(--panel); border: 1px solid var(--border); border-radius: 12px; padding: 14px; box-shadow: 0 8px 20px rgba(15,23,42,0.06); }
+        .panel h2 { margin: 0 0 8px 0; font-size: 16px; }
+        .panel-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; margin-bottom: 8px; }
+        .eyebrow { font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); margin-bottom: 2px; }
+        .subtext { font-size: 12px; color: var(--muted); }
+        .status-pill { padding: 6px 12px; border-radius: 999px; font-weight: 700; font-size: 13px; background: #e2e8f0; color: #334155; align-self: flex-start; }
+        .status-pill[data-state="running"] { background: #dcfce7; color: #166534; }
+        .status-pill[data-state="stopping"] { background: #fef9c3; color: #92400e; }
+        .status-pill[data-state="completed"] { background: #e0f2fe; color: #075985; }
+        .status-pill[data-state="completed_with_errors"] { background: #fee2e2; color: #991b1b; }
+        .status-pill[data-state="idle"] { background: #ede9fe; color: #5b21b6; }
+        .metrics-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 10px; }
+        .metric-card { border: 1px solid var(--border); border-radius: 10px; padding: 10px; background: linear-gradient(135deg, #fff, #f7fbff); }
+        .metric-card.primary { background: linear-gradient(135deg, #0ea5e9, #2563eb); color: #f8fafc; border: none; }
+        .metric-label { font-size: 12px; text-transform: uppercase; letter-spacing: 0.05em; color: #6b7280; }
+        .metric-card.primary .metric-label { color: #dbeafe; }
+        .metric-value { font-size: 26px; font-weight: 700; margin: 4px 0; }
+        .metric-sub { font-size: 12px; color: #94a3b8; }
+        .metric-card.primary .metric-sub { color: #bfdbfe; }
+        .progress-row { display: flex; align-items: center; gap: 10px; margin: 10px 0; }
+        .progress-shell { background: #e2e8f0; height: 10px; border-radius: 999px; flex: 1; overflow: hidden; }
+        .progress-bar { background: #22c55e; height: 100%; width: 0; transition: width 0.3s ease; }
+        .chip-row { display: flex; flex-wrap: wrap; gap: 8px; }
+        .chip { background: #e5e7eb; border-radius: 12px; padding: 4px 10px; font-size: 12px; color: #374151; border: 1px solid #d1d5db; }
+        .chip.highlight { background: #dbeafe; border-color: #bfdbfe; color: #1d4ed8; }
+        .action-row button { padding: 8px 10px; border-radius: 8px; border: 1px solid #cbd5e1; background: #f8fafc; cursor: pointer; }
+        .action-row button.destructive { background: #fef2f2; color: #991b1b; border-color: #fecdd3; }
+        .live-meta { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 8px; margin: 6px 0; }
+        .meta-item { font-size: 13px; color: #1f2937; }
+        .meta-item strong { color: #4b5563; }
+        .log-box { max-height: 360px; min-height: 240px; overflow: auto; border-radius: 10px; background: #0b1021; color: #e5e7eb; font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace; font-size: 12px; padding: 12px; line-height: 1.35; border: 1px solid #111827; }
         .error-list { max-height: 260px; overflow: auto; }
-        .error-item { border-bottom: 1px solid #e5e7eb; padding: 4px 0; }
-        .log-list { max-height: 260px; overflow: auto; font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace; font-size: 12px; background: #f8fafc; border: 1px solid #e5e7eb; border-radius: 6px; padding: 6px; white-space: pre-wrap; }
-        .button-link { padding: 8px 12px; background: #e5e7eb; border-radius: 6px; text-decoration: none; color: #111827; border: 1px solid #cbd5e1; }
+        .error-item { border-bottom: 1px solid #e5e7eb; padding: 4px 0; font-size: 13px; }
+        .status-table { width: 100%; border-collapse: collapse; }
+        .status-table th, .status-table td { border-bottom: 1px solid #e5e7eb; padding: 6px 8px; text-align: left; font-size: 13px; }
+        .roots-list { display: flex; flex-direction: column; gap: 6px; margin-top: 8px; }
+        .root-item { border: 1px solid #d7dde7; border-radius: 8px; padding: 8px 10px; display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+        .tree ul { list-style: none; padding-left: 14px; margin: 0; }
+        .tree li { cursor: pointer; padding: 2px 0; font-size: 13px; }
         .toggle { cursor: pointer; margin-right: 4px; color: #4b5563; }
+        .add-root-row { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 8px; }
+        .add-root-row input { padding: 6px 8px; border-radius: 6px; border: 1px solid #d1d5db; }
+        .meta-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 8px; margin-bottom: 6px; }
+        .pill { border-radius: 12px; padding: 4px 8px; font-size: 12px; border: 1px solid #cbd5e1; background: #f8fafc; color: #1f2937; }
     </style>
 </head>
 <body>
     <header>
         <div class="header-top">
-            <h1>System &amp; Index</h1>
+            <div>
+                <h1>System &amp; Index</h1>
+                <div class="subtext">Live-Übersicht für Laufstatus, Log und Fehler</div>
+            </div>
             <div class="header-actions">
+                <span class="pill" id="version-label">{{ app_version }}</span>
                 <a href="/" class="button-link">Zur Suche</a>
             </div>
         </div>
     </header>
     <div class="system-layout">
-        <section class="panel">
-            <h2>Basis-Ordner</h2>
-            <div id="base-root"></div>
-            <h3>Explorer</h3>
-            <div class="tree" id="tree"></div>
-        </section>
-        <section class="panel">
-            <div class="actions">
+        <section class="panel live-panel">
+            <div class="panel-head">
+                <div>
+                    <div class="eyebrow">Index-Live</div>
+                    <h2>Indexstatus</h2>
+                    <div class="subtext">Aktuelle Kennzahlen und Fortschritt</div>
+                </div>
+                <div class="status-pill" id="status-pill" data-state="idle">Wartet</div>
+            </div>
+            <div class="chip-row action-row" style="margin-bottom:10px;">
                 <button id="start-run">Index starten</button>
                 <button id="stop-run">Index stoppen</button>
                 <button id="preflight">Preflight (zählen)</button>
-                <button id="reset-run" class="destructive">Index leeren (ohne Start)</button>
-                <button id="reset-run-start" class="destructive">Index leeren &amp; neu starten</button>
+                <button id="reset-run" class="destructive">Index leeren</button>
+                <button id="reset-run-start" class="destructive">Leeren &amp; neu starten</button>
             </div>
-            <div class="chips" id="ext-counts"></div>
-            <div id="preflight-result" style="font-size:13px;color:#374151;"></div>
-            <h2>Roots</h2>
-            <div class="roots-list" id="roots"></div>
-            <div style="margin-top:8px;">
-                <input type="text" id="new-path" placeholder="Pfad aus Explorer wählen oder tippen" style="width:60%;">
-                <input type="text" id="new-label" placeholder="Label" style="width:20%;">
-                <button id="add-root">Hinzufügen</button>
+            <div class="metrics-grid">
+                <div class="metric-card primary">
+                    <div class="metric-label">Status</div>
+                    <div class="metric-value" id="metric-status">–</div>
+                    <div class="metric-sub" id="last-run-label">Letzter Lauf –</div>
+                </div>
+                <div class="metric-card">
+                    <div class="metric-label">Dokumente im Index</div>
+                    <div class="metric-value" id="metric-total-docs">–</div>
+                    <div class="metric-sub">DB-Stand</div>
+                </div>
+                <div class="metric-card">
+                    <div class="metric-label">Zu scannen</div>
+                    <div class="metric-value" id="metric-total-scan">–</div>
+                    <div class="metric-sub">Dateien im Lauf</div>
+                </div>
+                <div class="metric-card">
+                    <div class="metric-label">Gescannt</div>
+                    <div class="metric-value" id="metric-scanned">–</div>
+                    <div class="metric-sub">inkl. übersprungen</div>
+                </div>
+                <div class="metric-card">
+                    <div class="metric-label">OK</div>
+                    <div class="metric-value" id="metric-ok">–</div>
+                    <div class="metric-sub">ohne Fehler</div>
+                </div>
+                <div class="metric-card">
+                    <div class="metric-label">Fehler</div>
+                    <div class="metric-value" id="metric-errors">–</div>
+                    <div class="metric-sub">laufender Lauf</div>
+                </div>
+                <div class="metric-card">
+                    <div class="metric-label">Hinzugefügt</div>
+                    <div class="metric-value" id="metric-added">–</div>
+                    <div class="metric-sub">neue Dokumente</div>
+                </div>
+                <div class="metric-card">
+                    <div class="metric-label">Aktualisiert</div>
+                    <div class="metric-value" id="metric-updated">–</div>
+                    <div class="metric-sub">geändert</div>
+                </div>
+                <div class="metric-card">
+                    <div class="metric-label">Entfernt</div>
+                    <div class="metric-value" id="metric-removed">–</div>
+                    <div class="metric-sub">verwaist</div>
+                </div>
+                <div class="metric-card">
+                    <div class="metric-label">Übersprungen</div>
+                    <div class="metric-value" id="metric-skipped">–</div>
+                    <div class="metric-sub">unverändert/zu groß</div>
+                </div>
             </div>
-            <h2>Status</h2>
-            <table class="status">
-                <tbody id="status-body"></tbody>
-            </table>
-            <h2>Letzte Läufe</h2>
-            <table class="status">
-                <thead><tr><th>Start</th><th>Status</th><th>Scanned</th><th>Added</th><th>Errors</th></tr></thead>
+            <div class="progress-row">
+                <div class="progress-shell"><div class="progress-bar" id="progress-bar"></div></div>
+                <div class="subtext" id="progress-text">–</div>
+            </div>
+            <div class="live-meta">
+                <div class="meta-item"><strong>Run:</strong> <span id="run-id">–</span></div>
+                <div class="meta-item"><strong>Start:</strong> <span id="started-at">–</span></div>
+                <div class="meta-item"><strong>Laufzeit:</strong> <span id="runtime-label">–</span></div>
+                <div class="meta-item"><strong>Letztes Signal:</strong> <span id="heartbeat-label">–</span></div>
+            </div>
+            <div class="live-meta">
+                <div class="meta-item" style="grid-column: 1 / -1;"><strong>Aktuelle Datei:</strong> <span id="current-file">–</span></div>
+            </div>
+            <div class="chip-row" id="ext-counts"></div>
+        </section>
+        <section class="panel log-panel">
+            <div class="panel-head">
+                <div>
+                    <div class="eyebrow">Indexer</div>
+                    <h2>Live-Log</h2>
+                    <div class="subtext">Letzte Zeilen + Streaming</div>
+                </div>
+                <div class="chip-row action-row">
+                    <button id="live-log">Live</button>
+                    <button id="older-log">Ältere</button>
+                    <button id="refresh-log">Neu laden</button>
+                    <button id="toggle-autoscroll">Autoscroll an</button>
+                </div>
+            </div>
+            <div class="log-box" id="indexer-log"></div>
+            <div class="subtext" id="log-info">–</div>
+        </section>
+        <section class="panel errors-panel">
+            <div class="panel-head">
+                <div>
+                    <div class="eyebrow">Qualität</div>
+                    <h2>Fehler</h2>
+                    <div class="subtext">Aktuelle Fehler im Lauf</div>
+                </div>
+                <div class="chip-row action-row">
+                    <button id="prev-errors">Zurück</button>
+                    <button id="next-errors">Weiter</button>
+                </div>
+            </div>
+            <div class="error-list" id="errors"></div>
+            <div class="subtext" id="errors-info"></div>
+        </section>
+        <section class="panel runs-panel">
+            <div class="panel-head">
+                <div>
+                    <div class="eyebrow">Historie</div>
+                    <h2>Letzte Läufe</h2>
+                </div>
+            </div>
+            <table class="status-table">
+                <thead><tr><th>Start</th><th>Status</th><th>Gescannt</th><th>Added</th><th>Errors</th></tr></thead>
                 <tbody id="runs-body"></tbody>
             </table>
-            <h2>Fehler</h2>
-            <div class="error-list" id="errors"></div>
-            <div class="actions">
-                <button id="prev-errors">Zurück</button>
-                <button id="next-errors">Weiter</button>
-                <span id="errors-info"></span>
+        </section>
+        <section class="panel roots-panel">
+            <div class="panel-head">
+                <div>
+                    <div class="eyebrow">Quellen</div>
+                    <h2>Roots &amp; Explorer</h2>
+                </div>
             </div>
-            <h2>Indexer-Log (live)</h2>
-            <div class="log-list" id="indexer-log"></div>
-            <div class="actions">
-                <button id="prev-log">Zurück</button>
-                <button id="next-log">Weiter</button>
-                <button id="refresh-log">Aktualisieren</button>
-                <span id="log-info"></span>
+            <div class="meta-grid">
+                <div>
+                    <strong>Basis-Ordner</strong><br>
+                    <span id="base-root"></span>
+                </div>
+                <div>
+                    <strong>Preflight</strong><br>
+                    <div id="preflight-result" class="subtext">Noch nicht geprüft.</div>
+                </div>
+            </div>
+            <div class="tree" id="tree"></div>
+            <div class="roots-list" id="roots"></div>
+            <div class="add-root-row">
+                <input type="text" id="new-path" placeholder="Pfad aus Explorer wählen oder tippen" style="flex:2;">
+                <input type="text" id="new-label" placeholder="Label" style="flex:1;">
+                <button id="add-root">Hinzufügen</button>
             </div>
         </section>
     </div>
     <script>
-        const state = { baseRoot: "", tree: [], roots: [] };
-        let errorOffset = 0;
-        const errorLimit = 50;
-        let logOffset = 0;
-        const logLimit = 200;
-        let autoLogTimer = null;
+        const state = { errorOffset: 0, errorLimit: 50, logOffset: 0, logPointer: 0, logTail: 400, logTotal: 0, autoScrollLog: true };
+        const POLL_STATUS_MS = 2000;
+        const POLL_LOG_MS = 2000;
+        const POLL_ERRORS_MS = 15000;
 
-        async function fetchJSON(url, opts={}) {
+        async function fetchJSON(url, opts = {}) {
             const res = await fetch(url, opts);
-            if (!res.ok) throw new Error(await res.text());
+            if (!res.ok) {
+                const text = await res.text();
+                throw new Error(text || res.statusText);
+            }
             return res.json();
         }
 
-        async function loadChildren(path, ul) {
+        function setText(id, value) {
+            const el = document.getElementById(id);
+            if (el) el.textContent = value;
+        }
+
+        function fmtNumber(value) {
+            const n = Number(value || 0);
+            return Number.isFinite(n) ? n.toLocaleString("de-DE") : "0";
+        }
+
+        function fmtDateTime(value) {
+            if (!value) return "–";
+            const d = new Date(value);
+            if (Number.isNaN(d.getTime())) return "–";
+            return d.toLocaleString("de-DE", { year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" });
+        }
+
+        function fmtDuration(sec) {
+            const total = Math.max(0, Math.floor(sec || 0));
+            const h = Math.floor(total / 3600).toString().padStart(2, "0");
+            const m = Math.floor((total % 3600) / 60).toString().padStart(2, "0");
+            const s = Math.floor(total % 60).toString().padStart(2, "0");
+            return `${h}:${m}:${s}`;
+        }
+
+        function statusLabel(code) {
+            switch ((code || "idle").toLowerCase()) {
+                case "running": return "Läuft";
+                case "stopping": return "Stoppt";
+                case "completed": return "Fertig";
+                case "completed_with_errors": return "Fertig (Fehler)";
+                default: return "Wartet";
+            }
+        }
+
+        function updateStatusPill(text, code) {
+            const pill = document.getElementById("status-pill");
+            if (!pill) return;
+            pill.textContent = text;
+            pill.dataset.state = code || "idle";
+        }
+
+        async function refreshStatus() {
+            try {
+                const [statusData, idxData] = await Promise.all([
+                    fetchJSON("/api/admin/status"),
+                    fetchJSON("/api/admin/indexer_status"),
+                ]);
+                renderSummary(statusData, idxData);
+            } catch (err) {
+                console.error("Status laden fehlgeschlagen", err);
+            }
+        }
+
+        function renderSummary(statusData, idxData) {
+            const live = idxData.live || {};
+            const activeId = live.run_id || idxData.run_id;
+            const statusCode = live.status || (activeId ? "running" : "idle");
+            const statusText = statusLabel(statusCode);
+            updateStatusPill(statusText, statusCode);
+            setText("metric-status", statusText);
+            setText("metric-total-docs", fmtNumber(statusData.total_docs || 0));
+            setText("metric-total-scan", fmtNumber(live.total_files ?? 0));
+            const scanned = live.scanned ?? 0;
+            setText("metric-scanned", fmtNumber(scanned));
+            const errors = live.errors ?? 0;
+            const ok = Math.max(0, scanned - errors);
+            setText("metric-ok", fmtNumber(ok));
+            setText("metric-errors", fmtNumber(errors));
+            setText("metric-added", fmtNumber(live.added ?? 0));
+            setText("metric-updated", fmtNumber(live.updated ?? 0));
+            setText("metric-removed", fmtNumber(live.removed ?? 0));
+            setText("metric-skipped", fmtNumber(live.skipped ?? 0));
+            const totalFiles = live.total_files ?? 0;
+            const progress = totalFiles > 0 ? Math.min(100, Math.round((scanned / totalFiles) * 100)) : 0;
+            const bar = document.getElementById("progress-bar");
+            if (bar) bar.style.width = `${progress}%`;
+            setText("progress-text", totalFiles ? `${fmtNumber(scanned)} / ${fmtNumber(totalFiles)} (${progress}%)` : `${fmtNumber(scanned)} Dateien gescannt`);
+            setText("run-id", activeId ? `#${activeId}` : "kein aktiver Lauf");
+            setText("started-at", live.started_at ? fmtDateTime(live.started_at) : "–");
+            setText("runtime-label", fmtDuration(live.elapsed_seconds || 0));
+            const hb = idxData.heartbeat_age != null ? `${idxData.heartbeat_age}s` : "–";
+            setText("heartbeat-label", hb);
+            setText("current-file", live.current_path || "–");
+            if (idxData.version) {
+                setText("version-label", idxData.version);
+            }
+            if (idxData.last_run) {
+                const last = idxData.last_run;
+                const finished = last.finished_at ? fmtDateTime(last.finished_at) : "läuft";
+                setText("last-run-label", `${fmtDateTime(last.started_at)} → ${finished}`);
+            }
+            renderExtCounts(statusData.ext_counts || []);
+            renderRuns(statusData.recent_runs || []);
+        }
+
+        function renderExtCounts(list) {
+            const ext = document.getElementById("ext-counts");
+            if (!ext) return;
+            ext.innerHTML = "";
+            list.forEach((row) => {
+                const chip = document.createElement("span");
+                chip.className = "chip";
+                chip.textContent = `${row.extension || "?"}: ${fmtNumber(row.count || row.c || 0)}`;
+                ext.appendChild(chip);
+            });
+        }
+
+        function renderRuns(runs) {
+            const body = document.getElementById("runs-body");
+            if (!body) return;
+            body.innerHTML = "";
+            runs.forEach((r) => {
+                const tr = document.createElement("tr");
+                tr.innerHTML = `<td>${fmtDateTime(r.started_at)}${r.finished_at ? " → " + fmtDateTime(r.finished_at) : ""}</td>
+                    <td>${r.status || ""}</td>
+                    <td>${fmtNumber(r.scanned_files || 0)}</td>
+                    <td>${fmtNumber(r.added || 0)}</td>
+                    <td>${fmtNumber(r.errors || 0)}</td>`;
+                body.appendChild(tr);
+            });
+        }
+
+        async function loadErrors() {
+            try {
+                const data = await fetchJSON(`/api/admin/errors?limit=${state.errorLimit}&offset=${state.errorOffset}`);
+                const box = document.getElementById("errors");
+                box.innerHTML = "";
+                (data.errors || []).forEach((e) => {
+                    const div = document.createElement("div");
+                    div.className = "error-item";
+                    div.textContent = `${e.created_at}: ${e.path} — ${e.error_type} (${e.message})`;
+                    box.appendChild(div);
+                });
+                const total = data.total || 0;
+                const start = total === 0 ? 0 : Math.min(total, state.errorOffset + 1);
+                const end = Math.min(total, state.errorOffset + state.errorLimit);
+                setText("errors-info", `${start} - ${end} / ${total}`);
+                document.getElementById("prev-errors").disabled = state.errorOffset <= 0;
+                document.getElementById("next-errors").disabled = state.errorOffset + state.errorLimit >= total;
+            } catch (err) {
+                setText("errors-info", `Fehler beim Laden: ${err}`);
+            }
+        }
+
+        function updateAutoScrollButton() {
+            const btn = document.getElementById("toggle-autoscroll");
+            if (btn) {
+                btn.textContent = state.autoScrollLog ? "Autoscroll an" : "Autoscroll aus";
+            }
+        }
+
+        function scrollLogIfNeeded(force = false) {
+            const box = document.getElementById("indexer-log");
+            if (!box) return;
+            const nearBottom = box.scrollHeight - box.scrollTop - box.clientHeight < 60;
+            if (force || (state.autoScrollLog && nearBottom)) {
+                box.scrollTop = box.scrollHeight;
+            }
+        }
+
+        async function loadLog({ forceReplace = false, live = true } = {}) {
+            try {
+                let url = "/api/admin/indexer_log";
+                if (state.logOffset === 0 && live) {
+                    if (state.logPointer === 0 || forceReplace) {
+                        url += `?tail=${state.logTail}`;
+                    } else {
+                        url += `?since=${state.logPointer}`;
+                    }
+                } else {
+                    url += `?offset=${state.logOffset}&limit=${state.logTail}`;
+                }
+                const data = await fetchJSON(url);
+                const box = document.getElementById("indexer-log");
+                const lines = data.lines || [];
+                if (state.logOffset === 0 && live && state.logPointer && !forceReplace) {
+                    if (lines.length) {
+                        box.textContent += lines.join("");
+                    }
+                } else {
+                    box.textContent = lines.join("");
+                }
+                state.logTotal = data.total || state.logTotal;
+                state.logPointer = live ? (data.total || state.logPointer) : state.logPointer;
+                const start = data.from || 0;
+                const end = start + lines.length;
+                const mode = state.logOffset === 0 && live ? "Live" : "Archiv";
+                setText("log-info", data.total ? `${mode}: Zeilen ${start + 1} - ${end} / ${data.total}` : "Keine Log-Einträge");
+                document.getElementById("older-log").disabled = (data.total || 0) <= state.logTail;
+                scrollLogIfNeeded(forceReplace);
+            } catch (err) {
+                setText("log-info", `Log laden fehlgeschlagen: ${err}`);
+            }
+        }
+
+        async function loadChildren(path) {
             const data = await fetchJSON(`/api/admin/tree?parent=${encodeURIComponent(path || "")}`);
             return data.children || [];
         }
 
-        function createNode(n, depth=0) {
+        function createNode(n, depth = 0) {
             const li = document.createElement("li");
             const toggle = document.createElement("span");
             toggle.className = "toggle";
@@ -136,7 +482,7 @@
                     li.dataset.expanded = "true";
                     toggle.textContent = "▼";
                     const childUl = document.createElement("ul");
-                    const children = await loadChildren(n.path, childUl);
+                    const children = await loadChildren(n.path);
                     children.forEach((c) => childUl.appendChild(createNode(c, depth + 1)));
                     li.appendChild(childUl);
                 }
@@ -172,20 +518,19 @@
 
         async function loadRoots() {
             const data = await fetchJSON("/api/admin/roots");
-            state.roots = data.roots;
             const list = document.getElementById("roots");
             list.innerHTML = "";
             data.roots.forEach((r) => {
                 const div = document.createElement("div");
                 div.className = "root-item";
-                div.innerHTML = `<span>${r.label} — ${r.path}</span>
+                div.innerHTML = `<span>${r.label || ""} — ${r.path}</span>
                 <span>
                     <button data-act="${r.id}" data-active="${!r.active}">${r.active ? "Deaktivieren" : "Aktivieren"}</button>
                     <button data-del="${r.id}">Löschen</button>
                 </span>`;
                 list.appendChild(div);
             });
-            list.querySelectorAll("button[data-act]").forEach(btn => {
+            list.querySelectorAll("button[data-act]").forEach((btn) => {
                 btn.addEventListener("click", async () => {
                     const id = btn.dataset.act;
                     const active = btn.dataset.active === "true";
@@ -193,7 +538,7 @@
                     loadRoots();
                 });
             });
-            list.querySelectorAll("button[data-del]").forEach(btn => {
+            list.querySelectorAll("button[data-del]").forEach((btn) => {
                 btn.addEventListener("click", async () => {
                     const id = btn.dataset.del;
                     await fetchJSON(`/api/admin/roots/${id}`, { method: "DELETE" });
@@ -202,99 +547,19 @@
             });
         }
 
-        function fmtDate(s) {
-            if (!s) return "";
-            const d = new Date(s);
-            return d.toLocaleString("de-DE", { year:"numeric", month:"2-digit", day:"2-digit", hour:"2-digit", minute:"2-digit" });
-        }
-
-        async function loadStatus() {
-            const data = await fetchJSON("/api/admin/status");
-            const b = document.getElementById("status-body");
-            b.innerHTML = `
-                <tr><td>Dokumente gesamt</td><td>${data.total_docs}</td></tr>
-            `;
-            const ext = document.getElementById("ext-counts");
-            ext.innerHTML = "";
-            (data.ext_counts || []).forEach((row) => {
-                const chip = document.createElement("span");
-                chip.className = "chip";
-                chip.textContent = `${row.extension || "?"}: ${row.c}`;
-                ext.appendChild(chip);
-            });
-            const runs = document.getElementById("runs-body");
-            runs.innerHTML = "";
-            (data.recent_runs || []).forEach((r) => {
-                const tr = document.createElement("tr");
-                tr.innerHTML = `<td>${fmtDate(r.started_at)} - ${fmtDate(r.finished_at)}</td><td>${r.status || ""}</td><td>${r.scanned_files || ""}</td><td>${r.added || ""}</td><td>${r.errors || ""}</td>`;
-                runs.appendChild(tr);
-            });
-            await loadIndexerStatus();
-        }
-
-        async function loadIndexerStatus() {
-            const data = await fetchJSON("/api/admin/indexer_status");
-            const hb = data.heartbeat ? `${Math.max(0, Math.floor((Date.now()/1000 - data.heartbeat)))}s` : "–";
-            const run = data.run_id ? `#${data.run_id}` : "kein aktiver Lauf";
-            document.getElementById("status-body").insertAdjacentHTML("beforeend", `<tr><td>Indexer</td><td>${run}, letzte Aktivität: ${hb}</td></tr>`);
-            const versionEl = document.getElementById("version-label");
-            if (versionEl && data.version) {
-                versionEl.textContent = data.version;
-            }
-        }
-
-        async function loadErrors() {
-            const data = await fetchJSON(`/api/admin/errors?limit=${errorLimit}&offset=${errorOffset}`);
-            const box = document.getElementById("errors");
-            box.innerHTML = "";
-            (data.errors || []).forEach((e) => {
-                const div = document.createElement("div");
-                div.className = "error-item";
-                div.textContent = `${e.created_at}: ${e.path} — ${e.error_type} (${e.message})`;
-                box.appendChild(div);
-            });
-            const info = document.getElementById("errors-info");
-            info.textContent = `${Math.min(data.total, errorOffset + 1)} - ${Math.min(data.total, errorOffset + errorLimit)} / ${data.total || 0}`;
-            document.getElementById("prev-errors").disabled = errorOffset <= 0;
-            document.getElementById("next-errors").disabled = errorOffset + errorLimit >= (data.total || 0);
-        }
-
-        async function loadLog(delta = 0) {
-            logOffset = Math.max(0, logOffset + delta * logLimit);
-            try {
-                const data = await fetchJSON(`/api/admin/indexer_log?offset=${logOffset}&limit=${logLimit}`);
-                const div = document.getElementById("indexer-log");
-                div.textContent = (data.lines || []).join("");
-                const start = Math.max(1, data.total - (logOffset + (data.lines || []).length) + 1);
-                const end = data.total - logOffset;
-                document.getElementById("log-info").textContent = (data.lines?.length ? `${start} - ${end}` : "Keine Log-Einträge");
-                document.getElementById("prev-log").disabled = !data.has_more_older;
-                document.getElementById("next-log").disabled = !data.has_more_newer;
-            } catch (err) {
-                document.getElementById("indexer-log").textContent = `Log laden fehlgeschlagen: ${err}`;
-            }
-        }
-
-        async function triggerRun(fullReset=false) {
-            const res = await fetch(`/api/admin/index/run?full_reset=${fullReset}`, { method: "POST" });
-            if (res.status === 409) {
-                alert("Indexlauf läuft bereits");
-            }
-        }
-
         document.getElementById("start-run").addEventListener("click", () => triggerRun(false));
         document.getElementById("reset-run").addEventListener("click", async () => {
             if (confirm("Index leeren? Dies startet keinen neuen Lauf.")) {
                 await fetchJSON(`/api/admin/index/reset`, { method: "POST" });
-                loadStatus();
+                refreshStatus();
                 loadErrors();
-                loadLog();
+                loadLog({ forceReplace: true });
             }
         });
         document.getElementById("preflight").addEventListener("click", async () => {
             const data = await fetchJSON("/api/admin/preflight");
             const box = document.getElementById("preflight-result");
-            box.textContent = `Preflight: PDF ${data.counts[".pdf"]} | RTF ${data.counts[".rtf"]} | MSG ${data.counts[".msg"]} | TXT ${data.counts[".txt"]}`;
+            box.textContent = `PDF ${data.counts[".pdf"]} | RTF ${data.counts[".rtf"]} | MSG ${data.counts[".msg"]} | TXT ${data.counts[".txt"]}`;
         });
         document.getElementById("reset-run-start").addEventListener("click", async () => {
             if (confirm("Index leeren und direkt neu starten?")) {
@@ -312,24 +577,50 @@
             loadRoots();
         });
 
-        async function refreshAll() {
-            await Promise.all([loadTree(), loadRoots(), loadStatus(), loadErrors(), loadLog()]);
+        async function triggerRun(fullReset = false) {
+            const res = await fetch(`/api/admin/index/run?full_reset=${fullReset}`, { method: "POST" });
+            if (res.status === 409) {
+                alert("Indexlauf läuft bereits");
+            }
         }
 
-        refreshAll();
-        setInterval(() => { loadStatus(); loadLog(0); }, 10000);
-
         document.getElementById("prev-errors").addEventListener("click", () => {
-            errorOffset = Math.max(0, errorOffset - errorLimit);
+            state.errorOffset = Math.max(0, state.errorOffset - state.errorLimit);
             loadErrors();
         });
         document.getElementById("next-errors").addEventListener("click", () => {
-            errorOffset = errorOffset + errorLimit;
+            state.errorOffset = state.errorOffset + state.errorLimit;
             loadErrors();
         });
-        document.getElementById("prev-log").addEventListener("click", () => loadLog(1)); // ältere Einträge
-        document.getElementById("next-log").addEventListener("click", () => loadLog(-1)); // neuere Einträge
-        document.getElementById("refresh-log").addEventListener("click", () => loadLog(0));
+        document.getElementById("older-log").addEventListener("click", () => {
+            const total = state.logTotal || 0;
+            state.logOffset = Math.min(total, state.logOffset + state.logTail);
+            state.logPointer = 0;
+            state.autoScrollLog = false;
+            updateAutoScrollButton();
+            loadLog({ forceReplace: true, live: false });
+        });
+        document.getElementById("live-log").addEventListener("click", () => {
+            state.logOffset = 0;
+            state.logPointer = 0;
+            loadLog({ forceReplace: true, live: true });
+        });
+        document.getElementById("refresh-log").addEventListener("click", () => loadLog({ forceReplace: true }));
+        document.getElementById("toggle-autoscroll").addEventListener("click", () => {
+            state.autoScrollLog = !state.autoScrollLog;
+            updateAutoScrollButton();
+            scrollLogIfNeeded(true);
+        });
+
+        async function refreshAll() {
+            await Promise.all([loadTree(), loadRoots(), refreshStatus(), loadErrors(), loadLog({ forceReplace: true })]);
+        }
+
+        refreshAll();
+        updateAutoScrollButton();
+        setInterval(() => { refreshStatus(); }, POLL_STATUS_MS);
+        setInterval(() => { if (state.logOffset === 0) loadLog({ live: true }); }, POLL_LOG_MS);
+        setInterval(() => { loadErrors(); }, POLL_ERRORS_MS);
     </script>
 </body>
 </html>
