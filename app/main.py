@@ -242,7 +242,7 @@ def create_app(config: Optional[CentralConfig] = None) -> FastAPI:
                 "last_run": last_run,
                 "recent_runs": recent_runs,
                 "errors_total": db.error_count(conn),
-                "send_report_enabled": get_send_report_enabled(),
+                "send_report_enabled": config_db.get_setting("send_report_enabled", "0") == "1",
             }
 
     @app.get("/api/admin/roots")

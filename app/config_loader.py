@@ -83,11 +83,11 @@ class CentralConfig:
     raw: Optional[configparser.ConfigParser] = None
 
 
-def load_config(path: Path = Path("config/central_config.ini")) -> CentralConfig:
+def load_config(path: Path = Path("config/central_config.ini"), use_env: bool = True) -> CentralConfig:
     """
     ENV-getriebene Konfiguration für Docker-Betrieb.
     """
-    env_roots = os.getenv("INDEX_ROOTS", "")
+    env_roots = os.getenv("INDEX_ROOTS", "") if use_env else ""
     roots_list: list[tuple[Path, str]] = []
     if env_roots:
         for item in env_roots.split(","):
@@ -101,17 +101,17 @@ def load_config(path: Path = Path("config/central_config.ini")) -> CentralConfig
                 roots_list.append((Path(raw), Path(raw).name))
     paths_cfg = PathsConfig(roots=roots_list)
 
-    worker_raw = int(os.getenv("INDEX_WORKER_COUNT", "2") or 2)
+    worker_raw = int(os.getenv("INDEX_WORKER_COUNT", "2") or 2) if use_env else 2
     if worker_raw < 1:
         raise ValueError("INDEX_WORKER_COUNT muss >=1 sein")
-    max_size_raw = int(os.getenv("INDEX_MAX_FILE_SIZE_MB", "0") or 0)
+    max_size_raw = int(os.getenv("INDEX_MAX_FILE_SIZE_MB", "0") or 0) if use_env else 0
     indexer_cfg = IndexerConfig(
         worker_count=worker_raw,
         run_interval_cron=None,
         max_file_size_mb=max_size_raw or None,
     )
 
-    smtp_host = os.getenv("SMTP_HOST")
+    smtp_host = os.getenv("SMTP_HOST", "") if use_env else ""
     smtp_cfg: Optional[SMTPConfig] = None
     if smtp_host:
         smtp_cfg = SMTPConfig(
@@ -129,9 +129,9 @@ def load_config(path: Path = Path("config/central_config.ini")) -> CentralConfig
         snippet_length=160,
     )
     logging_cfg = LoggingConfig(
-        level=os.getenv("LOG_LEVEL", "INFO"),
-        log_dir=Path(os.getenv("LOG_DIR", "logs")),
-        rotation_mb=int(os.getenv("LOG_ROTATION_MB", "10")),
+        level=os.getenv("LOG_LEVEL", "INFO") if use_env else "INFO",
+        log_dir=Path(os.getenv("LOG_DIR", "logs")) if use_env else Path("logs"),
+        rotation_mb=int(os.getenv("LOG_ROTATION_MB", "10")) if use_env else 10,
     )
 
     return CentralConfig(
@@ -140,7 +140,7 @@ def load_config(path: Path = Path("config/central_config.ini")) -> CentralConfig
         smtp=smtp_cfg,
         ui=ui_cfg,
         logging=logging_cfg,
-        report_enabled=os.getenv("SEND_REPORT_ENABLED", "0") == "1",
+        report_enabled=False,  # Dashboard steuert das Flag
         raw=None,
     )
 

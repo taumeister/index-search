@@ -616,7 +616,9 @@ def send_report_if_configured(
     if not smtp:
         logger.info("Kein SMTP konfiguriert, überspringe Report")
         return
-    if not config.report_enabled:
+    # Report-Flag wird über DB/UI gesteuert (nicht ENV)
+    from app import config_db  # lazy import to avoid cycles
+    if config_db.get_setting("send_report_enabled", "0") != "1":
         logger.info("Report Versand deaktiviert")
         return
     subject = f"Indexlauf #{run_id} {status}"
