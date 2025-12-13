@@ -48,7 +48,8 @@
 - `GET /api/admin/tree`: Verzeichnisbaum unter `base_data_root`.
 
 ## Frontend
-- Layout: Suche oben, Trefferliste links, Preview rechts (umschaltbar auf Popup).
+- Layout: oben kompakter Header (Titel, Zoom-Controls, Dashboard), darunter Suche + Filter; Trefferliste links, Preview rechts (umschaltbar auf Popup).
+- Header und Tabellenkopf bleiben beim Scrollen sichtbar; Trefferliste scrollt unabhängig.
 - Preview-Panel: Breite per Griff verstellbar (Session-Scoped gespeichert), enthält Download-, Druck- und Pop-up-Aktionen; Schließen per Klick außerhalb/Escape.
 - Tabelle: Spalten sortierbar (Dateiname, Typ, Größe, Geändert) und per sichtbarem Handle in der Breite anpassbar (Persistenz via Storage), Kontextmenü mit Preview/Pop-up/Download/Druck.
 - PDF-Preview via pdf.js Iframe, MSG mit Header/Body, RTF/TXT als Text.

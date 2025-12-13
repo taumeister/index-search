@@ -1,5 +1,10 @@
 # Release-Notizen
 
+## v020 - Schlankes UI & fixierte Spaltenköpfe
+- Header neu strukturiert: Titel, Zoom-Regler und Dashboard-Button einzeilig; Suche/Filter darunter.
+- Buttons und Eingabefelder schlanker gestaltet.
+- Tabellenkopf bleibt beim Scrollen fixiert; Trefferliste behält Spaltenkopf sichtbar.
+
 ## v014 - Status stabil nach Reset
 - Admin-Status/Fehler-Endpunkte initialisieren die DB bei fehlenden Tabellen (kein 500 nach Index-Reset).
 

@@ -26,9 +26,17 @@
 </head>
 <body>
     <header>
-        <h1>Dokumenten-Volltextsuche</h1>
-        <div style="margin-left:auto;">
-            <a href="/dashboard" class="button-link">Dashboard</a>
+        <div class="header-top">
+            <h1>Dokumenten-Volltextsuche</h1>
+            <div class="header-actions">
+                <div class="zoom-controls" aria-label="Zoom">
+                    <button type="button" id="zoom-out" title="Zoom verkleinern">-</button>
+                    <span id="zoom-display" class="zoom-display">100%</span>
+                    <button type="button" id="zoom-in" title="Zoom vergrößern">+</button>
+                    <button type="button" id="zoom-reset" title="Zoom zurücksetzen">Reset</button>
+                </div>
+                <a href="/dashboard" class="button-link">Dashboard</a>
+            </div>
         </div>
         <div class="search-bar">
             <input id="search-input" type="text" placeholder="Suche wie im Explorer..." />
@@ -48,12 +56,6 @@
                     <option value="2023">2023</option>
                     <option value="2022">2022</option>
                 </select>
-            </div>
-            <div class="zoom-controls" aria-label="Zoom">
-                <button type="button" id="zoom-out" title="Zoom verkleinern">-</button>
-                <span id="zoom-display" class="zoom-display">100%</span>
-                <button type="button" id="zoom-in" title="Zoom vergrößern">+</button>
-                <button type="button" id="zoom-reset" title="Zoom zurücksetzen">Reset</button>
             </div>
         </div>
     </header>
