@@ -9,7 +9,7 @@ services:
     volumes:
       - ./:/app
       # Exakter Host-Pfad muss per ENV INDEX_ROOT gesetzt werden und dem Pfad in der Config entsprechen, z.B. INDEX_ROOT=/home/tom/projekte/INDEX
-      - ${INDEX_ROOT:?Set INDEX_ROOT to the host path used in config}:${INDEX_ROOT:?Set INDEX_ROOT to the host path used in config}:ro
+      - /storage/unimatrix/12_Dokumente/Ablage:/data:ro
     environment:
       - TZ=Europe/Berlin
     restart: unless-stopped
