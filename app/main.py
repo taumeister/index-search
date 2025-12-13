@@ -59,7 +59,6 @@ def create_app(config: Optional[CentralConfig] = None) -> FastAPI:
     config = config or load_config()
     ensure_dirs(config)
     db.init_db()
-    app_version = read_version()
 
     app = FastAPI(title="Index-Suche")
     templates = Jinja2Templates(directory="app/frontend/templates")
@@ -73,17 +72,24 @@ def create_app(config: Optional[CentralConfig] = None) -> FastAPI:
                 "request": request,
                 "default_preview": config.ui.default_preview,
                 "snippet_length": config.ui.snippet_length,
-                "app_version": app_version,
+                "app_version": read_version(),
             },
         )
 
     @app.get("/dashboard", response_class=HTMLResponse)
     def dashboard(request: Request):
-        return templates.TemplateResponse("dashboard.html", {"request": request, "app_version": app_version})
+        return templates.TemplateResponse("dashboard.html", {"request": request, "app_version": read_version()})
 
     @app.get("/viewer", response_class=HTMLResponse)
     def viewer(request: Request, id: int = Query(...)):
-        return templates.TemplateResponse("viewer.html", {"request": request, "doc_id": id, "app_version": app_version})
+        return templates.TemplateResponse(
+            "viewer.html",
+            {
+                "request": request,
+                "doc_id": id,
+                "app_version": read_version(),
+            },
+        )
 
     @app.get("/api/search")
     def search(
