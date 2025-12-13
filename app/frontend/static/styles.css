@@ -1,8 +1,13 @@
 :root {
+:root {
     --app-zoom: 1;
     --panel-width: clamp(320px, 32vw, 520px);
     --border: #d7dde7;
     --muted: #6b7280;
+}
+
+html, body {
+    height: 100%;
 }
 
 body {
@@ -12,6 +17,9 @@ body {
     background: #f7f9fb;
     color: #1f2933;
     zoom: var(--app-zoom);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
 }
 
 @supports not (zoom: 1) {
@@ -138,12 +146,13 @@ h1 {
 
 main {
     padding: 10px;
-    height: calc(100vh - 104px);
     box-sizing: border-box;
     position: relative;
     display: flex;
     flex-direction: column;
     gap: 8px;
+    flex: 1;
+    overflow: hidden;
 }
 
 #layout {

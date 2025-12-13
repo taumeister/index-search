@@ -8,6 +8,9 @@
 ## v021 - Dashboard-Header vereinheitlicht
 - System/Dashboard nutzt den kompakten Header-Stil analog zur Suche.
 
+## v022 - Fixierter Tabellenkopf auch bei Seitenscroll
+- Seitenaufbau nutzt flex, die Trefferliste scrollt innen; Tabellenkopf bleibt sichtbar wie der Header.
+
 ## v014 - Status stabil nach Reset
 - Admin-Status/Fehler-Endpunkte initialisieren die DB bei fehlenden Tabellen (kein 500 nach Index-Reset).
 
