@@ -57,6 +57,13 @@ function debounceSearch() {
 function renderResults(results) {
     const tbody = document.querySelector("#results-table tbody");
     tbody.innerHTML = "";
+    if (!results.length) {
+        const empty = document.createElement("tr");
+        empty.innerHTML = `<td class="empty-row" colspan="6">Keine Treffer gefunden.</td>`;
+        tbody.appendChild(empty);
+        return;
+    }
+
     results.forEach((row) => {
         const tr = document.createElement("tr");
         const rowId = row.id || row.doc_id;
@@ -66,13 +73,16 @@ function renderResults(results) {
         const pathLabel = row.path || "";
         const nameLabel = row.filename || "";
         const snippetText = row.snippet ? stripTags(row.snippet) : "";
+        const snippetHtml = sanitizeSnippet(row.snippet);
         tr.innerHTML = `
-            <td title="${escapeHtml(nameLabel)}">${escapeHtml(nameLabel)}</td>
-            <td class="snippet" title="${escapeHtml(snippetText)}">${escapeHtml(snippetText)}</td>
+            <td class="cell-name" title="${escapeHtml(nameLabel)}">
+                <span class="filename">${escapeHtml(nameLabel)}</span>
+            </td>
+            <td class="snippet" title="${escapeHtml(snippetText)}">${snippetHtml || ""}</td>
             <td>${escapeHtml(mtimeLabel)}</td>
             <td>${escapeHtml(sizeLabel)}</td>
             <td>${escapeHtml(row.extension)}</td>
-            <td title="${escapeHtml(pathLabel)}">${escapeHtml(pathLabel)}</td>
+            <td class="path-cell" title="${escapeHtml(pathLabel)}">${escapeHtml(pathLabel)}</td>
         `;
         if (currentDocId && String(currentDocId) === String(rowId)) {
             tr.classList.add("active");
@@ -100,6 +110,7 @@ async function openPreview(id, showPanel = false) {
     if (currentDocId !== id) return;
     document.getElementById("download-link").href = `/api/document/${id}/file?download=1`;
     renderPreviewContent(doc, document.getElementById("preview-content"));
+    updatePreviewHeader(doc);
     if (showPanel) {
         showPreviewPanel();
     }
@@ -114,6 +125,7 @@ function closePreviewPanel() {
     document.getElementById("preview-panel").classList.add("hidden");
     markActiveRow(null);
     currentDocId = null;
+    resetPreviewHeader();
 }
 
 function previewIsOpen() {
@@ -216,22 +228,22 @@ function renderPreviewContent(doc, container) {
     if (ext === ".msg") {
         const header = document.createElement("div");
         header.innerHTML = `
-            <div><strong>Von:</strong> ${doc.msg_from || ""}</div>
-            <div><strong>An:</strong> ${doc.msg_to || ""}</div>
-            <div><strong>CC:</strong> ${doc.msg_cc || ""}</div>
-            <div><strong>Betreff:</strong> ${doc.msg_subject || doc.title_or_subject || ""}</div>
-            <div><strong>Datum:</strong> ${doc.msg_date || ""}</div>
+            <div><strong>Von:</strong> ${escapeHtml(doc.msg_from || "")}</div>
+            <div><strong>An:</strong> ${escapeHtml(doc.msg_to || "")}</div>
+            <div><strong>CC:</strong> ${escapeHtml(doc.msg_cc || "")}</div>
+            <div><strong>Betreff:</strong> ${escapeHtml(doc.msg_subject || doc.title_or_subject || "")}</div>
+            <div><strong>Datum:</strong> ${escapeHtml(doc.msg_date || "")}</div>
             <hr/>
         `;
         const body = document.createElement("pre");
-        body.textContent = doc.content || "";
+        body.innerHTML = highlightTerms(doc.content || "");
         container.appendChild(header);
         container.appendChild(body);
         return;
     }
 
     const pre = document.createElement("pre");
-    pre.textContent = doc.content || "";
+    pre.innerHTML = highlightTerms(doc.content || "");
     container.appendChild(pre);
 }
 
@@ -239,6 +251,49 @@ function stripTags(html) {
     const tmp = document.createElement("div");
     tmp.innerHTML = html || "";
     return tmp.textContent || "";
+}
+
+function sanitizeSnippet(html) {
+    const tmp = document.createElement("div");
+    tmp.innerHTML = html || "";
+    const clean = (node) => {
+        Array.from(node.childNodes).forEach((child) => {
+            if (child.nodeType === Node.TEXT_NODE) return;
+            if (child.nodeType === Node.ELEMENT_NODE) {
+                if (child.tagName === "MARK") {
+                    clean(child);
+                } else {
+                    const text = document.createTextNode(child.textContent || "");
+                    node.replaceChild(text, child);
+                }
+            } else {
+                node.removeChild(child);
+            }
+        });
+    };
+    clean(tmp);
+    return tmp.innerHTML;
+}
+
+function getCurrentTerms() {
+    const q = document.getElementById("search-input")?.value || "";
+    return q
+        .split(/[\s,]+/)
+        .map((t) => t.trim())
+        .filter(Boolean)
+        .slice(0, 5);
+}
+
+function highlightTerms(text) {
+    const terms = getCurrentTerms();
+    if (!terms.length || !text) return escapeHtml(text);
+    const slice = text.slice(0, 80000); // Limit für Performance
+    const regex = new RegExp(`(${terms.map((t) => escapeRegExp(t)).join("|")})`, "gi");
+    return escapeHtml(slice).replace(regex, "<mark>$1</mark>");
+}
+
+function escapeRegExp(str) {
+    return str.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
 function openPopupForRow(id) {
@@ -276,6 +331,24 @@ function printDocument(id) {
         }
     };
     document.body.appendChild(iframe);
+}
+
+function updatePreviewHeader(doc) {
+    const nameEl = document.getElementById("preview-name");
+    const pathEl = document.getElementById("preview-path");
+    if (nameEl) {
+        nameEl.textContent = doc.filename || doc.title_or_subject || "Preview";
+    }
+    if (pathEl) {
+        pathEl.textContent = doc.path || "";
+    }
+}
+
+function resetPreviewHeader() {
+    const nameEl = document.getElementById("preview-name");
+    const pathEl = document.getElementById("preview-path");
+    if (nameEl) nameEl.textContent = "Preview";
+    if (pathEl) pathEl.textContent = "";
 }
 
 function setupPopup() {

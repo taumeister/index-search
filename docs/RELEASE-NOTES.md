@@ -1,5 +1,10 @@
 # Release-Notizen
 
+## v029 - Snippet-Highlight & Preview-Kontext
+- Suchtreffer zeigen wieder farbige Markierungen direkt im Snippet, bleiben dabei einzeilig und kompakt.
+- Ergebnisliste: Dateiname klar hervorgehoben, Pfad dezenter; leere Trefferliste zeigt einen kurzen Hinweis.
+- Preview zeigt Dateiname und Pfad im Header; Text-/MSG-Inhalte markieren die aktuellen Suchbegriffe.
+
 ## v020 - Schlankes UI & fixierte Spaltenköpfe
 - Header neu strukturiert: Titel, Zoom-Regler und Dashboard-Button einzeilig; Suche/Filter darunter.
 - Buttons und Eingabefelder schlanker gestaltet.

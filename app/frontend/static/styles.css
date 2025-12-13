@@ -207,6 +207,22 @@ th, td {
     position: relative;
 }
 
+td.cell-name {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.filename {
+    font-weight: 600;
+    color: #0f172a;
+}
+
+td.snippet {
+    color: #1f2933;
+    font-size: 13px;
+}
+
 th {
     background: #f7f9fb;
     position: sticky;
@@ -229,11 +245,12 @@ th.sortable {
 }
 
 tr:hover {
-    background: #eef2f7;
+    background: #f1f4f9;
 }
 
 tr.active {
-    background: #dde7f5;
+    background: #e6eefb;
+    box-shadow: inset 3px 0 0 #5b8def;
 }
 
 #results-table th:nth-child(1),
@@ -264,6 +281,19 @@ tr.active {
 #results-table th:nth-child(6),
 #results-table td:nth-child(6) {
     max-width: 30ch;
+}
+
+.path-cell {
+    color: var(--muted);
+    font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+    font-size: 12px;
+}
+
+.empty-row {
+    text-align: center;
+    color: var(--muted);
+    padding: 16px 8px;
+    background: #fff;
 }
 
 .preview {
@@ -306,6 +336,34 @@ tr.active {
     text-decoration: none;
     color: #0f172a;
     box-shadow: 0 1px 2px rgba(0,0,0,0.05);
+}
+
+.preview-title {
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.preview-name {
+    font-weight: 600;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.preview-path {
+    color: var(--muted);
+    font-size: 12px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.preview-actions {
+    display: flex;
+    align-items: center;
+    gap: 6px;
 }
 
 #preview-content, #popup-body {
