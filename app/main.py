@@ -27,9 +27,10 @@ def get_config() -> CentralConfig:
 
 def read_version() -> str:
     try:
-        return Path("VERSION").read_text(encoding="utf-8").strip()
+        content = Path("VERSION").read_text(encoding="utf-8").strip()
+        return content or "v?"
     except Exception:
-        return ""
+        return "v?"
 
 
 def build_match_query(raw: str) -> str:

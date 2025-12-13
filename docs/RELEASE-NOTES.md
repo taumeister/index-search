@@ -23,6 +23,9 @@
 ## v026 - Versionsanzeige im Header
 - Versionsnummer aus `VERSION` wird im Header neben „Dokumenten-Volltextsuche“ angezeigt.
 
+## v027 - Versions-Badge sichtbar
+- Versions-Text fällt nicht mehr leer; Badge kontrastreicher dargestellt.
+
 ## v014 - Status stabil nach Reset
 - Admin-Status/Fehler-Endpunkte initialisieren die DB bei fehlenden Tabellen (kein 500 nach Index-Reset).
 
