@@ -16,7 +16,10 @@ body {
     background: #f7f9fb;
     color: #1f2933;
     zoom: var(--app-zoom);
-    overflow-x: hidden;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    min-height: 100vh;
 }
 
 @supports not (zoom: 1) {
@@ -149,7 +152,7 @@ main {
     flex-direction: column;
     gap: 8px;
     flex: 1;
-    overflow: auto;
+    overflow: hidden;
     min-height: 0;
 }
 

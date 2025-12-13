@@ -14,6 +14,9 @@
 ## v023 - Scrollen wiederhergestellt
 - Körper scrollt wieder; Listenbereich kann wieder gescrollt werden, Tabellenkopf bleibt sticky.
 
+## v024 - Sticky Kopf bei internem Scroll
+- Body wieder als Flex-Layout mit internem Scroll im Ergebnisbereich; Tabellenkopf bleibt fixiert, während die Ergebnisliste scrollt.
+
 ## v014 - Status stabil nach Reset
 - Admin-Status/Fehler-Endpunkte initialisieren die DB bei fehlenden Tabellen (kein 500 nach Index-Reset).
 
