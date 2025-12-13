@@ -5,6 +5,11 @@
 - Frontend: Debounce mit Abbruch laufender Requests, „Mehr laden“-Button mit Offset/Limit; leere oder zu kurze Queries zeigen Hinweise.
 - Snippet-Default verkürzt (160 Zeichen) und Datenmenge pro Treffer reduziert für schnellere Antworten.
 
+## v031 - Diagnose: sqlite3 im Image, Indexer-Log & Heartbeat im Dashboard
+- Container enthält jetzt sqlite3 für On-Container-DB-Inspektion.
+- Indexer schreibt Heartbeat, Run-ID bleibt abrufbar; API liefert Heartbeat/Last Run sowie paginiertes Indexer-Log.
+- Dashboard zeigt Live-Indexer-Log (paginiert) und nutzt die neuen Endpunkte für Diagnosen.
+
 ## v029 - Snippet-Highlight & Preview-Kontext
 - Suchtreffer zeigen wieder farbige Markierungen direkt im Snippet, bleiben dabei einzeilig und kompakt.
 - Ergebnisliste: Dateiname klar hervorgehoben, Pfad dezenter; leere Trefferliste zeigt einen kurzen Hinweis.

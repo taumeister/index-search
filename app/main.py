@@ -16,7 +16,7 @@ from app import api
 from app import config_db
 from app.config_loader import CentralConfig, ensure_dirs, load_config
 from app.db import datenbank as db
-from app.indexer.index_lauf_service import run_index_lauf, stop_event
+from app.indexer.index_lauf_service import run_index_lauf, stop_event, load_run_id
 
 logging.basicConfig(level=logging.INFO)
 index_lock = threading.Lock()
@@ -121,6 +121,7 @@ def create_app(config: Optional[CentralConfig] = None) -> FastAPI:
     app = FastAPI(title="Index-Suche")
     templates = Jinja2Templates(directory="app/frontend/templates")
     app.mount("/static", StaticFiles(directory="app/frontend/static"), name="static")
+    LOG_PAGE_SIZE = 200
 
     @app.get("/", response_class=HTMLResponse)
     def index(request: Request):
@@ -325,6 +326,40 @@ def create_app(config: Optional[CentralConfig] = None) -> FastAPI:
             rows = db.list_errors(conn, limit=limit, offset=offset)
             total = db.error_count(conn)
             return {"errors": [dict(r) for r in rows], "total": total}
+
+    @app.get("/api/admin/indexer_log")
+    def admin_indexer_log(offset: int = 0, limit: int = LOG_PAGE_SIZE, _auth: bool = Depends(require_secret)):
+        log_path = Path("logs/indexer.log")
+        if limit <= 0 or limit > 1000:
+            limit = LOG_PAGE_SIZE
+        if offset < 0:
+            offset = 0
+        lines: list[str] = []
+        if log_path.exists():
+            with log_path.open("r", encoding="utf-8", errors="ignore") as f:
+                all_lines = f.readlines()
+                start = max(0, len(all_lines) - offset - limit)
+                end = max(0, len(all_lines) - offset)
+                lines = all_lines[start:end]
+        return {"lines": lines, "has_more": len(lines) == limit}
+
+    @app.get("/api/admin/indexer_status")
+    def admin_indexer_status(_auth: bool = Depends(require_secret)):
+        run_id = load_run_id()
+        heartbeat_ts = None
+        hb_path = Path("data/index.heartbeat")
+        if hb_path.exists():
+            try:
+                heartbeat_ts = int(hb_path.read_text().strip())
+            except Exception:
+                heartbeat_ts = None
+        db.init_db()
+        last_run = None
+        with db.get_conn() as conn:
+            row = db.get_last_run(conn)
+            if row:
+                last_run = dict(row)
+        return {"run_id": run_id, "heartbeat": heartbeat_ts, "last_run": last_run}
 
     def list_children(path: Path) -> list:
         try:

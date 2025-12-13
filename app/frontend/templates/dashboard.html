@@ -36,6 +36,7 @@
         button.destructive { background: #fef2f2; color: #991b1b; border: 1px solid #fca5a5; }
         .error-list { max-height: 260px; overflow: auto; }
         .error-item { border-bottom: 1px solid #e5e7eb; padding: 4px 0; }
+        .log-list { max-height: 260px; overflow: auto; font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace; font-size: 12px; background: #f8fafc; border: 1px solid #e5e7eb; border-radius: 6px; padding: 6px; white-space: pre-wrap; }
         .button-link { padding: 8px 12px; background: #e5e7eb; border-radius: 6px; text-decoration: none; color: #111827; border: 1px solid #cbd5e1; }
         .toggle { cursor: pointer; margin-right: 4px; color: #4b5563; }
     </style>
@@ -89,12 +90,22 @@
                 <button id="next-errors">Weiter</button>
                 <span id="errors-info"></span>
             </div>
+            <h2>Indexer-Log (live)</h2>
+            <div class="log-list" id="indexer-log"></div>
+            <div class="actions">
+                <button id="prev-log">Zurück</button>
+                <button id="next-log">Weiter</button>
+                <button id="refresh-log">Aktualisieren</button>
+                <span id="log-info"></span>
+            </div>
         </section>
     </div>
     <script>
         const state = { baseRoot: "", tree: [], roots: [] };
         let errorOffset = 0;
         const errorLimit = 50;
+        let logOffset = 0;
+        const logLimit = 200;
 
         async function fetchJSON(url, opts={}) {
             const res = await fetch(url, opts);
@@ -235,6 +246,22 @@
             document.getElementById("next-errors").disabled = errorOffset + errorLimit >= (data.total || 0);
         }
 
+        async function loadLog(delta = 0) {
+            logOffset = Math.max(0, logOffset + delta * logLimit);
+            try {
+                const data = await fetchJSON(`/api/admin/indexer_log?offset=${logOffset}&limit=${logLimit}`);
+                const div = document.getElementById("indexer-log");
+                div.textContent = (data.lines || []).join("");
+                const start = logOffset + 1;
+                const end = logOffset + (data.lines || []).length;
+                document.getElementById("log-info").textContent = (data.lines?.length ? `${start} - ${end}` : "Keine Log-Einträge");
+                document.getElementById("prev-log").disabled = logOffset <= 0;
+                document.getElementById("next-log").disabled = !(data.has_more);
+            } catch (err) {
+                document.getElementById("indexer-log").textContent = `Log laden fehlgeschlagen: ${err}`;
+            }
+        }
+
         async function triggerRun(fullReset=false) {
             const res = await fetch(`/api/admin/index/run?full_reset=${fullReset}`, { method: "POST" });
             if (res.status === 409) {
@@ -248,6 +275,7 @@
                 await fetchJSON(`/api/admin/index/reset`, { method: "POST" });
                 loadStatus();
                 loadErrors();
+                loadLog();
             }
         });
         document.getElementById("preflight").addEventListener("click", async () => {
@@ -272,7 +300,7 @@
         });
 
         async function refreshAll() {
-            await Promise.all([loadTree(), loadRoots(), loadStatus(), loadErrors()]);
+            await Promise.all([loadTree(), loadRoots(), loadStatus(), loadErrors(), loadLog()]);
         }
 
         refreshAll();
@@ -286,6 +314,9 @@
             errorOffset = errorOffset + errorLimit;
             loadErrors();
         });
+        document.getElementById("prev-log").addEventListener("click", () => loadLog(1));
+        document.getElementById("next-log").addEventListener("click", () => loadLog(-1));
+        document.getElementById("refresh-log").addEventListener("click", () => loadLog(0));
     </script>
 </body>
 </html>

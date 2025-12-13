@@ -2,6 +2,7 @@ import concurrent.futures
 import logging
 import os
 import smtplib
+import time
 from email.message import EmailMessage
 from datetime import datetime, timezone
 from pathlib import Path
@@ -20,6 +21,8 @@ stop_event = threading.Event()
 
 
 SUPPORTED_EXTENSIONS = {".pdf", ".rtf", ".msg", ".txt"}
+RUN_STATUS_FILE = Path("data/index.run")
+HEARTBEAT_FILE = Path("data/index.heartbeat")
 
 
 def setup_logging(config: CentralConfig) -> None:
@@ -37,6 +40,7 @@ def run_index_lauf(config: CentralConfig) -> Dict[str, int]:
     stop_event.clear()
     db.init_db()
     setup_logging(config)
+    touch_heartbeat()
 
     start_time = datetime.now(timezone.utc).isoformat()
     counters = {"scanned": 0, "added": 0, "updated": 0, "removed": 0, "errors": 0}
@@ -44,6 +48,7 @@ def run_index_lauf(config: CentralConfig) -> Dict[str, int]:
     with db.get_conn() as conn:
         run_id = db.record_index_run_start(conn, start_time)
         existing_meta = db.list_existing_meta(conn)
+        save_run_id(run_id)
 
     root_entries = config.paths.roots
     if not root_entries:
@@ -142,6 +147,7 @@ def run_index_lauf(config: CentralConfig) -> Dict[str, int]:
                     conn.commit()
                 except Exception:
                     pass
+                touch_heartbeat()
         finally:
             conn.close()
 
@@ -195,6 +201,8 @@ def run_index_lauf(config: CentralConfig) -> Dict[str, int]:
                     "message": str(exc),
                 }
             )
+        finally:
+            touch_heartbeat()
 
     with concurrent.futures.ThreadPoolExecutor(max_workers=config.indexer.worker_count) as pool:
         futures = [
@@ -226,8 +234,38 @@ def run_index_lauf(config: CentralConfig) -> Dict[str, int]:
             counters["errors"],
             None,
         )
+    clear_run_id()
     send_report_if_configured(config, counters, status)
     return counters
+
+
+def save_run_id(run_id: int) -> None:
+    RUN_STATUS_FILE.parent.mkdir(exist_ok=True)
+    RUN_STATUS_FILE.write_text(str(run_id))
+
+
+def load_run_id() -> Optional[int]:
+    if RUN_STATUS_FILE.exists():
+        try:
+            return int(RUN_STATUS_FILE.read_text().strip())
+        except Exception:
+            return None
+    return None
+
+
+def clear_run_id() -> None:
+    if RUN_STATUS_FILE.exists():
+        RUN_STATUS_FILE.unlink()
+    if HEARTBEAT_FILE.exists():
+        HEARTBEAT_FILE.unlink()
+
+
+def touch_heartbeat() -> None:
+    try:
+        HEARTBEAT_FILE.parent.mkdir(exist_ok=True)
+        HEARTBEAT_FILE.write_text(str(int(time.time())))
+    except Exception:
+        pass
 
 
 def process_file(real_path: Path, original_path: Path, source: str, config: CentralConfig, run_id: int) -> Dict[str, str]:

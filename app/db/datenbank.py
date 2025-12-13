@@ -344,6 +344,15 @@ def list_errors(conn: sqlite3.Connection, limit: int = 50, offset: int = 0) -> L
     return cursor.fetchall()
 
 
+def get_last_run(conn: sqlite3.Connection) -> Optional[sqlite3.Row]:
+    cursor = conn.execute(
+        """
+        SELECT * FROM index_runs ORDER BY started_at DESC LIMIT 1
+        """
+    )
+    return cursor.fetchone()
+
+
 def error_count(conn: sqlite3.Connection) -> int:
     return conn.execute("SELECT COUNT(*) FROM file_errors").fetchone()[0]
 
