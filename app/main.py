@@ -242,6 +242,7 @@ def create_app(config: Optional[CentralConfig] = None) -> FastAPI:
                 "last_run": last_run,
                 "recent_runs": recent_runs,
                 "errors_total": db.error_count(conn),
+                "send_report_enabled": get_send_report_enabled(),
             }
 
     @app.get("/api/admin/roots")
@@ -327,6 +328,16 @@ def create_app(config: Optional[CentralConfig] = None) -> FastAPI:
         # writer will flush and status will be "stopped"
         return {"status": "stopping"}
 
+    def get_send_report_enabled() -> bool:
+        env_val = os.getenv("SEND_REPORT_ENABLED")
+        if env_val is not None:
+            return env_val.strip() == "1"
+        try:
+            val = config_db.get_setting("send_report_enabled", "0")
+            return val == "1"
+        except Exception:
+            return False
+
     @app.get("/api/admin/preflight")
     def preflight(_auth: bool = Depends(require_secret)):
         cfg = load_config()
@@ -346,6 +357,14 @@ def create_app(config: Optional[CentralConfig] = None) -> FastAPI:
             rows = db.list_errors(conn, limit=limit, offset=offset)
             total = db.error_count(conn)
             return {"errors": [dict(r) for r in rows], "total": total}
+
+    @app.post("/api/admin/reporting/send_report")
+    def toggle_send_report(enabled: bool = Query(...), _auth: bool = Depends(require_secret)):
+        try:
+            config_db.set_setting("send_report_enabled", "1" if enabled else "0")
+        except Exception:
+            pass
+        return {"enabled": enabled}
 
     @app.get("/api/admin/indexer_log")
     def admin_indexer_log(

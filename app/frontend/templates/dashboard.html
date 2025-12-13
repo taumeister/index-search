@@ -117,6 +117,9 @@
                     <button id="preflight">Preflight (zählen)</button>
                     <button id="reset-run" class="destructive">Index leeren</button>
                     <button id="reset-run-start" class="destructive">Leeren &amp; neu starten</button>
+                    <label style="display:flex;align-items:center;gap:6px;">
+                        <input type="checkbox" id="toggle-report"> Mail senden
+                    </label>
                 </div>
                 <div class="metrics-grid">
                     <div class="metric-card primary">
@@ -342,6 +345,8 @@
                 const finished = last.finished_at ? fmtDateTime(last.finished_at) : "läuft";
                 setText("last-run-label", `${fmtDateTime(last.started_at)} → ${finished}`);
             }
+            const toggle = document.getElementById("toggle-report");
+            if (toggle) toggle.checked = Boolean(statusData.send_report_enabled);
             renderExtCounts(statusData.ext_counts || []);
             renderRuns(statusData.recent_runs || []);
         }
@@ -524,6 +529,9 @@
                 btn.addEventListener("click", async () => {
                     const id = btn.dataset.act;
                     const active = btn.dataset.active === "true";
+                    if (!active) {
+                        if (!confirm("Quelle deaktivieren?")) return;
+                    }
                     await fetchJSON(`/api/admin/roots/${id}/activate?active=${active}`, { method: "POST" });
                     loadRoots();
                 });
@@ -531,6 +539,8 @@
             list.querySelectorAll("button[data-del]").forEach((btn) => {
                 btn.addEventListener("click", async () => {
                     const id = btn.dataset.del;
+                    if (!confirm("Quelle wirklich löschen?")) return;
+                    if (!confirm("Sicher, Quelle entfernen?")) return;
                     await fetchJSON(`/api/admin/roots/${id}`, { method: "DELETE" });
                     loadRoots();
                 });
@@ -539,10 +549,9 @@
 
         document.getElementById("start-run").addEventListener("click", () => triggerRun(false));
         document.getElementById("reset-run").addEventListener("click", async () => {
-            if (confirm("Index leeren? Dies startet keinen neuen Lauf.")) {
+            if (confirm("Index leeren? Dies startet keinen neuen Lauf.") && confirm("Wirklich Index löschen? Daten gehen verloren.")) {
                 await fetchJSON(`/api/admin/index/reset`, { method: "POST" });
                 refreshStatus();
-                loadErrors();
                 loadLog({ forceReplace: true });
             }
         });
@@ -552,7 +561,7 @@
             box.textContent = `PDF ${data.counts[".pdf"]} | RTF ${data.counts[".rtf"]} | MSG ${data.counts[".msg"]} | TXT ${data.counts[".txt"]}`;
         });
         document.getElementById("reset-run-start").addEventListener("click", async () => {
-            if (confirm("Index leeren und direkt neu starten?")) {
+            if (confirm("Index leeren und direkt neu starten?") && confirm("Sicher? Alle Indexdaten werden gelöscht.")) {
                 await fetchJSON(`/api/admin/index/reset_run`, { method: "POST" });
             }
         });
@@ -566,6 +575,14 @@
             await fetchJSON(`/api/admin/roots?path=${encodeURIComponent(path)}&label=${encodeURIComponent(label)}`, { method: "POST" });
             loadRoots();
         });
+
+        const reportToggle = document.getElementById("toggle-report");
+        if (reportToggle) {
+            reportToggle.addEventListener("change", async (e) => {
+                const enabled = e.target.checked;
+                await fetchJSON(`/api/admin/reporting/send_report?enabled=${enabled}`, { method: "POST" });
+            });
+        }
 
         async function triggerRun(fullReset = false) {
             const res = await fetch(`/api/admin/index/run?full_reset=${fullReset}`, { method: "POST" });
@@ -594,14 +611,13 @@
         });
 
         async function refreshAll() {
-            await Promise.all([loadTree(), loadRoots(), refreshStatus(), loadErrors(), loadLog({ forceReplace: true })]);
+            await Promise.all([loadTree(), loadRoots(), refreshStatus(), loadLog({ forceReplace: true })]);
         }
 
         refreshAll();
         updateAutoScrollButton();
         setInterval(() => { refreshStatus(); }, POLL_STATUS_MS);
         setInterval(() => { if (state.logOffset === 0) loadLog({ live: true }); }, POLL_LOG_MS);
-        setInterval(() => { loadErrors(); }, POLL_ERRORS_MS);
     </script>
 </body>
 </html>

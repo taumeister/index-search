@@ -39,6 +39,7 @@ def seed_defaults(conn: sqlite3.Connection) -> None:
         "logging_level": "INFO",
         "log_dir": "logs",
         "rotation_mb": "10",
+        "send_report_enabled": "0",
     }
     for key, value in defaults.items():
         conn.execute(

@@ -458,6 +458,7 @@ def run_index_lauf(config: CentralConfig) -> Dict[str, int]:
         counters["removed"] = removed_count
         db.cleanup_scanned_paths(conn, run_id)
 
+    end_time = datetime.now(timezone.utc).isoformat()
     status = "stopped" if stop_event.is_set() else ("completed" if counters["errors"] == 0 else "completed_with_errors")
     update_live_status(counters, status=status, finished=True)
     logger.info(
@@ -475,7 +476,7 @@ def run_index_lauf(config: CentralConfig) -> Dict[str, int]:
         db.record_index_run_finish(
             conn,
             run_id,
-            datetime.now(timezone.utc).isoformat(),
+            end_time,
             status,
             counters["scanned"],
             counters["added"],
@@ -485,7 +486,7 @@ def run_index_lauf(config: CentralConfig) -> Dict[str, int]:
             None,
         )
     clear_run_id()
-    send_report_if_configured(config, counters, status)
+    send_report_if_configured(config, counters, status, run_id, start_time, end_time)
     return counters
 
 
@@ -603,14 +604,28 @@ def get_owner(stat) -> Optional[str]:
         return None
 
 
-def send_report_if_configured(config: CentralConfig, counters: Dict[str, int], status: str) -> None:
+def send_report_if_configured(
+    config: CentralConfig,
+    counters: Dict[str, int],
+    status: str,
+    run_id: int,
+    started_at: str,
+    finished_at: str,
+) -> None:
     smtp = config.smtp
     if not smtp:
         logger.info("Kein SMTP konfiguriert, überspringe Report")
         return
-    subject = f"Indexlauf {status}"
+    if not config.report_enabled:
+        logger.info("Report Versand deaktiviert")
+        return
+    subject = f"Indexlauf #{run_id} {status}"
     body = (
+        f"Indexlauf #{run_id}\n"
         f"Status: {status}\n"
+        f"Start: {started_at}\n"
+        f"Ende: {finished_at}\n"
+        f"Dauer: {max(0, int(datetime.fromisoformat(finished_at).timestamp() - datetime.fromisoformat(started_at).timestamp()))}s\n"
         f"Gescannt: {counters['scanned']}\n"
         f"Hinzugefügt: {counters['added']}\n"
         f"Aktualisiert: {counters['updated']}\n"

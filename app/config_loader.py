@@ -131,7 +131,8 @@ class CentralConfig:
     smtp: Optional[SMTPConfig]
     ui: UIConfig
     logging: LoggingConfig
-    raw: Optional[configparser.ConfigParser]
+    report_enabled: bool = False
+    raw: Optional[configparser.ConfigParser] = None
 
 
 def _read_ini(path: Path) -> configparser.ConfigParser:
@@ -174,12 +175,25 @@ def load_config(path: Path = Path("config/central_config.ini")) -> CentralConfig
             smtp=smtp_cfg,
             ui=ui_cfg,
             logging=logging_cfg,
+            report_enabled=os.getenv("SEND_REPORT_ENABLED", "0") == "1",
             raw=parser,
         )
 
     config_db.ensure_db()
 
+    env_roots = os.getenv("INDEX_ROOTS")
     roots_list = [(Path(p), label) for p, label, _id, _active in config_db.list_roots(active_only=True)]
+    if env_roots:
+        roots_list = []
+        for item in env_roots.split(","):
+            raw = item.strip()
+            if not raw:
+                continue
+            if ":" in raw:
+                path_s, label = raw.split(":", 1)
+                roots_list.append((Path(path_s.strip()), label.strip() or Path(path_s.strip()).name))
+            else:
+                roots_list.append((Path(raw), Path(raw).name))
     paths_cfg = PathsConfig(roots=roots_list)
 
     def setting(key: str, default: str) -> str:
@@ -187,21 +201,33 @@ def load_config(path: Path = Path("config/central_config.ini")) -> CentralConfig
         return val if val is not None else default
 
     indexer_cfg = IndexerConfig(
-        worker_count=int(setting("worker_count", "2") or 2),
+        worker_count=int(os.getenv("INDEX_WORKER_COUNT", setting("worker_count", "2") or 2)),
         run_interval_cron=None,
-        max_file_size_mb=int(setting("max_file_size_mb", "") or 0) or None,
+        max_file_size_mb=int(os.getenv("INDEX_MAX_FILE_SIZE_MB", setting("max_file_size_mb", "") or 0) or 0)
+        or None,
     )
 
+    smtp_host = os.getenv("SMTP_HOST")
     smtp_cfg: Optional[SMTPConfig] = None
+    if smtp_host:
+        smtp_cfg = SMTPConfig(
+            host=smtp_host,
+            port=int(os.getenv("SMTP_PORT", "587")),
+            use_tls=os.getenv("SMTP_USE_TLS", "true").lower() == "true",
+            username=os.getenv("SMTP_USER", "") or None,
+            password=os.getenv("SMTP_PASS", "") or None,
+            sender=os.getenv("SMTP_FROM", "index-search@localhost"),
+            recipients=[r.strip() for r in os.getenv("SMTP_TO", "").split(",") if r.strip()],
+        )
 
     ui_cfg = UIConfig(
         default_preview=setting("default_preview", "panel") or "panel",
         snippet_length=int(setting("snippet_length", "160") or 160),
     )
     logging_cfg = LoggingConfig(
-        level=setting("logging_level", "INFO") or "INFO",
-        log_dir=Path(setting("log_dir", "logs") or "logs"),
-        rotation_mb=int(setting("rotation_mb", "10") or 10),
+        level=os.getenv("LOG_LEVEL", setting("logging_level", "INFO") or "INFO"),
+        log_dir=Path(os.getenv("LOG_DIR", setting("log_dir", "logs") or "logs")),
+        rotation_mb=int(os.getenv("LOG_ROTATION_MB", setting("rotation_mb", "10") or 10)),
     )
 
     return CentralConfig(
@@ -210,6 +236,7 @@ def load_config(path: Path = Path("config/central_config.ini")) -> CentralConfig
         smtp=smtp_cfg,
         ui=ui_cfg,
         logging=logging_cfg,
+        report_enabled=os.getenv("SEND_REPORT_ENABLED", setting("send_report_enabled", "0")) == "1",
         raw=None,
     )
 
