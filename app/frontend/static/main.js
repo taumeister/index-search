@@ -19,8 +19,10 @@ const DEFAULT_SEARCH_MODE = normalizeSearchMode(window.searchDefaultMode) || "st
 const TYPE_FILTER_KEY = "searchTypeFilter";
 const TYPE_FILTER_SET = new Set(["", ".pdf", ".rtf", ".msg", ".txt"]);
 const TIME_FILTER_KEY = "searchTimeFilter";
+const TIME_YEAR_MAX = 2025;
+const TIME_YEAR_MIN = 2000;
 const TIME_PRIMARY_OPTIONS = ["", "yesterday", "last7", "last30"];
-const TIME_MORE_OPTIONS = ["last365", "2025", "2024", "2023", "2022", "2020"];
+const TIME_MORE_OPTIONS = ["last365", ...Array.from({ length: TIME_YEAR_MAX - TIME_YEAR_MIN + 1 }, (_, i) => String(TIME_YEAR_MAX - i))];
 const TIME_FILTER_ORDER = [...TIME_PRIMARY_OPTIONS, ...TIME_MORE_OPTIONS];
 let searchOffset = 0;
 let searchHasMore = false;
@@ -137,21 +139,62 @@ function labelForTime(value) {
             return "30T";
         case "last365":
             return "365T";
-        case "2025":
-        case "2024":
-        case "2023":
-        case "2022":
-        case "2020":
-            return value;
         default:
-            return "Alle";
+            return value || "Alle";
     }
+}
+
+function longLabelForTime(value) {
+    switch (value) {
+        case "":
+            return "Datum: alle";
+        case "yesterday":
+            return "Gestern";
+        case "last7":
+            return "Letzte 7 Tage";
+        case "last30":
+            return "Letzte 30 Tage";
+        case "last365":
+            return "Letzte 365 Tage";
+        default:
+            return `Jahr ${value}`;
+    }
+}
+
+function buildTimeMoreMenu() {
+    const menu = document.getElementById("time-more-menu");
+    if (!menu) return;
+    menu.innerHTML = "";
+    TIME_MORE_OPTIONS.forEach((opt) => {
+        const btn = document.createElement("button");
+        btn.type = "button";
+        btn.dataset.time = opt;
+        btn.setAttribute("role", "menuitemradio");
+        btn.setAttribute("aria-checked", "false");
+        btn.textContent = labelForTime(opt);
+        menu.appendChild(btn);
+    });
+}
+
+function buildFallbackTimeOptions(selectEl) {
+    if (!selectEl) return;
+    const options = [{ value: "", label: longLabelForTime("") }];
+    TIME_PRIMARY_OPTIONS.filter((v) => v !== "").forEach((v) => options.push({ value: v, label: longLabelForTime(v) }));
+    TIME_MORE_OPTIONS.forEach((v) => options.push({ value: v, label: longLabelForTime(v) }));
+    selectEl.innerHTML = "";
+    options.forEach(({ value, label }) => {
+        const opt = document.createElement("option");
+        opt.value = value;
+        opt.textContent = label;
+        selectEl.appendChild(opt);
+    });
 }
 
 function updateTimeChips(active) {
     document.querySelectorAll(".time-filter-chips .time-chip").forEach((btn) => {
+        const isMore = btn.id === "time-more-button";
         const val = normalizeTimeFilter(btn.dataset.time);
-        const isActive = val === active;
+        const isActive = isMore ? TIME_MORE_OPTIONS.includes(active) : val === active;
         btn.classList.toggle("active", isActive);
         btn.setAttribute("aria-pressed", isActive ? "true" : "false");
     });
@@ -192,9 +235,11 @@ function setupTimeFilterChips() {
     const stored = readStoredTimeFilter();
     const initial = normalizeTimeFilter(stored) || "";
     currentTimeFilter = initial;
+    buildTimeMoreMenu();
     updateTimeChips(initial);
     const fallbackSelect = document.getElementById("time-filter");
     if (fallbackSelect) {
+        buildFallbackTimeOptions(fallbackSelect);
         fallbackSelect.value = initial;
         fallbackSelect.addEventListener("change", () => {
             const next = normalizeTimeFilter(fallbackSelect.value);
@@ -206,6 +251,7 @@ function setupTimeFilterChips() {
     const container = document.getElementById("time-filter-chips");
     if (!container) return;
     container.querySelectorAll(".time-chip").forEach((btn) => {
+        if (btn.id === "time-more-button") return;
         btn.addEventListener("click", () => {
             const val = normalizeTimeFilter(btn.dataset.time);
             const next = val === currentTimeFilter ? "" : val;
