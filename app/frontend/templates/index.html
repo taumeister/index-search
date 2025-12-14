@@ -65,17 +65,22 @@
                 <button type="button" data-ext=".txt" title="Nur Textdateien">TEXT</button>
             </div>
             <div class="filters">
-                <select id="time-filter">
+                <div class="time-dial" id="time-dial" role="radiogroup" aria-label="Zeitraum">
+                    <div class="dial-center" id="time-dial-label">Alle</div>
+                    <button type="button" class="dial-segment" data-time="" aria-label="Alle Zeiträume" title="Alle Zeiträume">Alle</button>
+                    <button type="button" class="dial-segment" data-time="today" aria-label="Heute" title="Heute">Heute</button>
+                    <button type="button" class="dial-segment" data-time="yesterday" aria-label="Gestern" title="Gestern">Gestern</button>
+                    <button type="button" class="dial-segment" data-time="last7" aria-label="Letzte 7 Tage" title="Letzte 7 Tage">7T</button>
+                    <button type="button" class="dial-segment" data-time="last30" aria-label="Letzte 30 Tage" title="Letzte 30 Tage">30T</button>
+                    <button type="button" class="dial-segment" data-time="last365" aria-label="Letzte 365 Tage" title="Letzte 365 Tage">365T</button>
+                </div>
+                <select id="time-filter" class="time-fallback">
                     <option value="">Datum: alle</option>
                     <option value="today">Heute</option>
                     <option value="yesterday">Gestern</option>
                     <option value="last7">Letzte 7 Tage</option>
                     <option value="last30">Letzte 30 Tage</option>
                     <option value="last365">Letzte 365 Tage</option>
-                    <option value="2025">2025</option>
-                    <option value="2024">2024</option>
-                    <option value="2023">2023</option>
-                    <option value="2022">2022</option>
                 </select>
             </div>
         </div>

@@ -210,6 +210,120 @@ h1 {
     box-shadow: inset 0 1px 0 rgba(255,255,255,0.8);
 }
 
+.time-dial {
+    position: relative;
+    width: 44px;
+    height: 44px;
+    min-width: 44px;
+    min-height: 44px;
+    border-radius: 50%;
+    border: 1px solid var(--border);
+    background: radial-gradient(circle at 50% 50%, #f8fbff 0%, #eef3fb 60%, #dfe8f6 100%);
+    box-shadow: 0 1px 4px rgba(0,0,0,0.08), inset 0 1px 0 rgba(255,255,255,0.6);
+    display: grid;
+    place-items: center;
+    margin-left: 6px;
+    margin-right: 6px;
+}
+
+.time-dial .dial-center {
+    position: absolute;
+    width: 22px;
+    height: 22px;
+    border-radius: 50%;
+    background: linear-gradient(180deg, #ffffff, #e8eef9);
+    border: 1px solid #c7d5ef;
+    box-shadow: inset 0 1px 1px rgba(255,255,255,0.9);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 10px;
+    font-weight: 700;
+    color: #0b3570;
+    text-transform: uppercase;
+    pointer-events: none;
+}
+
+.time-dial .dial-segment {
+    position: absolute;
+    width: 44px;
+    height: 44px;
+    padding: 0;
+    margin: 0;
+    border: none;
+    background: transparent;
+    border-radius: 50%;
+    clip-path: circle(50%);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: transparent;
+    cursor: pointer;
+}
+
+.time-dial .dial-segment:focus-visible {
+    outline: 2px solid #8fb3ff;
+    outline-offset: 2px;
+}
+
+.time-dial .dial-segment::after {
+    content: attr(data-label);
+    display: none;
+}
+
+.time-dial .dial-segment.active {
+    box-shadow: 0 0 0 2px rgba(69,111,207,0.35), inset 0 0 0 1px rgba(255,255,255,0.8);
+    background: radial-gradient(circle at 50% 50%, rgba(120,152,230,0.35) 0%, rgba(93,134,226,0.6) 70%, rgba(47,93,193,0.8) 100%);
+}
+
+.time-dial .dial-segment:nth-of-type(2) { transform: rotate(300deg); }
+.time-dial .dial-segment:nth-of-type(3) { transform: rotate(0deg); }
+.time-dial .dial-segment:nth-of-type(4) { transform: rotate(60deg); }
+.time-dial .dial-segment:nth-of-type(5) { transform: rotate(120deg); }
+.time-dial .dial-segment:nth-of-type(6) { transform: rotate(180deg); }
+.time-dial .dial-segment:nth-of-type(7) { transform: rotate(240deg); }
+
+.time-dial .dial-segment:nth-of-type(2)::before { content: "Alle"; }
+.time-dial .dial-segment:nth-of-type(3)::before { content: "Heute"; }
+.time-dial .dial-segment:nth-of-type(4)::before { content: "Gestern"; }
+.time-dial .dial-segment:nth-of-type(5)::before { content: "7T"; }
+.time-dial .dial-segment:nth-of-type(6)::before { content: "30T"; }
+.time-dial .dial-segment:nth-of-type(7)::before { content: "365T"; }
+
+.time-dial .dial-segment::before {
+    position: absolute;
+    top: 4px;
+    font-size: 9px;
+    color: #0b3570;
+    text-shadow: 0 1px 1px rgba(255,255,255,0.9);
+    transform: rotate(-60deg);
+    pointer-events: none;
+}
+
+.time-dial .dial-segment:nth-of-type(3)::before { transform: rotate(0deg); }
+.time-dial .dial-segment:nth-of-type(4)::before { transform: rotate(-60deg); }
+.time-dial .dial-segment:nth-of-type(5)::before { transform: rotate(-120deg); }
+.time-dial .dial-segment:nth-of-type(6)::before { transform: rotate(-180deg); }
+.time-dial .dial-segment:nth-of-type(7)::before { transform: rotate(-240deg); }
+.time-dial .dial-segment:nth-of-type(2)::before { transform: rotate(-300deg); }
+
+.time-dial .dial-segment:hover {
+    background: radial-gradient(circle at 50% 50%, rgba(120,152,230,0.15), rgba(93,134,226,0.25));
+}
+
+.time-fallback {
+    display: none;
+}
+
+@media (max-width: 720px) {
+    .time-dial {
+        display: none;
+    }
+    .time-fallback {
+        display: inline-block;
+    }
+}
+
 .zoom-controls {
     display: flex;
     align-items: center;
