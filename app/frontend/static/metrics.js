@@ -5,6 +5,8 @@ const fmtTs = (ts) => {
     return d.toLocaleString();
 };
 
+const authHeaders = { "X-Internal-Auth": "1" };
+
 async function loadSummary() {
     const endpoint = document.getElementById("metrics-endpoint").value || "";
     const windowSeconds = parseInt(document.getElementById("metrics-window").value, 10) || 86400;
@@ -16,7 +18,7 @@ async function loadSummary() {
     const box = document.getElementById("metrics-summary");
     box.textContent = "Lade...";
     try {
-        const res = await fetch(`/api/admin/metrics/summary?${params.toString()}`);
+        const res = await fetch(`/api/admin/metrics/summary?${params.toString()}`, { headers: authHeaders });
         if (!res.ok) {
             box.textContent = "Fehler beim Laden.";
             return;
@@ -60,7 +62,7 @@ async function loadEvents() {
     const resBox = document.getElementById("metrics-events");
     resBox.textContent = "Lade...";
     try {
-        const res = await fetch(`/api/admin/metrics/events?${params.toString()}`);
+        const res = await fetch(`/api/admin/metrics/events?${params.toString()}`, { headers: authHeaders });
         if (!res.ok) {
             resBox.textContent = "Fehler beim Laden.";
             return;
@@ -112,7 +114,7 @@ async function loadSystem() {
     const box = document.getElementById("metrics-system");
     box.textContent = "Lade...";
     try {
-        const res = await fetch(`/api/admin/metrics/system?limit=${limit}`);
+        const res = await fetch(`/api/admin/metrics/system?limit=${limit}`, { headers: authHeaders });
         if (!res.ok) {
             box.textContent = "Fehler beim Laden.";
             return;
