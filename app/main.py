@@ -28,15 +28,46 @@ from app.indexer.index_lauf_service import (
 )
 from app import metrics
 from app.search_modes import SearchMode, build_search_plan, normalize_mode
+from app import config_db
 
 logging.basicConfig(level=logging.INFO)
 index_lock = threading.Lock()
 _metrics_thread_started = False
 _metrics_thread_lock = threading.Lock()
+logger = logging.getLogger(__name__)
 
 
 def get_config() -> CentralConfig:
     return load_config()
+
+
+def resolve_active_roots(config: CentralConfig) -> list[tuple[Path, str]]:
+    """
+    Liefert aktive Roots aus der Config-DB, andernfalls die env/INI-Roots.
+    Validiert Basis-Pfad und Existenz, fällt aber nicht stillschweigend auf /data zurück.
+    """
+    db_roots = config_db.list_roots(active_only=True)
+    if db_roots:
+        base_root = Path(config_db.get_setting("base_data_root", "/data")).resolve()
+        if not base_root.exists():
+            raise ValueError(f"Basis-Ordner nicht gefunden: {base_root}")
+        resolved: list[tuple[Path, str]] = []
+        for path, label, _rid, _active in db_roots:
+            p = Path(path).resolve()
+            if not p.is_dir():
+                raise ValueError(f"Wurzelpfad nicht gefunden: {p}")
+            try:
+                p.relative_to(base_root)
+            except ValueError:
+                raise ValueError(f"Pfad {p} liegt nicht unter Basis {base_root}")
+            resolved.append((p, label or p.name))
+        return resolved
+
+    # Fallback: env/INI-Roots
+    if config.paths.roots:
+        return config.paths.roots
+
+    raise ValueError("Keine aktiven Quellen konfiguriert")
 
 
 def ensure_app_secret(env_path: Path = Path(".env")) -> str:
@@ -402,9 +433,15 @@ def create_app(config: Optional[CentralConfig] = None) -> FastAPI:
     @app.post("/api/admin/roots")
     def add_root(path: str = Query(...), label: Optional[str] = Query(None), active: bool = Query(True), _auth: bool = Depends(require_secret)):
         base = config_db.get_setting("base_data_root", "/data")
-        if base and not str(path).startswith(base):
-            raise HTTPException(status_code=400, detail=f"Pfad muss unter {base} liegen")
-        rid = config_db.add_root(path, label, active)
+        base_path = Path(base).resolve()
+        resolved = Path(path).resolve()
+        try:
+            resolved.relative_to(base_path)
+        except ValueError:
+            raise HTTPException(status_code=400, detail=f"Pfad muss unter {base_path} liegen")
+        if not resolved.exists() or not resolved.is_dir():
+            raise HTTPException(status_code=400, detail=f"Pfad nicht gefunden: {resolved}")
+        rid = config_db.add_root(str(resolved), label, active)
         return {"id": rid}
 
     @app.delete("/api/admin/roots/{root_id}")
@@ -417,12 +454,14 @@ def create_app(config: Optional[CentralConfig] = None) -> FastAPI:
         config_db.update_root_active(root_id, active)
         return {"status": "ok"}
 
-    def _start_index(full_reset: bool = False) -> str:
+    def _start_index(full_reset: bool = False, cfg_override: Optional[CentralConfig] = None, roots_override: Optional[list[tuple[Path, str]]] = None) -> str:
         if not index_lock.acquire(blocking=False):
             return "busy"
         def runner():
             try:
-                cfg = load_config()
+                cfg = cfg_override or load_config()
+                if roots_override is not None:
+                    cfg.paths.roots = roots_override
                 run_index_lauf(cfg)
             finally:
                 index_lock.release()
@@ -431,7 +470,12 @@ def create_app(config: Optional[CentralConfig] = None) -> FastAPI:
 
     @app.post("/api/admin/index/run")
     def trigger_index(full_reset: bool = Query(False), _auth: bool = Depends(require_secret)):
-        status = _start_index(full_reset)
+        cfg = load_config()
+        try:
+            roots = resolve_active_roots(cfg)
+        except ValueError as exc:
+            return JSONResponse({"status": "error", "detail": str(exc)}, status_code=400)
+        status = _start_index(full_reset, cfg_override=cfg, roots_override=roots)
         if status == "busy":
             return JSONResponse({"status": "busy"}, status_code=409)
         return {"status": status}
@@ -462,6 +506,12 @@ def create_app(config: Optional[CentralConfig] = None) -> FastAPI:
                         p.unlink()
                 db.init_db()
                 cfg = load_config()
+                try:
+                    roots = resolve_active_roots(cfg)
+                except ValueError as exc:
+                    logger.error("Indexlauf abgebrochen: %s", exc)
+                    return
+                cfg.paths.roots = roots
                 run_index_lauf(cfg)
             finally:
                 index_lock.release()
@@ -487,14 +537,18 @@ def create_app(config: Optional[CentralConfig] = None) -> FastAPI:
     @app.get("/api/admin/preflight")
     def preflight(_auth: bool = Depends(require_secret)):
         cfg = load_config()
+        try:
+            roots = resolve_active_roots(cfg)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc))
         exts = {".pdf": 0, ".rtf": 0, ".msg": 0, ".txt": 0}
-        for root, _label in cfg.paths.roots:
+        for root, _label in roots:
             for dirpath, _, filenames in os.walk(root):
                 for name in filenames:
                     s = Path(name).suffix.lower()
                     if s in exts:
                         exts[s] += 1
-        return {"counts": exts, "roots": [str(r[0]) for r in cfg.paths.roots]}
+        return {"counts": exts, "roots": [str(r[0]) for r in roots]}
 
     @app.get("/api/admin/errors")
     def admin_errors(limit: int = 50, offset: int = 0, _auth: bool = Depends(require_secret)):
@@ -714,10 +768,14 @@ def create_app(config: Optional[CentralConfig] = None) -> FastAPI:
 
     @app.get("/api/admin/tree")
     def admin_tree(parent: Optional[str] = Query(None), _auth: bool = Depends(require_secret)):
-        base_root = Path(config_db.get_setting("base_data_root", "/data"))
+        base_root = Path(config_db.get_setting("base_data_root", "/data")).resolve()
         if not base_root.exists():
             return {"base": str(base_root), "children": []}
-        target = Path(parent) if parent else base_root
+        target = Path(parent).resolve() if parent else base_root
+        try:
+            target.relative_to(base_root)
+        except ValueError:
+            target = base_root
         return {"base": str(base_root), "parent": str(target), "children": list_children(target)}
 
     return app
