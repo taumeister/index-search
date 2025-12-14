@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <title>Metriken</title>
+    <link rel="stylesheet" href="/static/styles.css">
+</head>
+<body>
+    <header>
+        <div class="header-top">
+            <h1>Metriken <span class="version-badge">{{ app_version or 'v?' }}</span></h1>
+            <div class="header-actions">
+                <a href="/" class="button-link">Suche</a>
+                <a href="/dashboard" class="button-link">Dashboard</a>
+            </div>
+        </div>
+    </header>
+    <main id="metrics-main">
+        <section class="panel">
+            <div class="panel-header">
+                <h2>Zusammenfassung</h2>
+                <div class="panel-actions">
+                    <select id="metrics-endpoint">
+                        <option value="">Alle Endpunkte</option>
+                        <option value="document_file">Preview/Download</option>
+                        <option value="document_meta">Metadaten</option>
+                        <option value="client_preview">Client-Preview</option>
+                    </select>
+                    <select id="metrics-testflag">
+                        <option value="">Real + Test</option>
+                        <option value="real">Nur real</option>
+                        <option value="test">Nur Test</option>
+                    </select>
+                    <select id="metrics-window">
+                        <option value="3600">Letzte Stunde</option>
+                        <option value="21600">Letzte 6h</option>
+                        <option value="86400" selected>Letzte 24h</option>
+                        <option value="604800">Letzte 7 Tage</option>
+                    </select>
+                    <button id="metrics-refresh" type="button">Aktualisieren</button>
+                </div>
+            </div>
+            <div id="metrics-summary" class="metrics-summary"></div>
+        </section>
+
+        <section class="panel">
+            <div class="panel-header">
+                <h2>Letzte Events</h2>
+                <div class="panel-actions">
+                    <select id="events-limit">
+                        <option value="50">50</option>
+                        <option value="100" selected>100</option>
+                        <option value="200">200</option>
+                    </select>
+                    <button id="events-refresh" type="button">Neu laden</button>
+                </div>
+            </div>
+            <div id="metrics-events" class="metrics-events"></div>
+        </section>
+
+        <section class="panel">
+            <div class="panel-header">
+                <h2>Systemlast (Slots)</h2>
+                <div class="panel-actions">
+                    <select id="system-limit">
+                        <option value="60">60</option>
+                        <option value="240" selected>240</option>
+                        <option value="720">720</option>
+                    </select>
+                    <button id="system-refresh" type="button">Neu laden</button>
+                </div>
+            </div>
+            <div id="metrics-system" class="metrics-system"></div>
+        </section>
+    </main>
+    <script>
+        window.appVersion = "{{ app_version or 'v?' }}";
+    </script>
+    <script src="/static/metrics.js"></script>
+</body>
+</html>

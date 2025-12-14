@@ -1,11 +1,11 @@
 import logging
 from pathlib import Path
-from typing import Optional
+from typing import Optional, Dict, Any
 
 import uvicorn
 import secrets
 from fastapi import Cookie, Depends, FastAPI, HTTPException, Header, Query, Request
-from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 import mimetypes
@@ -25,9 +25,12 @@ from app.indexer.index_lauf_service import (
     get_log_tail,
     get_log_since,
 )
+from app import metrics
 
 logging.basicConfig(level=logging.INFO)
 index_lock = threading.Lock()
+_metrics_thread_started = False
+_metrics_thread_lock = threading.Lock()
 
 
 def get_config() -> CentralConfig:
@@ -61,6 +64,31 @@ def ensure_app_secret(env_path: Path = Path(".env")) -> str:
         pass
     os.environ["APP_SECRET"] = secret
     return secret
+
+
+def get_test_flags(request: Request) -> tuple[bool, Optional[str]]:
+    params = request.query_params
+    is_test = params.get("metrics_test") == "1" or request.headers.get("X-Metrics-Test") == "1"
+    test_run_id = params.get("test_run_id") or request.headers.get("X-Test-Run-Id")
+    return is_test, test_run_id
+
+
+def ensure_metrics_background() -> None:
+    global _metrics_thread_started
+    with _metrics_thread_lock:
+        if _metrics_thread_started:
+            return
+        _metrics_thread_started = True
+
+    def worker():
+        while True:
+            try:
+                metrics.record_system_slot()
+            except Exception:
+                pass
+            time.sleep(60)
+
+    threading.Thread(target=worker, daemon=True).start()
 
 
 def require_secret(
@@ -122,6 +150,8 @@ def create_app(config: Optional[CentralConfig] = None) -> FastAPI:
     ensure_app_secret()
     ensure_dirs(config)
     db.init_db()
+    metrics.init_metrics()
+    ensure_metrics_background()
 
     MAX_SEARCH_LIMIT = 500
     MIN_QUERY_LENGTH = 2
@@ -157,6 +187,10 @@ def create_app(config: Optional[CentralConfig] = None) -> FastAPI:
                 "app_version": read_version(),
             },
         )
+
+    @app.get("/metrics", response_class=HTMLResponse)
+    def metrics_page(request: Request):
+        return templates.TemplateResponse("metrics.html", {"request": request, "app_version": read_version()})
 
     @app.get("/api/search")
     def search(
@@ -201,29 +235,138 @@ def create_app(config: Optional[CentralConfig] = None) -> FastAPI:
             return {"results": [dict(row) for row in rows], "has_more": has_more}
 
     @app.get("/api/document/{doc_id}")
-    def document_details(doc_id: int, _auth: bool = Depends(require_secret)):
+    def document_details(doc_id: int, request: Request, _auth: bool = Depends(require_secret)):
+        t_start = time.perf_counter()
+        is_test, test_run_id = get_test_flags(request)
         with db.get_conn() as conn:
             row = db.get_document(conn, doc_id)
             if not row:
                 raise HTTPException(status_code=404, detail="Dokument nicht gefunden")
             content = db.get_document_content(conn, doc_id)
-            data = dict(row)
-            data["content"] = content
-            return data
+        data = dict(row)
+        data["content"] = content
+        try:
+            metrics.record_event(
+                {
+                    "endpoint": "document_meta",
+                    "doc_id": doc_id,
+                    "path": data.get("path"),
+                    "source": data.get("source"),
+                    "size_bytes": data.get("size_bytes"),
+                    "extension": data.get("extension"),
+                    "server_total_ms": (time.perf_counter() - t_start) * 1000,
+                    "status_code": 200,
+                    "is_test": is_test,
+                    "test_run_id": test_run_id,
+                    "user_agent": request.headers.get("User-Agent"),
+                }
+            )
+        except Exception:
+            pass
+        return data
 
     @app.get("/api/document/{doc_id}/file")
-    def document_file(doc_id: int, download: bool = Query(False, description="Download erzwingen"), _auth: bool = Depends(require_secret)):
+    def document_file(
+        doc_id: int,
+        request: Request,
+        download: bool = Query(False, description="Download erzwingen"),
+        _auth: bool = Depends(require_secret),
+    ):
+        is_test, test_run_id = get_test_flags(request)
+        t_start = time.perf_counter()
         with db.get_conn() as conn:
             row = db.get_document(conn, doc_id)
-            if not row:
-                raise HTTPException(status_code=404, detail="Dokument nicht gefunden")
-            path = Path(row["path"])
-            if not path.exists():
-                raise HTTPException(status_code=404, detail="Datei nicht mehr vorhanden")
-            media_type, _ = mimetypes.guess_type(path.name)
-            disposition = "attachment" if download else "inline"
-            headers = {"Content-Disposition": f'{disposition}; filename="{path.name}"'}
-            return FileResponse(path, media_type=media_type, headers=headers)
+        if not row:
+            raise HTTPException(status_code=404, detail="Dokument nicht gefunden")
+        row_dict = dict(row)
+        path = Path(row_dict["path"])
+        if not path.exists():
+            try:
+                metrics.record_event(
+                    {
+                        "endpoint": "document_file",
+                        "doc_id": doc_id,
+                        "path": str(path),
+                        "source": row_dict.get("source"),
+                        "size_bytes": row_dict.get("size_bytes"),
+                        "extension": row_dict.get("extension"),
+                        "server_total_ms": (time.perf_counter() - t_start) * 1000,
+                        "status_code": 404,
+                        "is_test": is_test,
+                        "test_run_id": test_run_id,
+                        "user_agent": request.headers.get("User-Agent"),
+                    }
+                )
+            except Exception:
+                pass
+            raise HTTPException(status_code=404, detail="Datei nicht mehr vorhanden")
+
+        media_type, _ = mimetypes.guess_type(path.name)
+        disposition = "attachment" if download else "inline"
+        headers = {"Content-Disposition": f'{disposition}; filename="{path.name}"'}
+
+        stat_start = time.perf_counter()
+        stat_ms = 0.0
+        file_size = row_dict.get("size_bytes")
+        try:
+            st = path.stat()
+            file_size = file_size or getattr(st, "st_size", None)
+            stat_ms = (time.perf_counter() - stat_start) * 1000
+        except Exception:
+            stat_ms = (time.perf_counter() - stat_start) * 1000
+        if file_size:
+            headers["Content-Length"] = str(file_size)
+
+        open_start = time.perf_counter()
+        f = path.open("rb")
+        open_ms = (time.perf_counter() - open_start) * 1000
+
+        chunk_size = 64 * 1024
+        first_read_start = time.perf_counter()
+        first_chunk = f.read(chunk_size)
+        first_read_ms = (time.perf_counter() - first_read_start) * 1000
+        ttfb_ms = (time.perf_counter() - t_start) * 1000
+        transfer_start = time.perf_counter()
+        bytes_sent = 0
+
+        def file_iter():
+            nonlocal bytes_sent
+            try:
+                if first_chunk:
+                    bytes_sent += len(first_chunk)
+                    yield first_chunk
+                for chunk in iter(lambda: f.read(chunk_size), b""):
+                    bytes_sent += len(chunk)
+                    yield chunk
+            finally:
+                f.close()
+                end_time = time.perf_counter()
+                transfer_ms = (end_time - transfer_start) * 1000
+                total_ms = (end_time - t_start) * 1000
+                try:
+                    metrics.record_event(
+                        {
+                            "endpoint": "document_file",
+                            "doc_id": doc_id,
+                            "path": str(path),
+                            "source": row_dict.get("source"),
+                            "size_bytes": row_dict.get("size_bytes"),
+                            "extension": row_dict.get("extension"),
+                            "server_ttfb_ms": ttfb_ms,
+                            "server_total_ms": total_ms,
+                            "smb_first_read_ms": first_read_ms + open_ms + stat_ms,
+                            "transfer_ms": transfer_ms,
+                            "bytes_sent": bytes_sent,
+                            "status_code": 200,
+                            "is_test": is_test,
+                            "test_run_id": test_run_id,
+                            "user_agent": request.headers.get("User-Agent"),
+                        }
+                    )
+                except Exception:
+                    pass
+
+        return StreamingResponse(file_iter(), media_type=media_type, headers=headers)
 
     @app.get("/api/admin/status")
     def admin_status(_auth: bool = Depends(require_secret)):
@@ -421,6 +564,52 @@ def create_app(config: Optional[CentralConfig] = None) -> FastAPI:
             "version": read_version(),
             "live": live,
         }
+
+    @app.get("/api/admin/metrics/summary")
+    def admin_metrics_summary(
+        window_seconds: int = Query(24 * 3600, ge=60, le=14 * 24 * 3600),
+        endpoint: Optional[str] = Query(None),
+        extension: Optional[str] = Query(None),
+        is_test: Optional[bool] = Query(None),
+        _auth: bool = Depends(require_secret),
+    ):
+        return metrics.get_summary(
+            window_seconds=window_seconds,
+            endpoint=endpoint,
+            extension=extension,
+            is_test=is_test,
+        )
+
+    @app.get("/api/admin/metrics/events")
+    def admin_metrics_events(limit: int = Query(200, ge=1, le=1000), is_test: Optional[bool] = Query(None), _auth: bool = Depends(require_secret)):
+        return {"events": metrics.get_recent_events(limit=limit, is_test=is_test)}
+
+    @app.get("/api/admin/metrics/system")
+    def admin_metrics_system(limit: int = Query(240, ge=1, le=1440), _auth: bool = Depends(require_secret)):
+        return {"slots": metrics.get_system_slots(limit=limit)}
+
+    @app.post("/api/admin/metrics/client_event")
+    async def admin_metrics_client_event(payload: Dict[str, Any], request: Request, _auth: bool = Depends(require_secret)):
+        is_test, test_run_id = get_test_flags(request)
+        event = {
+            "endpoint": "client_preview",
+            "doc_id": payload.get("doc_id"),
+            "size_bytes": payload.get("size_bytes"),
+            "extension": payload.get("extension"),
+            "client_click_ts": payload.get("client_click_ts"),
+            "client_resp_start_ts": payload.get("client_resp_start_ts"),
+            "client_resp_end_ts": payload.get("client_resp_end_ts"),
+            "client_render_end_ts": payload.get("client_render_end_ts"),
+            "is_test": is_test or payload.get("is_test"),
+            "test_run_id": payload.get("test_run_id") or test_run_id,
+            "user_agent": request.headers.get("User-Agent"),
+            "status_code": payload.get("status_code") or 200,
+        }
+        try:
+            metrics.record_event(event)
+        except Exception:
+            pass
+        return {"status": "ok"}
 
     def list_children(path: Path) -> list:
         try:

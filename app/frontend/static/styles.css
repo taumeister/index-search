@@ -547,3 +547,65 @@ body.resizing-preview {
     user-select: none;
     cursor: col-resize;
 }
+
+/* Metrics */
+#metrics-main {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    padding: 12px;
+}
+
+.panel {
+    background: var(--panel-bg);
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    padding: 12px;
+}
+
+.panel-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    margin-bottom: 8px;
+}
+
+.panel-actions {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+}
+
+.metrics-summary .metrics-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: 10px;
+}
+
+.metrics-summary .label {
+    color: #777;
+    font-size: 12px;
+    margin-bottom: 2px;
+}
+
+.metrics-summary .value {
+    font-weight: 600;
+}
+
+.metrics-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 14px;
+}
+
+.metrics-table th,
+.metrics-table td {
+    border: 1px solid var(--border-color);
+    padding: 6px 8px;
+    text-align: left;
+}
+
+.metrics-table th {
+    background: var(--header-bg);
+}

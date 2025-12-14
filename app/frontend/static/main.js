@@ -16,6 +16,7 @@ const SEARCH_DEBOUNCE_MS = 400;
 let searchOffset = 0;
 let searchHasMore = false;
 let searchLoading = false;
+const METRICS_ENABLED = true;
 const dateFormatter = new Intl.DateTimeFormat("de-DE", {
     year: "numeric",
     month: "2-digit",
@@ -111,6 +112,19 @@ function debounceSearch() {
     searchTimer = setTimeout(() => search({ append: false }), SEARCH_DEBOUNCE_MS);
 }
 
+async function sendClientMetric(payload) {
+    if (!METRICS_ENABLED) return;
+    try {
+        await fetch("/api/admin/metrics/client_event", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(payload),
+        });
+    } catch (err) {
+        // best-effort, keine UI-Störung
+    }
+}
+
 function renderResults(results, { append = false } = {}) {
     const tbody = document.querySelector("#results-table tbody");
     if (!append) {
@@ -172,15 +186,33 @@ async function openPreview(id, showPanel = false) {
     if (!id) return;
     currentDocId = id;
     markActiveRow(id);
+    const clickWallTs = Date.now() / 1000;
+    const clickPerf = performance.now();
     const res = await fetch(`/api/document/${id}`);
+    const respHeadersPerf = performance.now();
     if (!res.ok) {
         closePreviewPanel();
         return;
     }
     const doc = await res.json();
+    const respEndPerf = performance.now();
     if (currentDocId !== id) return;
     document.getElementById("download-link").href = `/api/document/${id}/file?download=1`;
-    renderPreviewContent(doc, document.getElementById("preview-content"));
+    const renderDone = () => {
+        if (!METRICS_ENABLED) return;
+        const renderPerf = performance.now();
+        const base = clickWallTs;
+        sendClientMetric({
+            doc_id: id,
+            size_bytes: doc.size_bytes,
+            extension: doc.extension,
+            client_click_ts: base,
+            client_resp_start_ts: base + (respHeadersPerf - clickPerf) / 1000,
+            client_resp_end_ts: base + (respEndPerf - clickPerf) / 1000,
+            client_render_end_ts: base + (renderPerf - clickPerf) / 1000,
+        });
+    };
+    renderPreviewContent(doc, document.getElementById("preview-content"), renderDone);
     updatePreviewHeader(doc);
     if (showPanel) {
         showPreviewPanel();
@@ -285,14 +317,20 @@ function setupPreviewResizer() {
     });
 }
 
-function renderPreviewContent(doc, container) {
+function renderPreviewContent(doc, container, onRenderComplete) {
     container.innerHTML = "";
     const ext = (doc.extension || "").toLowerCase();
     if (ext === ".pdf") {
         const iframe = document.createElement("iframe");
         iframe.src = `/api/document/${doc.id}/file#toolbar=0&navpanes=0&view=FitH`;
         iframe.className = "pdf-frame";
+        iframe.addEventListener("load", () => {
+            if (typeof onRenderComplete === "function") onRenderComplete();
+        });
         container.appendChild(iframe);
+        setTimeout(() => {
+            if (typeof onRenderComplete === "function") onRenderComplete();
+        }, 15000);
         return;
     }
 
@@ -310,12 +348,14 @@ function renderPreviewContent(doc, container) {
         body.innerHTML = highlightTerms(doc.content || "");
         container.appendChild(header);
         container.appendChild(body);
+        if (typeof onRenderComplete === "function") onRenderComplete();
         return;
     }
 
     const pre = document.createElement("pre");
     pre.innerHTML = highlightTerms(doc.content || "");
     container.appendChild(pre);
+    if (typeof onRenderComplete === "function") onRenderComplete();
 }
 
 function stripTags(html) {

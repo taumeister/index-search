@@ -12,3 +12,4 @@ python-dateutil==2.9.0.post0
 httpx==0.28.1
 pytest==9.0.2
 email-validator==2.3.0
+psutil==6.1.0
