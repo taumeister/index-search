@@ -1,0 +1,9 @@
+BEGIN:VCALENDAR
+VERSION:2.0
+BEGIN:VEVENT
+SUMMARY:Erneuerung Zertifikat: index-suche.unixuser.intern
+DTSTART:20271113
+DTEND:20271122
+DESCRIPTION:Erinnerung zur Erneuerung des Zertifikats für index-suche.unixuser.intern.
+END:VEVENT
+END:VCALENDAR

@@ -8,5 +8,3 @@ logs/
 .vscode/
 .env
 config/*.db
-certs/
-nginx/index-suche.conf
