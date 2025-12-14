@@ -48,6 +48,18 @@ function escapeHtml(str) {
         .replace(/'/g, "&#39;");
 }
 
+function focusSearchInput() {
+    const input = document.getElementById("search-input");
+    if (!input) return;
+    if (document.activeElement === input) return;
+    try {
+        input.focus({ preventScroll: true });
+        input.select();
+    } catch (_) {
+        /* ignore */
+    }
+}
+
 function normalizeSearchMode(value) {
     if (value === null || value === undefined) return null;
     const normalized = String(value).toLowerCase();
@@ -831,6 +843,7 @@ if (loadMoreBtn) {
 
 setupPopup();
 setupPreviewResizer();
+focusSearchInput();
 
 // Column resize
 function setupResizableColumns() {
