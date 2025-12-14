@@ -245,7 +245,7 @@ h1 {
 }
 
 .time-more {
-    position: relative;
+    position: static;
 }
 
 .time-more-menu {
