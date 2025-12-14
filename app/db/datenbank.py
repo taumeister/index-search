@@ -171,6 +171,8 @@ def search_documents(
     sort_key: Optional[str] = None,
     sort_dir: Optional[str] = None,
 ) -> List[sqlite3.Row]:
+    if not query or not str(query).strip():
+        return []
     filters = filters or {}
     where_clauses = []
     params: List[Any] = []

@@ -22,6 +22,8 @@
     <script>
         window.defaultPreview = "{{ default_preview }}";
         window.snippetLength = {{ snippet_length }};
+        window.searchDefaultMode = "{{ search_default_mode }}";
+        window.searchPrefixMinLen = {{ search_prefix_minlen }};
     </script>
 </head>
 <body>
@@ -41,6 +43,20 @@
         </div>
         <div class="search-bar">
             <input id="search-input" type="text" placeholder="Suche wie im Explorer..." />
+            <div class="search-mode" id="search-mode" role="radiogroup" aria-label="Search Mode">
+                <button type="button" data-mode="strict" title="Exakte Worttreffer, alle Wörter müssen vorkommen. Keine Teilwort- oder Fuzzy-Treffer.">
+                    <span class="mode-label">Strikt</span>
+                    <span class="mode-info" aria-hidden="true">i</span>
+                </button>
+                <button type="button" data-mode="standard" title="Ausgewogen: alle Wörter müssen vorkommen, lange Wörter dürfen als Prefix matchen.">
+                    <span class="mode-label">Standard</span>
+                    <span class="mode-info" aria-hidden="true">i</span>
+                </button>
+                <button type="button" data-mode="loose" title="Mehr Treffer: Prefix/Teilwort erlaubt, ein Wort reicht für ein Ergebnis.">
+                    <span class="mode-label">Locker</span>
+                    <span class="mode-info" aria-hidden="true">i</span>
+                </button>
+            </div>
             <div class="filters">
                 <select id="ext-filter">
                     <option value="">Typ (alle)</option>

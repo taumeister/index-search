@@ -27,6 +27,7 @@ from app.indexer.index_lauf_service import (
     get_log_since,
 )
 from app import metrics
+from app.search_modes import SearchMode, build_search_plan, normalize_mode
 
 logging.basicConfig(level=logging.INFO)
 index_lock = threading.Lock()
@@ -132,20 +133,6 @@ def read_version() -> str:
     return "v?"
 
 
-def build_match_query(raw: str) -> str:
-    raw = (raw or "").strip()
-    if not raw:
-        return "*"
-    tokens = []
-    for part in raw.replace('"', " ").split():
-        if not part:
-            continue
-        safe = part.replace('"', "")
-        if safe:
-            tokens.append(f"{safe}*")
-    return " AND ".join(tokens) if tokens else "*"
-
-
 def create_app(config: Optional[CentralConfig] = None) -> FastAPI:
     config = config or load_config()
     ensure_app_secret()
@@ -156,6 +143,8 @@ def create_app(config: Optional[CentralConfig] = None) -> FastAPI:
 
     MAX_SEARCH_LIMIT = 500
     MIN_QUERY_LENGTH = 2
+    DEFAULT_SEARCH_MODE = normalize_mode(getattr(config.ui, "search_default_mode", None), SearchMode.STANDARD)
+    PREFIX_MINLEN = max(1, int(getattr(config.ui, "search_prefix_minlen", 4) or 4))
 
     app = FastAPI(title="Index-Suche")
     templates = Jinja2Templates(directory="app/frontend/templates")
@@ -171,6 +160,8 @@ def create_app(config: Optional[CentralConfig] = None) -> FastAPI:
                 "default_preview": config.ui.default_preview,
                 "snippet_length": config.ui.snippet_length,
                 "app_version": read_version(),
+                "search_default_mode": getattr(config.ui, "search_default_mode", "standard"),
+                "search_prefix_minlen": getattr(config.ui, "search_prefix_minlen", 4),
             },
         )
 
@@ -203,12 +194,9 @@ def create_app(config: Optional[CentralConfig] = None) -> FastAPI:
         sort_dir: Optional[str] = None,
         limit: int = 200,
         offset: int = 0,
+        mode: Optional[str] = Query(None, description="Suchmodus (strict|standard|loose)"),
         _auth: bool = Depends(require_secret),
     ):
-        raw_q = (q or "").strip()
-        if raw_q and len(raw_q) < MIN_QUERY_LENGTH:
-            return {"results": [], "has_more": False, "message": f"Suchbegriff zu kurz (min. {MIN_QUERY_LENGTH} Zeichen)"}
-
         safe_limit = max(1, min(MAX_SEARCH_LIMIT, int(limit or 0)))
         safe_offset = max(0, int(offset or 0))
 
@@ -221,10 +209,20 @@ def create_app(config: Optional[CentralConfig] = None) -> FastAPI:
                 filters["extension"] = extension.lower()
             if time_filter:
                 filters["time_filter"] = time_filter
+
+            raw_q = (q or "").strip()
+            if raw_q and raw_q != "*" and len(raw_q) < MIN_QUERY_LENGTH:
+                return {"results": [], "has_more": False, "message": f"Suchbegriff zu kurz (min. {MIN_QUERY_LENGTH} Zeichen)"}
+
+            effective_mode = normalize_mode(mode, DEFAULT_SEARCH_MODE)
+            plan = build_search_plan(raw_q, effective_mode, PREFIX_MINLEN, allow_wildcard=bool(filters))
+            if plan.empty_reason:
+                return {"results": [], "has_more": False, "message": plan.empty_reason}
+
             fetch_limit = safe_limit + 1  # eine mehr holen, um has_more zu erkennen
             rows = db.search_documents(
                 conn,
-                build_match_query(q),
+                plan.fts_query or "",
                 limit=fetch_limit,
                 offset=safe_offset,
                 filters=filters,
@@ -233,7 +231,11 @@ def create_app(config: Optional[CentralConfig] = None) -> FastAPI:
             )
             has_more = len(rows) > safe_limit
             rows = rows[:safe_limit]
-            return {"results": [dict(row) for row in rows], "has_more": has_more}
+            return {
+                "results": [dict(row) for row in rows],
+                "has_more": has_more,
+                "mode": effective_mode.value,
+            }
 
     @app.get("/api/document/{doc_id}")
     def document_details(doc_id: int, request: Request, _auth: bool = Depends(require_secret)):

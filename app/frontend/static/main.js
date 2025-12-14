@@ -13,9 +13,13 @@ const ZOOM_STEP = 0.1;
 const SEARCH_LIMIT = 200;
 const MIN_QUERY_LENGTH = 2;
 const SEARCH_DEBOUNCE_MS = 400;
+const SEARCH_MODE_KEY = "searchMode";
+const SEARCH_MODE_SET = new Set(["strict", "standard", "loose"]);
+const DEFAULT_SEARCH_MODE = normalizeSearchMode(window.searchDefaultMode) || "standard";
 let searchOffset = 0;
 let searchHasMore = false;
 let searchLoading = false;
+let currentSearchMode = DEFAULT_SEARCH_MODE;
 const METRICS_ENABLED = true;
 const dateFormatter = new Intl.DateTimeFormat("de-DE", {
     year: "numeric",
@@ -35,6 +39,63 @@ function escapeHtml(str) {
         .replace(/'/g, "&#39;");
 }
 
+function normalizeSearchMode(value) {
+    if (value === null || value === undefined) return null;
+    const normalized = String(value).toLowerCase();
+    return SEARCH_MODE_SET.has(normalized) ? normalized : null;
+}
+
+function readStoredSearchMode() {
+    try {
+        const stored = localStorage.getItem(SEARCH_MODE_KEY);
+        return normalizeSearchMode(stored);
+    } catch (_) {
+        return null;
+    }
+}
+
+function persistSearchMode(mode) {
+    currentSearchMode = mode;
+    try {
+        localStorage.setItem(SEARCH_MODE_KEY, mode);
+    } catch (_) {
+        /* ignore */
+    }
+    const url = new URL(window.location.href);
+    url.searchParams.set("mode", mode);
+    history.replaceState(null, "", url.toString());
+}
+
+function updateSearchModeButtons(activeMode) {
+    const buttons = document.querySelectorAll("#search-mode button");
+    buttons.forEach((btn) => {
+        const btnMode = btn.dataset.mode;
+        const isActive = btnMode === activeMode;
+        btn.classList.toggle("active", isActive);
+        btn.setAttribute("aria-pressed", isActive ? "true" : "false");
+    });
+}
+
+function setupSearchModeSwitch() {
+    const urlMode = normalizeSearchMode(new URL(window.location.href).searchParams.get("mode"));
+    const storedMode = readStoredSearchMode();
+    const fallback = DEFAULT_SEARCH_MODE;
+    const initial = urlMode || storedMode || fallback;
+    persistSearchMode(initial);
+    updateSearchModeButtons(initial);
+    const switcher = document.getElementById("search-mode");
+    if (!switcher) return;
+    switcher.querySelectorAll("button").forEach((btn) => {
+        btn.addEventListener("click", () => {
+            const next = normalizeSearchMode(btn.dataset.mode);
+            if (!next || next === currentSearchMode) return;
+            persistSearchMode(next);
+            updateSearchModeButtons(next);
+            search({ append: false });
+        });
+    });
+}
+
 applySavedPreviewWidth();
 bootstrapZoom();
 
@@ -49,9 +110,31 @@ async function search({ append = false } = {}) {
         searchHasMore = false;
     }
 
-    if (trimmed && trimmed.length < MIN_QUERY_LENGTH) {
+    if (!trimmed) {
+        if (currentSearchController) {
+            currentSearchController.abort();
+            currentSearchController = null;
+        }
+        searchHasMore = false;
+        renderMessageRow("Bitte einen Suchbegriff eingeben.");
+        updateLoadMoreButton();
+        return;
+    }
+
+    if (trimmed && trimmed !== "*" && trimmed.length < MIN_QUERY_LENGTH) {
         searchHasMore = false;
         renderMessageRow(`Mindestens ${MIN_QUERY_LENGTH} Zeichen eingeben.`);
+        updateLoadMoreButton();
+        return;
+    }
+
+    if (trimmed === "*" && !ext && !time) {
+        if (currentSearchController) {
+            currentSearchController.abort();
+            currentSearchController = null;
+        }
+        searchHasMore = false;
+        renderMessageRow("Wildcard nur mit aktivem Filter nutzen.");
         updateLoadMoreButton();
         return;
     }
@@ -61,6 +144,7 @@ async function search({ append = false } = {}) {
     }
     currentSearchController = new AbortController();
 
+    const activeMode = normalizeSearchMode(currentSearchMode) || DEFAULT_SEARCH_MODE;
     const params = new URLSearchParams({ q, limit: SEARCH_LIMIT, offset: append ? searchOffset : 0 });
     if (ext) params.append("extension", ext.toLowerCase());
     if (time) params.append("time_filter", time);
@@ -68,6 +152,7 @@ async function search({ append = false } = {}) {
         params.append("sort_key", sortState.key);
         params.append("sort_dir", sortState.dir);
     }
+    params.append("mode", activeMode);
 
     searchLoading = true;
     updateLoadMoreButton();
@@ -474,6 +559,7 @@ function setupPopup() {
 }
 
 // Search & filter bindings
+setupSearchModeSwitch();
 document.getElementById("search-input").addEventListener("input", debounceSearch);
 document.getElementById("ext-filter").addEventListener("change", () => search({ append: false }));
 document.getElementById("time-filter").addEventListener("change", () => search({ append: false }));

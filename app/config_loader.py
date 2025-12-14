@@ -58,6 +58,21 @@ class SMTPConfig(BaseModel):
 class UIConfig(BaseModel):
     default_preview: str = "panel"
     snippet_length: int = 160
+    search_default_mode: str = "standard"
+    search_prefix_minlen: int = 4
+
+    @field_validator("search_default_mode")
+    def validate_mode(cls, value: str) -> str:
+        value = (value or "standard").strip().lower()
+        if value not in {"strict", "standard", "loose"}:
+            raise ValueError("search_default_mode muss strict|standard|loose sein")
+        return value
+
+    @field_validator("search_prefix_minlen")
+    def validate_prefix_minlen(cls, value: int) -> int:
+        if value is None or value < 1:
+            raise ValueError("search_prefix_minlen muss >=1 sein")
+        return value
 
 
 class LoggingConfig(BaseModel):
@@ -127,6 +142,8 @@ def load_config(path: Path = Path("config/central_config.ini"), use_env: bool = 
     ui_cfg = UIConfig(
         default_preview="panel",
         snippet_length=160,
+        search_default_mode=os.getenv("SEARCH_DEFAULT_MODE", "standard") if use_env else "standard",
+        search_prefix_minlen=int(os.getenv("SEARCH_PREFIX_MINLEN", "4") or 4) if use_env else 4,
     )
     logging_cfg = LoggingConfig(
         level=os.getenv("LOG_LEVEL", "INFO") if use_env else "INFO",

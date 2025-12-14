@@ -11,6 +11,8 @@ def test_load_config_defaults(monkeypatch):
     assert cfg.indexer.worker_count == 2
     assert cfg.paths.roots == []
     assert cfg.smtp is None
+    assert cfg.ui.search_default_mode == "standard"
+    assert cfg.ui.search_prefix_minlen == 4
 
 
 def test_paths_with_labels(monkeypatch):
@@ -22,6 +24,8 @@ def test_paths_with_labels(monkeypatch):
     assert cfg.paths.roots[0][1] == "quelle_a"
     assert cfg.paths.roots[1][1] == "b"
     assert cfg.indexer.worker_count == 3
+    assert cfg.ui.search_default_mode == "standard"
+    assert cfg.ui.search_prefix_minlen == 4
 
 
 def test_invalid_worker_count(monkeypatch):
@@ -30,3 +34,13 @@ def test_invalid_worker_count(monkeypatch):
     monkeypatch.setenv("INDEX_WORKER_COUNT", "0")
     with pytest.raises(Exception):
         load_config(use_env=True)
+
+
+def test_search_ui_env(monkeypatch):
+    for key in ["INDEX_ROOTS", "INDEX_WORKER_COUNT", "SEARCH_DEFAULT_MODE", "SEARCH_PREFIX_MINLEN"]:
+        monkeypatch.delenv(key, raising=False)
+    monkeypatch.setenv("SEARCH_DEFAULT_MODE", "strict")
+    monkeypatch.setenv("SEARCH_PREFIX_MINLEN", "6")
+    cfg = load_config(use_env=True)
+    assert cfg.ui.search_default_mode == "strict"
+    assert cfg.ui.search_prefix_minlen == 6
