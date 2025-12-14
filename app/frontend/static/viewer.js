@@ -22,9 +22,10 @@ async function loadDoc() {
     const id = params.get("id");
     if (!id) return;
     document.title = `Viewer - Dokument ${id}`;
-    const res = await fetch(`/api/document/${id}`);
+    const headers = buildAuthHeaders();
+    const res = await fetch(`/api/document/${id}`, { headers, credentials: "include" });
     if (!res.ok) {
-        document.getElementById("content").innerHTML = "<p>Dokument nicht gefunden.</p>";
+        document.getElementById("content").innerHTML = `<p>Dokument nicht gefunden oder Zugriff verweigert (${res.status}).</p>`;
         return;
     }
     const doc = await res.json();
@@ -35,7 +36,11 @@ async function loadDoc() {
 
 function render(doc) {
     document.getElementById("title").textContent = doc.filename || "Dokument";
-    document.getElementById("download-link").dataset.docid = doc.id;
+    const dl = document.getElementById("download-link");
+    if (dl) {
+        dl.dataset.docid = doc.id;
+        dl.href = `/api/document/${doc.id}/file?download=1`;
+    }
 
     const container = document.getElementById("content");
     container.innerHTML = "";
@@ -43,9 +48,28 @@ function render(doc) {
 
     if (ext === ".pdf") {
         const iframe = document.createElement("iframe");
-        iframe.src = `/api/document/${doc.id}/file#toolbar=0&navpanes=0&view=FitH`;
         iframe.className = "pdf-frame";
+        iframe.title = "Dokument-Viewer";
+        iframe.setAttribute("aria-label", "Dokument-Viewer");
         container.appendChild(iframe);
+        let iframeSrcSet = false;
+        const setSrc = (src) => {
+            if (iframeSrcSet) return;
+            iframe.src = src;
+            iframeSrcSet = true;
+        };
+        const fallback = window.setTimeout(() => {
+            setSrc(`/api/document/${doc.id}/file#toolbar=0&navpanes=0&view=FitH`);
+        }, 900);
+        fetchFileAsBlob(doc.id)
+            .then((url) => {
+                window.clearTimeout(fallback);
+                setSrc(`${url}#toolbar=0&navpanes=0&view=FitH`);
+            })
+            .catch(() => {
+                window.clearTimeout(fallback);
+                setSrc(`/api/document/${doc.id}/file#toolbar=0&navpanes=0&view=FitH`);
+            });
         return;
     }
 
@@ -82,7 +106,7 @@ function printCurrent() {
     iframe.style.width = "1px";
     iframe.style.height = "1px";
     iframe.src = url;
-    const cleanup = () => setTimeout(() => iframe.remove(), 800);
+    const cleanup = () => setTimeout(() => iframe.remove(), 1600);
     let printed = false;
     iframe.onload = () => {
         try {
@@ -129,6 +153,16 @@ function bindActions() {
     if (btn) {
         btn.addEventListener("click", printCurrent);
     }
+    const closeBtn = document.getElementById("close-viewer");
+    if (closeBtn) {
+        closeBtn.addEventListener("click", () => {
+            try {
+                window.close();
+            } catch (_) {
+                /* ignore */
+            }
+        });
+    }
     const dl = document.getElementById("download-link");
     if (dl) {
         dl.addEventListener("click", async (e) => {
@@ -137,7 +171,8 @@ function bindActions() {
             const id = doc?.id;
             if (!id) return;
             try {
-                const resp = await fetch(`/api/document/${id}/file`);
+                const headers = buildAuthHeaders();
+        const resp = await fetch(`/api/document/${id}/file`, { headers, credentials: "include" });
                 if (!resp.ok) throw new Error(`Download fehlgeschlagen (${resp.status})`);
                 const blob = await resp.blob();
                 const url = URL.createObjectURL(blob);
@@ -159,6 +194,28 @@ function bindActions() {
 
 loadDoc();
 bindActions();
+function buildAuthHeaders() {
+    const headers = { "X-Internal-Auth": "1" };
+    try {
+        const cookieMatch = document.cookie.match(/app_secret=([^;]+)/);
+        if (cookieMatch && cookieMatch[1]) {
+            headers["X-App-Secret"] = decodeURIComponent(cookieMatch[1]);
+        }
+    } catch (_) {
+        /* ignore */
+    }
+    return headers;
+}
+
+async function fetchFileAsBlob(docId) {
+    const headers = buildAuthHeaders();
+    const resp = await fetch(`/api/document/${docId}/file`, { headers, credentials: "include" });
+    if (!resp.ok) {
+        throw new Error(`Download fehlgeschlagen (${resp.status})`);
+    }
+    const blob = await resp.blob();
+    return URL.createObjectURL(blob);
+}
 
 function clampZoom(value) {
     return Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, value));

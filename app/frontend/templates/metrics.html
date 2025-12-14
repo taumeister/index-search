@@ -6,20 +6,19 @@
     <link rel="stylesheet" href="/static/styles.css">
 </head>
 <body class="matrix-body">
-    <header class="matrix-header">
-        <div class="header-top">
-            <div>
-                <div class="eyebrow">Diagnose</div>
-                <h1>Preview Performance</h1>
-                <div class="subtext">Executive-Übersicht: Ampel, Klartext, wenige Charts</div>
-            </div>
-            <div class="header-actions">
-                <span class="pill version-pill">{{ app_version or 'v?' }}</span>
-                <a href="/" class="button-link">Suche</a>
-                <a href="/dashboard" class="button-link">Dashboard</a>
-            </div>
-        </div>
-        <div class="filter-row">
+    {% set header_title = "Preview Performance" %}
+    {% set header_subtitle = "" %}
+    {% set header_eyebrow = None %}
+    {% set version_badge = None %}
+    {% set header_actions = [
+        {"type":"icon","href":"/","label":"Suche","icon":"search"},
+        {"type":"icon","href":"/dashboard","label":"Dashboard","icon":"dashboard"}
+    ] %}
+    <header class="app-header matrix-header">
+        {% include "partials/header_top.html" with context %}
+    </header>
+    <main class="matrix-main">
+        <div class="filter-row metrics-filters">
             <div class="filter-group">
                 <label>Run wählen</label>
                 <select id="run-selector"></select>
@@ -34,14 +33,12 @@
                         <option value=".txt">Nur TXT</option>
                     </select>
                     <input id="test-min-size" type="number" min="0" step="0.1" value="0" title="Min. Größe MB" />
-                    <button id="test-run" type="button">Starten</button>
+                    <button id="test-run" type="button" class="btn btn-primary">Starten</button>
                     <span id="test-status" class="test-status"></span>
                 </div>
             </div>
-            <button id="metrics-refresh" class="primary">Aktualisieren</button>
+            <button id="metrics-refresh" class="btn btn-primary btn-adjust-offset">Aktualisieren</button>
         </div>
-    </header>
-    <main class="matrix-main">
         <div class="tab-bar">
             <button class="tab active" data-tab="overview">Overview</button>
             <button class="tab" data-tab="details">Details / Rohdaten</button>

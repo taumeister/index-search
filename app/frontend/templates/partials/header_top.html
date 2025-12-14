@@ -1,0 +1,52 @@
+{% macro render_icon(name) -%}
+    {%- if name == "metrics" -%}
+        <svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+            <path d="M4 13h3v7H4zm6-8h3v15h-3zm6 5h3v10h-3z" fill="currentColor"></path>
+        </svg>
+    {%- elif name == "dashboard" -%}
+        <svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+            <path d="M4 4h7v7H4zm0 9h7v7H4zm9-9h7v4h-7zm0 6h7v10h-7z" fill="currentColor"></path>
+        </svg>
+    {%- elif name == "home" -%}
+        <svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+            <path d="M12 3l9 8h-3v9h-5v-6H11v6H6v-9H3l9-8z" fill="currentColor"></path>
+        </svg>
+    {%- elif name == "search" -%}
+        <svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+            <path d="M10 2a8 8 0 105.293 14.293l4.707 4.707 1.414-1.414-4.707-4.707A8 8 0 0010 2zm0 2a6 6 0 110 12 6 6 0 010-12z" fill="currentColor"></path>
+        </svg>
+    {%- else -%}
+        {{ name }}
+    {%- endif -%}
+{%- endmacro %}
+
+<div class="header-top">
+    <div class="header-title">
+        {% if header_eyebrow %}<div class="eyebrow">{{ header_eyebrow }}</div>{% endif %}
+        <div class="header-title-row">
+            <h1>{{ header_title }}</h1>
+            {% if version_badge %}<span class="version-badge">{{ version_badge }}</span>{% endif %}
+            {% if header_slogan %}<span class="header-slogan-inline">{{ header_slogan }}</span>{% endif %}
+        </div>
+        {% if header_subtitle %}<div class="header-sub">{{ header_subtitle }}</div>{% endif %}
+    </div>
+    <div class="header-actions compact-actions">
+        {% for action in header_actions %}
+        {% if action.type == "icon" %}
+            <a href="{{ action.href }}" class="icon-button{{ ' ' + action.classes if action.classes else '' }}" aria-label="{{ action.label }}" title="{{ action.title or action.label }}" {% if action.id %}id="{{ action.id }}"{% endif %}>
+                {% if action.icon_text %}{{ action.icon_text }}{% else %}{{ render_icon(action.icon) }}{% endif %}
+            </a>
+        {% elif action.type == "icon_button" %}
+            <button type="button" class="icon-button{{ ' ' + action.classes if action.classes else '' }}" aria-label="{{ action.label }}" title="{{ action.title or action.label }}" {% if action.id %}id="{{ action.id }}"{% endif %}>
+                {% if action.icon_text %}{{ action.icon_text }}{% else %}{{ render_icon(action.icon) }}{% endif %}
+            </button>
+        {% elif action.type == "link" %}
+                <a href="{{ action.href }}" class="{{ action.class or 'btn btn-secondary' }}" {% if action.id %}id="{{ action.id }}"{% endif %}>{{ action.label }}</a>
+            {% elif action.type == "button" %}
+                <button type="button" class="{{ action.class or 'btn btn-secondary' }}" {% if action.id %}id="{{ action.id }}"{% endif %}>{{ action.label }}</button>
+            {% elif action.type == "pill" %}
+                <span class="{{ action.class or 'pill version-pill' }}" {% if action.id %}id="{{ action.id }}"{% endif %}>{{ action.label }}</span>
+            {% endif %}
+        {% endfor %}
+    </div>
+</div>

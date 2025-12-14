@@ -1,5 +1,6 @@
 import configparser
 import dataclasses
+from dataclasses import field
 import os
 from pathlib import Path
 from typing import Optional
@@ -87,6 +88,11 @@ class LoggingConfig(BaseModel):
         return value
 
 
+class FeedbackConfig(BaseModel):
+    enabled: bool = False
+    recipients: list[str] = []
+
+
 @dataclasses.dataclass
 class CentralConfig:
     paths: PathsConfig
@@ -95,6 +101,7 @@ class CentralConfig:
     ui: UIConfig
     logging: LoggingConfig
     report_enabled: bool = False
+    feedback: FeedbackConfig = field(default_factory=FeedbackConfig)
     raw: Optional[configparser.ConfigParser] = None
 
 
@@ -151,6 +158,11 @@ def load_config(path: Path = Path("config/central_config.ini"), use_env: bool = 
         rotation_mb=int(os.getenv("LOG_ROTATION_MB", "10")) if use_env else 10,
     )
 
+    feedback_cfg = FeedbackConfig(
+        enabled=os.getenv("FEEDBACK_ENABLED", "false").lower() == "true" if use_env else False,
+        recipients=[r.strip() for r in (os.getenv("FEEDBACK_TO", "") if use_env else "").split(",") if r.strip()],
+    )
+
     return CentralConfig(
         paths=paths_cfg,
         indexer=indexer_cfg,
@@ -158,6 +170,7 @@ def load_config(path: Path = Path("config/central_config.ini"), use_env: bool = 
         ui=ui_cfg,
         logging=logging_cfg,
         report_enabled=False,  # Dashboard steuert das Flag
+        feedback=feedback_cfg,
         raw=None,
     )
 

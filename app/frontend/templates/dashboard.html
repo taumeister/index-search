@@ -31,10 +31,6 @@
         }
         html, body { min-height: 100%; overflow-y: auto; }
         body { background: var(--bg); margin: 0; color: #111827; }
-        header { padding: 14px 16px 6px; }
-        .header-top { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
-        .header-actions { display: flex; align-items: center; gap: 10px; }
-        .button-link { padding: 8px 12px; background: #e5e7eb; border-radius: 8px; text-decoration: none; color: #111827; border: 1px solid #cbd5e1; }
         .system-layout { display: flex; flex-direction: column; gap: 12px; padding: 0 14px 20px; }
         .row { display: grid; gap: 12px; }
         .row.top { grid-template-columns: 2fr 1fr; }
@@ -88,17 +84,16 @@
     </style>
 </head>
 <body>
-    <header>
-        <div class="header-top">
-            <div>
-                <h1>System &amp; Index</h1>
-                <div class="subtext">Live-Übersicht für Laufstatus, Log und Fehler</div>
-            </div>
-            <div class="header-actions">
-                <span class="pill" id="version-label">{{ app_version }}</span>
-                <a href="/" class="button-link">Zur Suche</a>
-            </div>
-        </div>
+    {% set header_title = "System & Index" %}
+    {% set header_subtitle = "Live-Übersicht für Laufstatus, Log und Fehler" %}
+    {% set header_eyebrow = None %}
+    {% set version_badge = None %}
+    {% set header_actions = [
+        {"type":"icon","href":"/","label":"Suche","icon":"search"},
+        {"type":"icon","href":"/metrics","label":"Metrics","icon":"metrics"}
+    ] %}
+    <header class="app-header">
+        {% include "partials/header_top.html" with context %}
     </header>
     <div class="system-layout">
         <div class="row top">
@@ -112,11 +107,11 @@
                     <div class="status-pill" id="status-pill" data-state="idle">Wartet</div>
                 </div>
                 <div class="chip-row action-row" style="margin-bottom:10px;">
-                    <button id="start-run">Index starten</button>
-                    <button id="stop-run">Index stoppen</button>
-                    <button id="preflight">Preflight (zählen)</button>
-                    <button id="reset-run" class="destructive">Index leeren</button>
-                    <button id="reset-run-start" class="destructive">Leeren &amp; neu starten</button>
+                    <button id="start-run" class="btn btn-primary">Index starten</button>
+                    <button id="stop-run" class="btn btn-secondary">Index stoppen</button>
+                    <button id="preflight" class="btn btn-secondary">Preflight (zählen)</button>
+                    <button id="reset-run" class="btn btn-danger">Index leeren</button>
+                    <button id="reset-run-start" class="btn btn-danger">Leeren &amp; neu starten</button>
                     <label style="display:flex;align-items:center;gap:6px;">
                         <input type="checkbox" id="toggle-report"> Mail senden
                     </label>

@@ -29,6 +29,7 @@ from app.indexer.index_lauf_service import (
 from app import metrics
 from app.search_modes import SearchMode, build_search_plan, normalize_mode
 from app import config_db
+from app.feedback import MAX_FEEDBACK_CHARS, check_rate_limit, send_feedback_email
 
 logging.basicConfig(level=logging.INFO)
 index_lock = threading.Lock()
@@ -171,6 +172,9 @@ def create_app(config: Optional[CentralConfig] = None) -> FastAPI:
     db.init_db()
     metrics.init_metrics()
     ensure_metrics_background()
+    feedback_enabled = bool(getattr(config, "feedback", None) and config.feedback.enabled)
+    feedback_recipients = list(getattr(config.feedback, "recipients", []))
+    app_version = read_version()
 
     MAX_SEARCH_LIMIT = 500
     MIN_QUERY_LENGTH = 2
@@ -190,15 +194,16 @@ def create_app(config: Optional[CentralConfig] = None) -> FastAPI:
                 "request": request,
                 "default_preview": config.ui.default_preview,
                 "snippet_length": config.ui.snippet_length,
-                "app_version": read_version(),
+                "app_version": app_version,
                 "search_default_mode": getattr(config.ui, "search_default_mode", "standard"),
                 "search_prefix_minlen": getattr(config.ui, "search_prefix_minlen", 4),
+                "feedback_enabled": feedback_enabled,
             },
         )
 
     @app.get("/dashboard", response_class=HTMLResponse)
     def dashboard(request: Request):
-        return templates.TemplateResponse("dashboard.html", {"request": request, "app_version": read_version()})
+        return templates.TemplateResponse("dashboard.html", {"request": request, "app_version": app_version})
 
     @app.get("/viewer", response_class=HTMLResponse)
     def viewer(request: Request, id: int = Query(...)):
@@ -207,13 +212,44 @@ def create_app(config: Optional[CentralConfig] = None) -> FastAPI:
             {
                 "request": request,
                 "doc_id": id,
-                "app_version": read_version(),
+                "app_version": app_version,
             },
         )
 
     @app.get("/metrics", response_class=HTMLResponse)
     def metrics_page(request: Request):
-        return templates.TemplateResponse("metrics.html", {"request": request, "app_version": read_version()})
+        return templates.TemplateResponse("metrics.html", {"request": request, "app_version": app_version})
+
+    @app.post("/api/feedback")
+    async def submit_feedback(payload: Dict[str, Any], request: Request, _auth: bool = Depends(require_secret)):
+        if not feedback_enabled:
+            raise HTTPException(status_code=403, detail="Feedback deaktiviert")
+        if not config.smtp:
+            raise HTTPException(status_code=503, detail="E-Mail-Versand nicht verfügbar")
+        if not feedback_recipients:
+            raise HTTPException(status_code=503, detail="Feedback-Ziel nicht konfiguriert")
+
+        client_id = request.client.host if request.client else "unknown"
+        if not check_rate_limit(client_id):
+            raise HTTPException(status_code=429, detail="Zu viele Feedbacks. Bitte später erneut versuchen.")
+
+        message_html = ""
+        message_text = ""
+        try:
+            message_html = (payload.get("message_html") or "")[: MAX_FEEDBACK_CHARS * 4]
+            message_text = (payload.get("message_text") or "")[: MAX_FEEDBACK_CHARS * 2]
+        except Exception:
+            pass
+
+        try:
+            send_feedback_email(config, feedback_recipients, message_html, message_text, app_version)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc))
+        except Exception as exc:
+            logger.error("Feedback-Versand fehlgeschlagen: %s", exc)
+            raise HTTPException(status_code=500, detail="Versand fehlgeschlagen")
+
+        return {"status": "ok"}
 
     @app.get("/api/search")
     def search(

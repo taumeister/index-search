@@ -4,6 +4,11 @@ let currentSearchController = null;
 let sortState = { key: null, dir: "asc" };
 let resizingColumn = false;
 let resizingPreview = false;
+let feedbackState = { open: false, sending: false };
+let feedbackRefs = {};
+let suppressAutoFocus = false;
+let viewerPopupRef = null;
+let viewerPopupMonitor = null;
 const PANEL_WIDTH_KEY = "previewWidth";
 const APP_ZOOM_KEY = "appZoom";
 const DEFAULT_ZOOM = 1;
@@ -31,6 +36,10 @@ let currentSearchMode = DEFAULT_SEARCH_MODE;
 let currentTypeFilter = "";
 let currentTimeFilter = "";
 const METRICS_ENABLED = true;
+const FEEDBACK_ENABLED = Boolean(window.feedbackEnabled);
+const FEEDBACK_MAX_LEN = 5000;
+const FEEDBACK_ALLOWED_TAGS = new Set(["P", "DIV", "BR", "STRONG", "B", "EM", "I", "UL", "OL", "LI", "SPAN"]);
+const FEEDBACK_SUBJECT = `Feedback zur Dokumenten-Volltext-Suche (${window.appVersion || "v?"})`;
 const dateFormatter = new Intl.DateTimeFormat("de-DE", {
     year: "numeric",
     month: "2-digit",
@@ -48,7 +57,53 @@ function escapeHtml(str) {
         .replace(/'/g, "&#39;");
 }
 
+function setSuppressAutoFocus(active) {
+    suppressAutoFocus = Boolean(active);
+    if (suppressAutoFocus) {
+        window.clearTimeout(scheduleFocusSearchInput._t);
+    }
+}
+
+function viewerIsOpen() {
+    return viewerPopupRef && !viewerPopupRef.closed;
+}
+
+function trackViewerPopup(win) {
+    viewerPopupRef = win && !win.closed ? win : null;
+    setSuppressAutoFocus(Boolean(viewerPopupRef));
+    if (viewerPopupMonitor) {
+        window.clearInterval(viewerPopupMonitor);
+        viewerPopupMonitor = null;
+    }
+    if (!viewerPopupRef) {
+        setSuppressAutoFocus(false);
+        return;
+    }
+    // Keep focus automation from fighting the viewer; clean up when it closes.
+    try {
+        viewerPopupRef.addEventListener("beforeunload", () => {
+            viewerPopupRef = null;
+            setSuppressAutoFocus(false);
+            if (viewerPopupMonitor) {
+                window.clearInterval(viewerPopupMonitor);
+                viewerPopupMonitor = null;
+            }
+        });
+    } catch (_) {
+        /* ignore cross-window errors */
+    }
+    viewerPopupMonitor = window.setInterval(() => {
+        if (!viewerPopupRef || viewerPopupRef.closed) {
+            viewerPopupRef = null;
+            setSuppressAutoFocus(false);
+            window.clearInterval(viewerPopupMonitor);
+            viewerPopupMonitor = null;
+        }
+    }, 800);
+}
+
 function focusSearchInput() {
+    if (suppressAutoFocus || viewerIsOpen()) return;
     const input = document.getElementById("search-input");
     if (!input) return;
     if (document.activeElement === input) return;
@@ -61,6 +116,7 @@ function focusSearchInput() {
 }
 
 function scheduleFocusSearchInput(delay = 30) {
+    if (suppressAutoFocus || viewerIsOpen()) return;
     window.clearTimeout(scheduleFocusSearchInput._t);
     scheduleFocusSearchInput._t = window.setTimeout(() => focusSearchInput(), delay);
 }
@@ -772,6 +828,188 @@ function escapeRegExp(str) {
     return str.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
+function sanitizeFeedbackHtml(html) {
+    const parser = new DOMParser();
+    const doc = parser.parseFromString(html || "", "text/html");
+    doc.querySelectorAll("script, style").forEach((el) => el.remove());
+    doc.body.querySelectorAll("*").forEach((el) => {
+        const tag = el.tagName.toUpperCase();
+        if (!FEEDBACK_ALLOWED_TAGS.has(tag)) {
+            const parent = el.parentNode;
+            if (parent) {
+                while (el.firstChild) {
+                    parent.insertBefore(el.firstChild, el);
+                }
+                parent.removeChild(el);
+            }
+            return;
+        }
+        Array.from(el.attributes).forEach((attr) => el.removeAttribute(attr.name));
+    });
+    return (doc.body.innerHTML || "").trim();
+}
+
+function updateFeedbackCounter() {
+    if (!feedbackRefs.editor || !feedbackRefs.limit) return;
+    const length = ((feedbackRefs.editor.textContent || "").trim().length) || 0;
+    const label = `${Math.min(length, FEEDBACK_MAX_LEN)} / ${FEEDBACK_MAX_LEN}`;
+    feedbackRefs.limit.textContent = label;
+    feedbackRefs.limit.classList.toggle("over-limit", length > FEEDBACK_MAX_LEN);
+}
+
+function showFeedbackStatus(message, type = "info") {
+    if (!feedbackRefs.status) return;
+    feedbackRefs.status.textContent = message || "";
+    feedbackRefs.status.className = "feedback-status";
+    if (type === "success") feedbackRefs.status.classList.add("success");
+    if (type === "error") feedbackRefs.status.classList.add("error");
+    if (!message) {
+        feedbackRefs.status.classList.add("hidden");
+    } else {
+        feedbackRefs.status.classList.remove("hidden");
+    }
+}
+
+function resetFeedbackForm() {
+    if (feedbackRefs.editor) {
+        feedbackRefs.editor.innerHTML = "";
+    }
+    if (feedbackRefs.confirm) {
+        feedbackRefs.confirm.classList.add("hidden");
+    }
+    showFeedbackStatus("");
+    feedbackState.sending = false;
+    updateFeedbackCounter();
+}
+
+function closeFeedbackPanel() {
+    if (!feedbackRefs.overlay) return;
+    feedbackRefs.overlay.classList.add("hidden");
+    feedbackRefs.overlay.setAttribute("aria-hidden", "true");
+    feedbackState.open = false;
+    resetFeedbackForm();
+}
+
+function openFeedbackPanel() {
+    if (!feedbackRefs.overlay || !feedbackRefs.editor) return;
+    resetFeedbackForm();
+    feedbackRefs.overlay.classList.remove("hidden");
+    feedbackRefs.overlay.setAttribute("aria-hidden", "false");
+    feedbackState.open = true;
+    feedbackRefs.editor.focus();
+}
+
+async function sendFeedback() {
+    if (feedbackState.sending) return;
+    if (!feedbackRefs.editor) return;
+    const text = (feedbackRefs.editor.textContent || "").trim();
+    if (!text) {
+        showFeedbackStatus("Bitte Feedback eingeben.", "error");
+        return;
+    }
+    if (text.length > FEEDBACK_MAX_LEN) {
+        showFeedbackStatus(`Maximal ${FEEDBACK_MAX_LEN} Zeichen.`, "error");
+        return;
+    }
+    const sanitizedHtml = sanitizeFeedbackHtml(feedbackRefs.editor.innerHTML || "").slice(0, FEEDBACK_MAX_LEN * 4);
+
+    feedbackState.sending = true;
+    if (feedbackRefs.send) feedbackRefs.send.disabled = true;
+    if (feedbackRefs.confirm) feedbackRefs.confirm.classList.add("hidden");
+    showFeedbackStatus("Sende Feedback …");
+    try {
+        const res = await fetch("/api/feedback", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+                message_html: sanitizedHtml,
+                message_text: text,
+            }),
+        });
+        if (!res.ok) {
+            showFeedbackStatus("Senden fehlgeschlagen.", "error");
+            return;
+        }
+        showFeedbackStatus("Feedback gesendet.", "success");
+        setTimeout(() => {
+            closeFeedbackPanel();
+        }, 1100);
+    } catch (err) {
+        showFeedbackStatus("Senden fehlgeschlagen.", "error");
+    } finally {
+        feedbackState.sending = false;
+        if (feedbackRefs.send) feedbackRefs.send.disabled = false;
+    }
+}
+
+function initFeedback() {
+    if (!FEEDBACK_ENABLED) return;
+    const trigger = document.getElementById("feedback-trigger");
+    const overlay = document.getElementById("feedback-overlay");
+    const editor = document.getElementById("feedback-editor");
+    const limit = document.getElementById("feedback-limit");
+    const status = document.getElementById("feedback-status");
+    const sendBtn = document.getElementById("feedback-send");
+    const cancelBtn = document.getElementById("feedback-cancel");
+    const closeBtn = document.getElementById("feedback-close");
+    const confirm = document.getElementById("feedback-confirm");
+    const confirmYes = document.getElementById("feedback-confirm-yes");
+    const confirmNo = document.getElementById("feedback-confirm-no");
+    const subject = document.getElementById("feedback-subject");
+    const toolbar = document.querySelectorAll(".feedback-toolbar button[data-cmd]");
+    if (!trigger || !overlay || !editor || !sendBtn || !cancelBtn || !closeBtn || !confirm || !confirmYes || !confirmNo) return;
+    feedbackRefs = {
+        trigger,
+        overlay,
+        editor,
+        limit,
+        status,
+        send: sendBtn,
+        cancel: cancelBtn,
+        close: closeBtn,
+        confirm,
+        confirmYes,
+        confirmNo,
+        subject,
+    };
+    if (subject) {
+        subject.textContent = FEEDBACK_SUBJECT;
+    }
+    updateFeedbackCounter();
+    trigger.addEventListener("click", () => openFeedbackPanel());
+    closeBtn.addEventListener("click", () => closeFeedbackPanel());
+    cancelBtn.addEventListener("click", () => closeFeedbackPanel());
+    overlay.addEventListener("mousedown", (e) => {
+        if (e.target === overlay) {
+            closeFeedbackPanel();
+        }
+    });
+    document.addEventListener("keydown", (e) => {
+        if (e.key === "Escape" && feedbackState.open) {
+            closeFeedbackPanel();
+        }
+    });
+    sendBtn.addEventListener("click", () => {
+        confirm.classList.remove("hidden");
+    });
+    confirmYes.addEventListener("click", () => sendFeedback());
+    confirmNo.addEventListener("click", () => confirm.classList.add("hidden"));
+    editor.addEventListener("input", () => updateFeedbackCounter());
+    toolbar.forEach((btn) => {
+        btn.addEventListener("click", () => {
+            const cmd = btn.dataset.cmd;
+            if (!cmd) return;
+            editor.focus();
+            try {
+                document.execCommand(cmd, false, null);
+            } catch (err) {
+                /* ignore */
+            }
+            updateFeedbackCounter();
+        });
+    });
+}
+
 function openPopupForRow(id) {
     if (!id) return;
     const url = `/viewer?id=${id}`;
@@ -779,11 +1017,21 @@ function openPopupForRow(id) {
     const h = Math.max(480, Math.floor(window.screen.availHeight * 0.58));
     const left = Math.floor((window.screen.availWidth - w) / 2);
     const top = Math.floor((window.screen.availHeight - h) / 2);
-    window.open(
+    const win = window.open(
         url,
         "_blank",
         `width=${w},height=${h},left=${left},top=${top},resizable=yes,scrollbars=yes,toolbar=no,location=no,menubar=no`
     );
+    if (win) {
+        trackViewerPopup(win);
+        try {
+            win.focus();
+        } catch (_) {
+            /* ignore */
+        }
+    } else {
+        setSuppressAutoFocus(false);
+    }
 }
 
 function printDocument(id) {
@@ -855,6 +1103,7 @@ if (loadMoreBtn) {
 setupPopup();
 setupPreviewResizer();
 focusSearchInput();
+initFeedback();
 
 // Column resize
 function setupResizableColumns() {

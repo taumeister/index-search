@@ -25,4 +25,6 @@ services:
       - SMTP_FROM=${SMTP_FROM}
       - SMTP_TO=${SMTP_TO}
       - SEND_REPORT_ENABLED=${SEND_REPORT_ENABLED}
+      - FEEDBACK_ENABLED=${FEEDBACK_ENABLED}
+      - FEEDBACK_TO=${FEEDBACK_TO}
     restart: unless-stopped

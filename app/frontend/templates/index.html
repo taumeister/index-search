@@ -24,25 +24,26 @@
         window.snippetLength = {{ snippet_length }};
         window.searchDefaultMode = "{{ search_default_mode }}";
         window.searchPrefixMinLen = {{ search_prefix_minlen }};
+        window.feedbackEnabled = {{ "true" if feedback_enabled else "false" }};
+        window.appVersion = {{ (app_version or "v?") | tojson }};
     </script>
 </head>
 <body>
-    <header>
-        <div class="header-top">
-            <h1>Dokumenten-Volltextsuche <span class="version-badge">{{ app_version or 'v?' }}</span></h1>
-            <div class="header-actions compact-actions">
-                <a href="/metrics" class="icon-button" aria-label="Metrics" title="Metrics">
-                    <svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
-                        <path d="M4 13h3v7H4zm6-8h3v15h-3zm6 5h3v10h-3z" fill="currentColor"></path>
-                    </svg>
-                </a>
-                <a href="/dashboard" class="icon-button" aria-label="Dashboard" title="Dashboard">
-                    <svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
-                        <path d="M4 4h7v7H4zm0 9h7v7H4zm9-9h7v4h-7zm0 6h7v10h-7z" fill="currentColor"></path>
-                    </svg>
-                </a>
-            </div>
-        </div>
+    {% set header_title = "Dokumenten-Volltextsuche" %}
+    {% set header_subtitle = "" %}
+    {% set header_slogan = "Kanzlei Schmitt, wir können nur Enterprise..." %}
+    {% set header_eyebrow = None %}
+    {% set version_badge = app_version or 'v?' %}
+    {% set header_actions = [
+        {"type":"icon","href":"/metrics","label":"Metrics","icon":"metrics"},
+        {"type":"icon","href":"/dashboard","label":"Dashboard","icon":"dashboard"},
+        {"type":"icon_button","label":"Feedback","icon_text":"F","id":"feedback-trigger","classes":"feedback-icon"}
+    ] if feedback_enabled else [
+        {"type":"icon","href":"/metrics","label":"Metrics","icon":"metrics"},
+        {"type":"icon","href":"/dashboard","label":"Dashboard","icon":"dashboard"}
+    ] %}
+    <header class="app-header">
+        {% include "partials/header_top.html" with context %}
         <div class="search-bar">
             <input id="search-input" type="text" placeholder="Suche wie im Explorer..." />
             <div class="search-mode" id="search-mode" role="radiogroup" aria-label="Search Mode">
@@ -143,6 +144,49 @@
             <div id="popup-body"></div>
         </div>
     </div>
+
+    {% if feedback_enabled %}
+    <div id="feedback-overlay" class="feedback-overlay hidden" aria-hidden="true">
+        <div class="feedback-panel" role="dialog" aria-modal="false" aria-labelledby="feedback-title">
+            <div class="feedback-top">
+                <div>
+                    <div class="feedback-pill">Feedback</div>
+                    <div class="feedback-subtitle">Teilen Sie Eindrücke & Ideen</div>
+                </div>
+                <button type="button" class="feedback-close" id="feedback-close" aria-label="Schließen">×</button>
+            </div>
+            <div class="feedback-meta">
+                <div class="meta-label">Betreff</div>
+                <div class="meta-value" id="feedback-subject">Feedback zur Dokumenten-Volltext-Suche ({{ app_version or 'v?' }})</div>
+            </div>
+            <div class="feedback-editor-shell">
+                <div class="feedback-toolbar">
+                    <div class="toolbar-group">
+                        <button type="button" data-cmd="bold" title="Fett"><span class="toolbar-icon bold">B</span></button>
+                        <button type="button" data-cmd="italic" title="Kursiv"><span class="toolbar-icon italic">I</span></button>
+                        <button type="button" data-cmd="insertUnorderedList" title="Aufzählung">• • •</button>
+                    </div>
+                    <div class="feedback-limit" id="feedback-limit">0 / 5000</div>
+                </div>
+                <div id="feedback-editor" class="feedback-editor" contenteditable="true" data-placeholder="Feedback eingeben…"></div>
+            </div>
+            <div class="feedback-confirmation">
+                <div class="feedback-actions">
+                    <button type="button" id="feedback-cancel" class="ghost">Abbrechen</button>
+                    <button type="button" id="feedback-send" class="primary">Senden</button>
+                </div>
+                <div class="feedback-confirm hidden" id="feedback-confirm">
+                    <span>Feedback senden?</span>
+                    <div class="confirm-actions">
+                        <button type="button" id="feedback-confirm-yes" class="primary">Ja</button>
+                        <button type="button" id="feedback-confirm-no" class="ghost">Abbrechen</button>
+                    </div>
+                </div>
+            </div>
+            <div class="feedback-status hidden" id="feedback-status" role="status"></div>
+        </div>
+    </div>
+    {% endif %}
 
     <script src="/static/main.js"></script>
 </body>
