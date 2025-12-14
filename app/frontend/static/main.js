@@ -16,10 +16,13 @@ const SEARCH_DEBOUNCE_MS = 400;
 const SEARCH_MODE_KEY = "searchMode";
 const SEARCH_MODE_SET = new Set(["strict", "standard", "loose"]);
 const DEFAULT_SEARCH_MODE = normalizeSearchMode(window.searchDefaultMode) || "standard";
+const TYPE_FILTER_KEY = "searchTypeFilter";
+const TYPE_FILTER_SET = new Set(["", ".pdf", ".rtf", ".msg", ".txt"]);
 let searchOffset = 0;
 let searchHasMore = false;
 let searchLoading = false;
 let currentSearchMode = DEFAULT_SEARCH_MODE;
+let currentTypeFilter = "";
 const METRICS_ENABLED = true;
 const dateFormatter = new Intl.DateTimeFormat("de-DE", {
     year: "numeric",
@@ -28,7 +31,6 @@ const dateFormatter = new Intl.DateTimeFormat("de-DE", {
     hour: "2-digit",
     minute: "2-digit",
 });
-const SUPPORTED_EXTENSIONS = ["", ".pdf", ".rtf", ".msg", ".txt"];
 
 function escapeHtml(str) {
     return String(str || "")
@@ -96,13 +98,64 @@ function setupSearchModeSwitch() {
     });
 }
 
+function normalizeTypeFilter(value) {
+    if (value === null || value === undefined) return "";
+    const normalized = String(value).toLowerCase();
+    return TYPE_FILTER_SET.has(normalized) ? normalized : "";
+}
+
+function readStoredTypeFilter() {
+    try {
+        const stored = localStorage.getItem(TYPE_FILTER_KEY);
+        return normalizeTypeFilter(stored);
+    } catch (_) {
+        return "";
+    }
+}
+
+function persistTypeFilter(ext) {
+    currentTypeFilter = ext;
+    try {
+        localStorage.setItem(TYPE_FILTER_KEY, ext);
+    } catch (_) {
+        /* ignore */
+    }
+}
+
+function updateTypeFilterButtons(activeExt) {
+    document.querySelectorAll("#type-filter button").forEach((btn) => {
+        const val = normalizeTypeFilter(btn.dataset.ext);
+        const isActive = val === activeExt;
+        btn.classList.toggle("active", isActive);
+        btn.setAttribute("aria-pressed", isActive ? "true" : "false");
+    });
+}
+
+function setupTypeFilterSwitch() {
+    const stored = readStoredTypeFilter();
+    const initial = normalizeTypeFilter(stored) || "";
+    currentTypeFilter = initial;
+    updateTypeFilterButtons(initial);
+    const container = document.getElementById("type-filter");
+    if (!container) return;
+    container.querySelectorAll("button").forEach((btn) => {
+        btn.addEventListener("click", () => {
+            const next = normalizeTypeFilter(btn.dataset.ext);
+            if (next === currentTypeFilter) return;
+            persistTypeFilter(next);
+            updateTypeFilterButtons(next);
+            search({ append: false });
+        });
+    });
+}
+
 applySavedPreviewWidth();
 bootstrapZoom();
 
 async function search({ append = false } = {}) {
     const q = document.getElementById("search-input").value || "";
     const trimmed = q.trim();
-    const ext = document.getElementById("ext-filter").value;
+    const ext = normalizeTypeFilter(currentTypeFilter);
     const time = document.getElementById("time-filter").value;
 
     if (!append) {
@@ -175,9 +228,6 @@ async function search({ append = false } = {}) {
         }
         renderResults(rows, { append });
         searchOffset = append ? searchOffset + rows.length : rows.length;
-        if (!append) {
-            populateFilters(rows);
-        }
         updateSortIndicators();
     } catch (err) {
         if (err.name === "AbortError") return;
@@ -560,8 +610,8 @@ function setupPopup() {
 
 // Search & filter bindings
 setupSearchModeSwitch();
+setupTypeFilterSwitch();
 document.getElementById("search-input").addEventListener("input", debounceSearch);
-document.getElementById("ext-filter").addEventListener("change", () => search({ append: false }));
 document.getElementById("time-filter").addEventListener("change", () => search({ append: false }));
 const loadMoreBtn = document.getElementById("load-more");
 if (loadMoreBtn) {
@@ -658,17 +708,6 @@ function closeContextMenu() {
 
 window.addEventListener("load", setupResizableColumns);
 initZoomControls();
-
-function populateFilters(results) {
-    const extSelect = document.getElementById("ext-filter");
-    const currentExt = extSelect.value;
-    const extOptions = SUPPORTED_EXTENSIONS.map((x) => {
-        if (!x) return '<option value="">Typ (alle / Reset)</option>';
-        return `<option value="${x}">${x}</option>`;
-    });
-    extSelect.innerHTML = extOptions.join("");
-    extSelect.value = currentExt;
-}
 
 // Sorting
 const sortableKeys = new Set(["filename", "extension", "size_bytes", "mtime"]);
