@@ -250,7 +250,8 @@ h1 {
 .time-more-menu {
     position: absolute;
     top: calc(100% + 6px);
-    right: 0;
+    left: 50%;
+    transform: translateX(-50%);
     background: #fff;
     border: 1px solid var(--border);
     border-radius: 10px;
