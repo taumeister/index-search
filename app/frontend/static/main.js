@@ -60,6 +60,11 @@ function focusSearchInput() {
     }
 }
 
+function scheduleFocusSearchInput(delay = 30) {
+    window.clearTimeout(scheduleFocusSearchInput._t);
+    scheduleFocusSearchInput._t = window.setTimeout(() => focusSearchInput(), delay);
+}
+
 function normalizeSearchMode(value) {
     if (value === null || value === undefined) return null;
     const normalized = String(value).toLowerCase();
@@ -113,6 +118,7 @@ function setupSearchModeSwitch() {
             persistSearchMode(next);
             updateSearchModeButtons(next);
             search({ append: false });
+            scheduleFocusSearchInput();
         });
     });
 }
@@ -258,6 +264,7 @@ function setupTimeFilterChips() {
             persistTimeFilter(next);
             updateTimeChips(next);
             search({ append: false });
+            scheduleFocusSearchInput();
         });
     }
     const container = document.getElementById("time-filter-chips");
@@ -272,6 +279,7 @@ function setupTimeFilterChips() {
             if (fallbackSelect) fallbackSelect.value = next;
             closeTimeMoreMenu();
             search({ append: false });
+            scheduleFocusSearchInput();
         });
     });
     const moreBtn = document.getElementById("time-more-button");
@@ -290,6 +298,7 @@ function setupTimeFilterChips() {
                 if (fallbackSelect) fallbackSelect.value = val;
                 closeTimeMoreMenu();
                 search({ append: false });
+                scheduleFocusSearchInput();
             });
         });
         document.addEventListener("click", (e) => {
@@ -364,6 +373,7 @@ function setupTypeFilterSwitch() {
             persistTypeFilter(next);
             updateTypeFilterButtons(next);
             search({ append: false });
+            scheduleFocusSearchInput();
         });
     });
 }
@@ -515,6 +525,7 @@ function renderResults(results, { append = false } = {}) {
         tr.addEventListener("click", () => {
             markActiveRow(rowId);
             openPreview(rowId, true);
+            scheduleFocusSearchInput();
         });
         tr.addEventListener("dblclick", () => openPopupForRow(rowId));
         tr.addEventListener("contextmenu", (e) => showContextMenu(e, rowId));
