@@ -21,7 +21,6 @@ async function loadDoc() {
     const params = new URLSearchParams(window.location.search);
     const id = params.get("id");
     if (!id) return;
-    document.title = `Viewer - Dokument ${id}`;
     const headers = buildAuthHeaders();
     const res = await fetch(`/api/document/${id}`, { headers, credentials: "include" });
     if (!res.ok) {
@@ -35,11 +34,14 @@ async function loadDoc() {
 }
 
 function render(doc) {
-    document.getElementById("title").textContent = doc.filename || "Dokument";
+    const filename = doc.filename || `Dokument ${doc.id || ""}`.trim();
+    const safeFileName = (filename || `dokument-${doc.id || ""}`.trim()).replace(/[\\/]/g, "_");
+    document.title = filename;
+    document.getElementById("title").textContent = filename;
     const dl = document.getElementById("download-link");
     if (dl) {
         dl.dataset.docid = doc.id;
-        dl.href = `/api/document/${doc.id}/file?download=1`;
+        dl.href = `/api/document/${doc.id}/file/${encodeURIComponent(safeFileName)}?download=1`;
     }
 
     const container = document.getElementById("content");
@@ -52,24 +54,7 @@ function render(doc) {
         iframe.title = "Dokument-Viewer";
         iframe.setAttribute("aria-label", "Dokument-Viewer");
         container.appendChild(iframe);
-        let iframeSrcSet = false;
-        const setSrc = (src) => {
-            if (iframeSrcSet) return;
-            iframe.src = src;
-            iframeSrcSet = true;
-        };
-        const fallback = window.setTimeout(() => {
-            setSrc(`/api/document/${doc.id}/file#toolbar=0&navpanes=0&view=FitH`);
-        }, 900);
-        fetchFileAsBlob(doc.id)
-            .then((url) => {
-                window.clearTimeout(fallback);
-                setSrc(`${url}#toolbar=0&navpanes=0&view=FitH`);
-            })
-            .catch(() => {
-                window.clearTimeout(fallback);
-                setSrc(`/api/document/${doc.id}/file#toolbar=0&navpanes=0&view=FitH`);
-            });
+        iframe.src = `/api/document/${doc.id}/file/${encodeURIComponent(safeFileName)}#toolbar=0&navpanes=0&view=FitH`;
         return;
     }
 
@@ -99,53 +84,38 @@ function printCurrent() {
     const doc = window.__currentDoc;
     const id = doc?.id;
     if (!id) return;
-    const url = `/api/document/${id}/file#toolbar=0&navpanes=0&view=FitH`;
+    const filename = doc.filename || `dokument-${id}`;
+    const safeFileName = (filename || `dokument-${id}`).replace(/[\\/]/g, "_");
+    const url = `/api/document/${id}/file/${encodeURIComponent(safeFileName)}#toolbar=0&navpanes=0&view=FitH`;
     const iframe = document.createElement("iframe");
+    // Größeres, aber unsichtbares iframe, damit kein Reflow/Minimieren sichtbar wird.
     iframe.style.position = "fixed";
-    iframe.style.right = "-9999px";
-    iframe.style.width = "1px";
-    iframe.style.height = "1px";
+    iframe.style.top = "0";
+    iframe.style.left = "0";
+    iframe.style.width = "100vw";
+    iframe.style.height = "100vh";
+    iframe.style.opacity = "0";
+    iframe.style.pointerEvents = "none";
     iframe.src = url;
-    const cleanup = () => setTimeout(() => iframe.remove(), 1600);
-    let printed = false;
+    const cleanup = () => setTimeout(() => iframe.remove(), 20000);
     iframe.onload = () => {
         try {
             iframe.contentWindow.focus();
             iframe.contentWindow.print();
-            printed = true;
         } catch (err) {
             console.error("Print fehlgeschlagen", err);
         } finally {
+            setTimeout(() => {
+                try {
+                    window.focus();
+                } catch (_) {
+                    /* ignore */
+                }
+            }, 100);
             cleanup();
         }
     };
     document.body.appendChild(iframe);
-
-    // Fallback: kleines Fenster öffnen, drucken, wieder schließen
-    setTimeout(() => {
-        if (printed) return;
-        const win = window.open(url, "_blank", "width=600,height=700,toolbar=no,location=no,menubar=no,resizable=yes,scrollbars=yes");
-        if (!win) return;
-        const closeWin = () => {
-            try {
-                win.close();
-            } catch (_) {
-                /* ignore */
-            }
-        };
-        const tryPrint = () => {
-            try {
-                win.focus();
-                win.print();
-            } catch (err) {
-                console.error("Print fallback fehlgeschlagen", err);
-            } finally {
-                setTimeout(closeWin, 300);
-            }
-        };
-        win.addEventListener("load", () => setTimeout(tryPrint, 200));
-        setTimeout(tryPrint, 1200);
-    }, 800);
 }
 
 function bindActions() {
@@ -170,24 +140,8 @@ function bindActions() {
             const doc = window.__currentDoc;
             const id = doc?.id;
             if (!id) return;
-            try {
-                const headers = buildAuthHeaders();
-        const resp = await fetch(`/api/document/${id}/file`, { headers, credentials: "include" });
-                if (!resp.ok) throw new Error(`Download fehlgeschlagen (${resp.status})`);
-                const blob = await resp.blob();
-                const url = URL.createObjectURL(blob);
-                const a = document.createElement("a");
-                a.href = url;
-                a.download = doc.filename || `dokument-${id}`;
-                document.body.appendChild(a);
-                a.click();
-                setTimeout(() => {
-                    a.remove();
-                    URL.revokeObjectURL(url);
-                }, 500);
-            } catch (err) {
-                console.error(err);
-            }
+            // Direktlink nutzen, damit der Download-Button nicht blockiert.
+            window.open(`/api/document/${id}/file?download=1`, "_blank");
         });
     }
 }

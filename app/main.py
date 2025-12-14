@@ -336,10 +336,12 @@ def create_app(config: Optional[CentralConfig] = None) -> FastAPI:
         return data
 
     @app.get("/api/document/{doc_id}/file")
+    @app.get("/api/document/{doc_id}/file/{filename}")
     def document_file(
         doc_id: int,
         request: Request,
         download: bool = Query(False, description="Download erzwingen"),
+        filename: Optional[str] = None,
         _auth: bool = Depends(require_secret),
     ):
         is_test, test_run_id = get_test_flags(request)

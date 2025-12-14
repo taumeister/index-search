@@ -5,14 +5,38 @@ body {
     color: #1f2933;
 }
 
-.viewer-header {
-    position: sticky;
-    top: 0;
+header {
+    background: #1b3a5d;
+    color: #fff;
+    padding: 10px 14px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
+
+.title {
+    font-size: 16px;
+    font-weight: 600;
+}
+
+.actions {
+    display: flex;
+    gap: 8px;
+}
+
+button, a.button {
+    background: #2d6cdf;
+    color: #fff;
+    border: none;
+    padding: 8px 12px;
+    border-radius: 6px;
+    cursor: pointer;
+    text-decoration: none;
 }
 
 main {
     padding: 6px;
-    height: calc(100vh - 72px);
+    height: calc(100vh - 60px);
     box-sizing: border-box;
 }
 

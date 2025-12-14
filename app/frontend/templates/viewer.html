@@ -22,17 +22,13 @@
     <link rel="stylesheet" href="/static/viewer.css">
 </head>
 <body>
-    {% set header_title = "Dokument" %}
-    {% set header_subtitle = "" %}
-    {% set header_eyebrow = None %}
-    {% set version_badge = None %}
-    {% set header_actions = [
-        {"type":"button","label":"Drucken","id":"print-btn","class":"btn btn-secondary"},
-        {"type":"link","label":"Download","id":"download-link","href":"#","class":"btn btn-primary"},
-        {"type":"button","label":"Schließen","id":"close-viewer","class":"btn btn-ghost"}
-    ] %}
-    <header class="app-header viewer-header">
-        {% include "partials/header_top.html" with context %}
+    <header>
+        <div class="title" id="title">Dokument</div>
+        <div class="actions">
+            <button id="print-btn">Drucken</button>
+            <a id="download-link" class="button" target="_blank" rel="noopener">Download</a>
+            <button onclick="window.close()">Schließen</button>
+        </div>
     </header>
     <main>
         <div class="viewer-panel">
