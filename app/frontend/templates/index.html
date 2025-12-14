@@ -30,15 +30,17 @@
     <header>
         <div class="header-top">
             <h1>Dokumenten-Volltextsuche <span class="version-badge">{{ app_version or 'v?' }}</span></h1>
-            <div class="header-actions">
-                <div class="zoom-controls" aria-label="Zoom">
-                    <button type="button" id="zoom-out" title="Zoom verkleinern">-</button>
-                    <span id="zoom-display" class="zoom-display">100%</span>
-                    <button type="button" id="zoom-in" title="Zoom vergrößern">+</button>
-                    <button type="button" id="zoom-reset" title="Zoom zurücksetzen">Reset</button>
-                </div>
-                <a href="/metrics" class="button-link">Metrics</a>
-                <a href="/dashboard" class="button-link">Dashboard</a>
+            <div class="header-actions compact-actions">
+                <a href="/metrics" class="icon-button" aria-label="Metrics" title="Metrics">
+                    <svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                        <path d="M4 13h3v7H4zm6-8h3v15h-3zm6 5h3v10h-3z" fill="currentColor"></path>
+                    </svg>
+                </a>
+                <a href="/dashboard" class="icon-button" aria-label="Dashboard" title="Dashboard">
+                    <svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                        <path d="M4 4h7v7H4zm0 9h7v7H4zm9-9h7v4h-7zm0 6h7v10h-7z" fill="currentColor"></path>
+                    </svg>
+                </a>
             </div>
         </div>
         <div class="search-bar">

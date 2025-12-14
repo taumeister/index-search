@@ -72,6 +72,31 @@ h1 {
     font-size: 13px;
 }
 
+.icon-button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 32px;
+    height: 32px;
+    border-radius: 8px;
+    border: 1px solid transparent;
+    color: #e5e7eb;
+    background: rgba(255,255,255,0.08);
+    text-decoration: none;
+    transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+}
+
+.icon-button:hover {
+    background: rgba(255,255,255,0.18);
+    color: #ffffff;
+    border-color: rgba(255,255,255,0.2);
+}
+
+.icon-button:focus-visible {
+    outline: 2px solid #b1c5f6;
+    outline-offset: 2px;
+}
+
 .header-top {
     display: flex;
     align-items: center;
@@ -84,6 +109,9 @@ h1 {
     display: flex;
     align-items: center;
     gap: 10px;
+}
+.compact-actions {
+    gap: 8px;
 }
 
 .search-bar {

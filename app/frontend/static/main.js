@@ -1040,25 +1040,6 @@ function initZoomControls() {
     const initialZoom = readSavedZoom();
     applyZoom(initialZoom, { persist: false });
 
-    const zoomIn = document.getElementById("zoom-in");
-    const zoomOut = document.getElementById("zoom-out");
-    const zoomReset = document.getElementById("zoom-reset");
-
-    const adjustZoom = (delta) => {
-        const next = clampZoom(getActiveZoom() + delta);
-        applyZoom(next);
-    };
-
-    if (zoomIn) {
-        zoomIn.addEventListener("click", () => adjustZoom(ZOOM_STEP));
-    }
-    if (zoomOut) {
-        zoomOut.addEventListener("click", () => adjustZoom(-ZOOM_STEP));
-    }
-    if (zoomReset) {
-        zoomReset.addEventListener("click", () => applyZoom(DEFAULT_ZOOM));
-    }
-
     window.addEventListener("storage", (e) => {
         if (e.key === APP_ZOOM_KEY) {
             applyZoom(readSavedZoom(), { persist: false });
