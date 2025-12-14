@@ -39,11 +39,13 @@
 - `GET /`: Hauptseite.
 - `GET /dashboard`: System/Dashboard mit Roots/Status.
 - `GET /api/search`: Parameter `q`, optional `source`, `extension`, `limit`, `offset`; liefert Treffer mit Snippet.
-- Suchlogik: Mehrere Wörter werden als AND kombiniert, Tokens werden als Prefix (`wort*`) gesucht; leere Suche zeigt alle Treffer.
+- Suchmodi: Strikt (AND, Whole-Token, keine Prefix/Fuzzy, leere Suche blockt), Standard (AND, Whole-Word oder Prefix ab `SEARCH_PREFIX_MINLEN`, Default), Locker (OR, Prefix/Teilwort tolerant). `SEARCH_DEFAULT_MODE` und `SEARCH_PREFIX_MINLEN` per ENV.
+- Requests senden `mode=strict|standard|loose`; Wildcard `*` nur mit aktivem Filter.
+- Suchlogik: leere Suche blockiert; Snippets werden serverseitig erzeugt, Matches folgen dem gewählten Modus.
 - `GET /api/document/{id}`: Metadaten + Volltext.
 - `GET /api/document/{id}/file`: Originaldatei (Download/Inline).
 - `GET /api/admin/status`: Gesamtanzahl, letzter Lauf, Historie.
-- `GET/POST/DELETE /api/admin/roots`: Roots verwalten (aktiv, Pfad, Label).
+- `GET/POST/DELETE /api/admin/roots`: Roots verwalten (aktiv, Pfad, Label). Add-Root validiert: Pfad muss existieren, unter `base_data_root` liegen, kein Fallback auf `/data`.
 - `POST /api/admin/index/run`: Indexlauf starten, optional Reset.
 - `GET /api/admin/errors`: Fehlerliste.
 - `GET /api/admin/tree`: Verzeichnisbaum unter `base_data_root`.
