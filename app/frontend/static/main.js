@@ -19,7 +19,9 @@ const DEFAULT_SEARCH_MODE = normalizeSearchMode(window.searchDefaultMode) || "st
 const TYPE_FILTER_KEY = "searchTypeFilter";
 const TYPE_FILTER_SET = new Set(["", ".pdf", ".rtf", ".msg", ".txt"]);
 const TIME_FILTER_KEY = "searchTimeFilter";
-const TIME_FILTER_ORDER = ["", "today", "yesterday", "last7", "last30", "last365"];
+const TIME_PRIMARY_OPTIONS = ["", "yesterday", "last7", "last30"];
+const TIME_MORE_OPTIONS = ["last365", "2025", "2024", "2023", "2022", "2020"];
+const TIME_FILTER_ORDER = [...TIME_PRIMARY_OPTIONS, ...TIME_MORE_OPTIONS];
 let searchOffset = 0;
 let searchHasMore = false;
 let searchLoading = false;
@@ -127,8 +129,6 @@ function persistTimeFilter(value) {
 
 function labelForTime(value) {
     switch (value) {
-        case "today":
-            return "Heute";
         case "yesterday":
             return "Gestern";
         case "last7":
@@ -137,93 +137,127 @@ function labelForTime(value) {
             return "30T";
         case "last365":
             return "365T";
+        case "2025":
+        case "2024":
+        case "2023":
+        case "2022":
+        case "2020":
+            return value;
         default:
             return "Alle";
     }
 }
 
-function setTimeDialLabel(value) {
-    const center = document.getElementById("time-dial-label");
-    if (center) {
-        center.textContent = labelForTime(value);
-    }
-}
-
-function updateTimeDialButtons(active) {
-    document.querySelectorAll("#time-dial .dial-segment").forEach((btn) => {
+function updateTimeChips(active) {
+    document.querySelectorAll(".time-filter-chips .time-chip").forEach((btn) => {
         const val = normalizeTimeFilter(btn.dataset.time);
         const isActive = val === active;
         btn.classList.toggle("active", isActive);
         btn.setAttribute("aria-pressed", isActive ? "true" : "false");
     });
-    setTimeDialLabel(active);
+    const moreMenu = document.getElementById("time-more-menu");
+    if (moreMenu) {
+        moreMenu.querySelectorAll("button").forEach((btn) => {
+            const val = normalizeTimeFilter(btn.dataset.time);
+            const isActive = val === active;
+            btn.classList.toggle("active", isActive);
+            btn.setAttribute("aria-checked", isActive ? "true" : "false");
+        });
+    }
 }
 
-function rotateTimeFilter(delta) {
-    const currentIdx = TIME_FILTER_ORDER.indexOf(currentTimeFilter);
-    const nextIdx = (currentIdx + delta + TIME_FILTER_ORDER.length) % TIME_FILTER_ORDER.length;
-    return TIME_FILTER_ORDER[nextIdx];
+function closeTimeMoreMenu() {
+    const menu = document.getElementById("time-more-menu");
+    const btn = document.getElementById("time-more-button");
+    if (menu && !menu.classList.contains("hidden")) {
+        menu.classList.add("hidden");
+        if (btn) btn.setAttribute("aria-expanded", "false");
+    }
 }
 
-function setupTimeDial() {
+function toggleTimeMoreMenu() {
+    const menu = document.getElementById("time-more-menu");
+    const btn = document.getElementById("time-more-button");
+    if (!menu || !btn) return;
+    const nextVisible = menu.classList.contains("hidden");
+    menu.classList.toggle("hidden", !nextVisible);
+    btn.setAttribute("aria-expanded", nextVisible ? "true" : "false");
+    if (nextVisible) {
+        const active = menu.querySelector("button.active") || menu.querySelector("button");
+        if (active) active.focus();
+    }
+}
+
+function setupTimeFilterChips() {
     const stored = readStoredTimeFilter();
     const initial = normalizeTimeFilter(stored) || "";
     currentTimeFilter = initial;
-    updateTimeDialButtons(initial);
-    const container = document.getElementById("time-dial");
+    updateTimeChips(initial);
     const fallbackSelect = document.getElementById("time-filter");
     if (fallbackSelect) {
         fallbackSelect.value = initial;
         fallbackSelect.addEventListener("change", () => {
             const next = normalizeTimeFilter(fallbackSelect.value);
             persistTimeFilter(next);
-            updateTimeDialButtons(next);
+            updateTimeChips(next);
             search({ append: false });
         });
     }
+    const container = document.getElementById("time-filter-chips");
     if (!container) return;
-    container.querySelectorAll(".dial-segment").forEach((btn) => {
+    container.querySelectorAll(".time-chip").forEach((btn) => {
         btn.addEventListener("click", () => {
-            const next = normalizeTimeFilter(btn.dataset.time);
-            const toggled = next === currentTimeFilter ? "" : next;
-            persistTimeFilter(toggled);
-            updateTimeDialButtons(toggled);
-            if (fallbackSelect) fallbackSelect.value = toggled;
+            const val = normalizeTimeFilter(btn.dataset.time);
+            const next = val === currentTimeFilter ? "" : val;
+            persistTimeFilter(next);
+            updateTimeChips(next);
+            if (fallbackSelect) fallbackSelect.value = next;
+            closeTimeMoreMenu();
             search({ append: false });
         });
     });
-    container.addEventListener("wheel", (e) => {
-        if (Math.abs(e.deltaY) < Math.abs(e.deltaX)) return;
-        e.preventDefault();
-        const delta = e.deltaY > 0 ? 1 : -1;
-        const next = rotateTimeFilter(delta);
-        persistTimeFilter(next);
-        updateTimeDialButtons(next);
-        if (fallbackSelect) fallbackSelect.value = next;
-        search({ append: false });
-    });
-    container.addEventListener("keydown", (e) => {
-        if (!["ArrowLeft", "ArrowRight", "Enter", " "].includes(e.key)) return;
-        e.preventDefault();
-        if (e.key === "ArrowLeft") {
-            const next = rotateTimeFilter(-1);
-            persistTimeFilter(next);
-            updateTimeDialButtons(next);
-            if (fallbackSelect) fallbackSelect.value = next;
-            search({ append: false });
-        } else if (e.key === "ArrowRight") {
-            const next = rotateTimeFilter(1);
-            persistTimeFilter(next);
-            updateTimeDialButtons(next);
-            if (fallbackSelect) fallbackSelect.value = next;
-            search({ append: false });
-        } else {
-            const target = document.activeElement;
-            if (target && target.classList.contains("dial-segment")) {
-                target.click();
+    const moreBtn = document.getElementById("time-more-button");
+    const moreMenu = document.getElementById("time-more-menu");
+    if (moreBtn && moreMenu) {
+        moreBtn.addEventListener("click", (e) => {
+            e.stopPropagation();
+            toggleTimeMoreMenu();
+        });
+        moreMenu.querySelectorAll("button").forEach((btn) => {
+            btn.addEventListener("click", (e) => {
+                e.stopPropagation();
+                const val = normalizeTimeFilter(btn.dataset.time);
+                persistTimeFilter(val);
+                updateTimeChips(val);
+                if (fallbackSelect) fallbackSelect.value = val;
+                closeTimeMoreMenu();
+                search({ append: false });
+            });
+        });
+        document.addEventListener("click", (e) => {
+            if (!moreMenu.contains(e.target) && e.target !== moreBtn) {
+                closeTimeMoreMenu();
             }
-        }
-    });
+        });
+        moreMenu.addEventListener("keydown", (e) => {
+            const items = Array.from(moreMenu.querySelectorAll("button"));
+            const idx = items.indexOf(document.activeElement);
+            if (e.key === "Escape") {
+                closeTimeMoreMenu();
+                moreBtn.focus();
+            }
+            if (e.key === "ArrowRight" || e.key === "ArrowDown") {
+                e.preventDefault();
+                const next = items[(idx + 1) % items.length];
+                next.focus();
+            }
+            if (e.key === "ArrowLeft" || e.key === "ArrowUp") {
+                e.preventDefault();
+                const prev = items[(idx - 1 + items.length) % items.length];
+                prev.focus();
+            }
+        });
+    }
 }
 function normalizeTypeFilter(value) {
     if (value === null || value === undefined) return "";
@@ -738,7 +772,7 @@ function setupPopup() {
 // Search & filter bindings
 setupSearchModeSwitch();
 setupTypeFilterSwitch();
-setupTimeDial();
+setupTimeFilterChips();
 document.getElementById("search-input").addEventListener("input", debounceSearch);
 const loadMoreBtn = document.getElementById("load-more");
 if (loadMoreBtn) {

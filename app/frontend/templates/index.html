@@ -65,22 +65,34 @@
                 <button type="button" data-ext=".txt" title="Nur Textdateien">TEXT</button>
             </div>
             <div class="filters">
-                <div class="time-dial" id="time-dial" role="radiogroup" aria-label="Zeitraum">
-                    <div class="dial-center" id="time-dial-label">Alle</div>
-                    <button type="button" class="dial-segment" data-time="" aria-label="Alle Zeiträume" title="Alle Zeiträume">Alle</button>
-                    <button type="button" class="dial-segment" data-time="today" aria-label="Heute" title="Heute">Heute</button>
-                    <button type="button" class="dial-segment" data-time="yesterday" aria-label="Gestern" title="Gestern">Gestern</button>
-                    <button type="button" class="dial-segment" data-time="last7" aria-label="Letzte 7 Tage" title="Letzte 7 Tage">7T</button>
-                    <button type="button" class="dial-segment" data-time="last30" aria-label="Letzte 30 Tage" title="Letzte 30 Tage">30T</button>
-                    <button type="button" class="dial-segment" data-time="last365" aria-label="Letzte 365 Tage" title="Letzte 365 Tage">365T</button>
+                <div class="time-filter-chips" id="time-filter-chips" role="radiogroup" aria-label="Zeitraum">
+                    <button type="button" class="time-chip" data-time="" aria-label="Alle Zeiträume" title="Alle Zeiträume">Alle</button>
+                    <button type="button" class="time-chip" data-time="yesterday" aria-label="Gestern" title="Gestern">Gestern</button>
+                    <button type="button" class="time-chip" data-time="last7" aria-label="Letzte 7 Tage" title="Letzte 7 Tage">7T</button>
+                    <button type="button" class="time-chip" data-time="last30" aria-label="Letzte 30 Tage" title="Letzte 30 Tage">30T</button>
+                    <div class="time-more">
+                        <button type="button" class="time-chip" id="time-more-button" aria-haspopup="true" aria-expanded="false" aria-controls="time-more-menu" title="Weitere Zeiträume">More</button>
+                        <div class="time-more-menu hidden" id="time-more-menu" role="menu">
+                            <button type="button" data-time="last365" role="menuitemradio" aria-checked="false">365T</button>
+                            <button type="button" data-time="2025" role="menuitemradio" aria-checked="false">2025</button>
+                            <button type="button" data-time="2024" role="menuitemradio" aria-checked="false">2024</button>
+                            <button type="button" data-time="2023" role="menuitemradio" aria-checked="false">2023</button>
+                            <button type="button" data-time="2022" role="menuitemradio" aria-checked="false">2022</button>
+                            <button type="button" data-time="2020" role="menuitemradio" aria-checked="false">2020</button>
+                        </div>
+                    </div>
                 </div>
                 <select id="time-filter" class="time-fallback">
                     <option value="">Datum: alle</option>
-                    <option value="today">Heute</option>
                     <option value="yesterday">Gestern</option>
                     <option value="last7">Letzte 7 Tage</option>
                     <option value="last30">Letzte 30 Tage</option>
                     <option value="last365">Letzte 365 Tage</option>
+                    <option value="2025">2025</option>
+                    <option value="2024">2024</option>
+                    <option value="2023">2023</option>
+                    <option value="2022">2022</option>
+                    <option value="2020">2020</option>
                 </select>
             </div>
         </div>
