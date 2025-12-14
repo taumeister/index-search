@@ -2,75 +2,117 @@
 <html lang="de">
 <head>
     <meta charset="UTF-8">
-    <title>Metriken</title>
+    <title>Performance Diagnose</title>
     <link rel="stylesheet" href="/static/styles.css">
 </head>
-<body>
-    <header>
+<body class="matrix-body">
+    <header class="matrix-header">
         <div class="header-top">
-            <h1>Metriken <span class="version-badge">{{ app_version or 'v?' }}</span></h1>
+            <div>
+                <div class="eyebrow">Diagnose</div>
+                <h1>Preview Performance</h1>
+                <div class="subtext">Executive-Übersicht: Ampel, Klartext, wenige Charts</div>
+            </div>
             <div class="header-actions">
+                <span class="pill version-pill">{{ app_version or 'v?' }}</span>
                 <a href="/" class="button-link">Suche</a>
                 <a href="/dashboard" class="button-link">Dashboard</a>
             </div>
         </div>
+        <div class="filter-row">
+            <div class="filter-group">
+                <label>Run wählen</label>
+                <select id="run-selector"></select>
+            </div>
+            <div class="filter-group test-controls">
+                <label>Neuer Testlauf</label>
+                <div class="test-row">
+                    <input id="test-count" type="number" min="1" max="1000" value="200" />
+                    <select id="test-ext">
+                        <option value="">Alle</option>
+                        <option value=".pdf" selected>Nur PDF</option>
+                        <option value=".txt">Nur TXT</option>
+                    </select>
+                    <input id="test-min-size" type="number" min="0" step="0.1" value="0" title="Min. Größe MB" />
+                    <button id="test-run" type="button">Starten</button>
+                    <span id="test-status" class="test-status"></span>
+                </div>
+            </div>
+            <button id="metrics-refresh" class="primary">Aktualisieren</button>
+        </div>
     </header>
-    <main id="metrics-main">
-        <section class="panel">
-            <div class="panel-header">
-                <h2>Zusammenfassung</h2>
-                <div class="panel-actions">
-                    <select id="metrics-endpoint">
-                        <option value="">Alle Endpunkte</option>
-                        <option value="document_file">Preview/Download</option>
-                        <option value="document_meta">Metadaten</option>
-                        <option value="client_preview">Client-Preview</option>
-                    </select>
-                    <select id="metrics-testflag">
-                        <option value="">Real + Test</option>
-                        <option value="real">Nur real</option>
-                        <option value="test">Nur Test</option>
-                    </select>
-                    <select id="metrics-window">
-                        <option value="3600">Letzte Stunde</option>
-                        <option value="21600">Letzte 6h</option>
-                        <option value="86400" selected>Letzte 24h</option>
-                        <option value="604800">Letzte 7 Tage</option>
-                    </select>
-                    <button id="metrics-refresh" type="button">Aktualisieren</button>
+    <main class="matrix-main">
+        <div class="tab-bar">
+            <button class="tab active" data-tab="overview">Overview</button>
+            <button class="tab" data-tab="details">Details / Rohdaten</button>
+        </div>
+
+        <section id="tab-overview" class="tab-panel active">
+            <div class="panel wide">
+                <div class="panel-head">
+                    <div>
+                        <div class="eyebrow">Test-Run</div>
+                        <h2 id="run-headline">Lade...</h2>
+                        <div class="subtext" id="run-meta">–</div>
+                    </div>
+                    <div class="pill" id="run-status">–</div>
+                </div>
+                <div id="cause-list" class="cause-list"></div>
+            </div>
+
+            <div id="kpi-grid" class="kpi-grid"></div>
+
+            <div class="card-row">
+                <div class="panel">
+                    <div class="panel-head">
+                        <div>
+                            <div class="eyebrow">Timeline</div>
+                            <h3>Preview-Zeit pro Dokument</h3>
+                        </div>
+                        <div class="subtext">Ausreißer (Run-Basis, Reihenfolge 1..N)</div>
+                    </div>
+                    <div id="chart-timeline" class="chart timeline"></div>
+                </div>
+                <div class="panel">
+                    <div class="panel-head">
+                        <div class="eyebrow">SMB</div>
+                        <h3>Latenz & Durchsatz</h3>
+                    </div>
+                    <div class="subtext">Erster Read + Transfer im Run</div>
+                    <div id="chart-smb" class="chart timeline"></div>
+                </div>
+                <div class="panel">
+                    <div class="panel-head">
+                        <div class="eyebrow">System</div>
+                        <h3>CPU & RAM über Run</h3>
+                    </div>
+                    <div id="chart-system" class="chart timeline"></div>
+                </div>
+                <div class="panel">
+                    <div class="panel-head">
+                        <div class="eyebrow">Pipeline</div>
+                        <h3>p50/p95 je Schritt</h3>
+                    </div>
+                    <div id="pipeline-bars" class="pipeline-bars"></div>
                 </div>
             </div>
-            <div id="metrics-summary" class="metrics-summary"></div>
         </section>
 
-        <section class="panel">
-            <div class="panel-header">
-                <h2>Letzte Events</h2>
-                <div class="panel-actions">
-                    <select id="events-limit">
-                        <option value="50">50</option>
-                        <option value="100" selected>100</option>
-                        <option value="200">200</option>
-                    </select>
-                    <button id="events-refresh" type="button">Neu laden</button>
+        <section id="tab-details" class="tab-panel">
+            <div class="panel">
+                <div class="panel-head">
+                    <div class="eyebrow">Rohdaten</div>
+                    <h3>Events</h3>
                 </div>
+                <div id="metrics-events" class="metrics-events"></div>
             </div>
-            <div id="metrics-events" class="metrics-events"></div>
-        </section>
-
-        <section class="panel">
-            <div class="panel-header">
-                <h2>Systemlast (Slots)</h2>
-                <div class="panel-actions">
-                    <select id="system-limit">
-                        <option value="60">60</option>
-                        <option value="240" selected>240</option>
-                        <option value="720">720</option>
-                    </select>
-                    <button id="system-refresh" type="button">Neu laden</button>
+            <div class="panel">
+                <div class="panel-head">
+                    <div class="eyebrow">Systemlast (Slots)</div>
+                    <h3>Tabellarisch</h3>
                 </div>
+                <div id="metrics-system" class="metrics-system"></div>
             </div>
-            <div id="metrics-system" class="metrics-system"></div>
         </section>
     </main>
     <script>

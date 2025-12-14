@@ -12,6 +12,10 @@ BASE_URL = os.getenv("METRICS_BASE_URL", "http://localhost:8000")
 APP_SECRET = os.getenv("APP_SECRET", "")
 DOC_LIMIT = int(os.getenv("METRICS_DOC_LIMIT", "500") or 500)
 TIMEOUT = float(os.getenv("METRICS_TIMEOUT", "15") or 15)
+EXT_FILTER = os.getenv("METRICS_EXT_FILTER", "").strip().lower()
+MIN_SIZE_MB = float(os.getenv("METRICS_MIN_SIZE_MB", "0") or 0.0)
+MAX_SIZE_MB = float(os.getenv("METRICS_MAX_SIZE_MB", "0") or 0.0)
+FORCED_RUN_ID = os.getenv("METRICS_TEST_RUN_ID", "").strip()
 
 
 def _headers(test_run_id: str = "") -> dict:
@@ -23,13 +27,23 @@ def _headers(test_run_id: str = "") -> dict:
     return hdr
 
 
-async def fetch_docs(client: httpx.AsyncClient) -> List[int]:
+async def fetch_docs(client: httpx.AsyncClient) -> List[dict]:
     params = {"limit": DOC_LIMIT, "offset": 0}
+    if EXT_FILTER:
+        params["extension"] = EXT_FILTER
     resp = await client.get(f"{BASE_URL}/api/search", params=params, headers=_headers())
     resp.raise_for_status()
     data = resp.json()
-    ids = [row.get("id") or row.get("doc_id") for row in data.get("results", [])]
-    return [i for i in ids if i is not None]
+    results = data.get("results", [])
+    filtered = []
+    for row in results:
+        size = row.get("size_bytes") or 0
+        if MIN_SIZE_MB and size < MIN_SIZE_MB * 1024 * 1024:
+            continue
+        if MAX_SIZE_MB and size > MAX_SIZE_MB * 1024 * 1024:
+            continue
+        filtered.append(row)
+    return filtered
 
 
 async def measure_doc(client: httpx.AsyncClient, doc_id: int, test_run_id: str) -> None:
@@ -59,14 +73,15 @@ async def measure_doc(client: httpx.AsyncClient, doc_id: int, test_run_id: str) 
 
 
 async def main():
-    test_run_id = f"run-{int(time.time())}"
+    test_run_id = FORCED_RUN_ID or f"run-{int(time.time())}"
     async with httpx.AsyncClient(follow_redirects=True) as client:
-        ids = await fetch_docs(client)
-        if not ids:
+        docs = await fetch_docs(client)
+        if not docs:
             print("Keine Dokumente gefunden.")
             return
-        random.shuffle(ids)
-        ids = ids[:DOC_LIMIT]
+        random.shuffle(docs)
+        docs = docs[:DOC_LIMIT]
+        ids = [d.get("id") or d.get("doc_id") for d in docs if (d.get("id") or d.get("doc_id")) is not None]
         for doc_id in ids:
             try:
                 await measure_doc(client, doc_id, test_run_id)

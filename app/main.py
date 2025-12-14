@@ -1,4 +1,5 @@
 import logging
+import subprocess
 from pathlib import Path
 from typing import Optional, Dict, Any
 
@@ -571,6 +572,7 @@ def create_app(config: Optional[CentralConfig] = None) -> FastAPI:
         endpoint: Optional[str] = Query(None),
         extension: Optional[str] = Query(None),
         is_test: Optional[bool] = Query(None),
+        test_run_id: Optional[str] = Query(None),
         _auth: bool = Depends(require_secret),
     ):
         return metrics.get_summary(
@@ -578,6 +580,7 @@ def create_app(config: Optional[CentralConfig] = None) -> FastAPI:
             endpoint=endpoint,
             extension=extension,
             is_test=is_test,
+            test_run_id=test_run_id,
         )
 
     @app.get("/api/admin/metrics/events")
@@ -610,6 +613,93 @@ def create_app(config: Optional[CentralConfig] = None) -> FastAPI:
         except Exception:
             pass
         return {"status": "ok"}
+
+    @app.post("/api/admin/metrics/reset")
+    def admin_metrics_reset(_auth: bool = Depends(require_secret)):
+        metrics.reset_metrics_storage()
+        return {"status": "reset"}
+
+    _metrics_test_lock = threading.Lock()
+
+    @app.post("/api/admin/metrics/test_run")
+    def admin_metrics_test_run(
+        count: int = Query(200, ge=1, le=1000),
+        ext_filter: Optional[str] = Query(None),
+        min_size_mb: Optional[float] = Query(0, ge=0),
+        _auth: bool = Depends(require_secret),
+    ):
+        if not _metrics_test_lock.acquire(blocking=False):
+            return JSONResponse({"status": "busy"}, status_code=409)
+        run_id = f"run-{int(time.time())}"
+
+        def runner():
+            try:
+                metrics.reset_metrics_storage()
+                env = os.environ.copy()
+                env["APP_SECRET"] = ensure_app_secret()
+                env["METRICS_DOC_LIMIT"] = str(count)
+                env["METRICS_BASE_URL"] = "http://localhost:8000"
+                env["METRICS_EXT_FILTER"] = (ext_filter or "").strip().lower()
+                env["METRICS_MIN_SIZE_MB"] = str(min_size_mb or 0)
+                env["METRICS_TEST_RUN_ID"] = run_id
+                try:
+                    subprocess.run(
+                        ["python", "scripts/run_metrics_test.py"],
+                        cwd=Path(__file__).resolve().parent.parent,
+                        env=env,
+                        check=False,
+                        timeout=600,
+                    )
+                except Exception:
+                    pass
+                try:
+                    metrics.save_test_run_artifact(
+                        run_id,
+                        {
+                            "count": count,
+                            "ext_filter": ext_filter,
+                            "min_size_mb": min_size_mb,
+                        },
+                    )
+                except Exception:
+                    pass
+            finally:
+                _metrics_test_lock.release()
+
+        threading.Thread(target=runner, daemon=True).start()
+        return {"status": "started", "count": count, "test_run_id": run_id}
+
+    @app.get("/api/admin/metrics/test_run_results")
+    def admin_metrics_test_run_results(
+        test_run_id: Optional[str] = Query(None),
+        limit: int = Query(200, ge=1, le=1000),
+        _auth: bool = Depends(require_secret),
+    ):
+        run_id = test_run_id or metrics.get_last_test_run_id()
+        if not run_id:
+            return {"test_run_id": None, "count": 0, "events": []}
+        return metrics.get_test_run_events(run_id, limit=limit)
+
+    @app.get("/api/admin/metrics/runs")
+    def admin_metrics_runs(limit: int = Query(20, ge=1, le=100), _auth: bool = Depends(require_secret)):
+        return {"runs": metrics.list_run_artifacts(limit=limit)}
+
+    @app.get("/api/admin/metrics/run/{run_id}")
+    def admin_metrics_run(run_id: str, _auth: bool = Depends(require_secret)):
+        data = metrics.load_run_artifact(run_id)
+        if not data:
+            raise HTTPException(status_code=404, detail="Run nicht gefunden")
+        return data
+
+    @app.get("/api/admin/metrics/run_latest")
+    def admin_metrics_run_latest(_auth: bool = Depends(require_secret)):
+        run_id = metrics.get_last_test_run_id()
+        if not run_id:
+            raise HTTPException(status_code=404, detail="Kein Run vorhanden")
+        data = metrics.load_run_artifact(run_id)
+        if not data:
+            raise HTTPException(status_code=404, detail="Run nicht gefunden")
+        return data
 
     def list_children(path: Path) -> list:
         try:
