@@ -3,13 +3,13 @@
     --panel-width: clamp(320px, 32vw, 520px);
     --border: #d7dde7;
     --muted: #6b7280;
-    --filter-font-size: 9.5px;
+    --filter-font-size: 11px;
     --filter-font-weight: 600;
-    --filter-padding-y: 6px;
-    --filter-padding-x: 9px;
-    --filter-group-height: 30px;
-    --filter-radius: 8px;
-    --filter-chip-radius: 7px;
+    --filter-padding-y: 7px;
+    --filter-padding-x: 10px;
+    --filter-group-height: 34px;
+    --filter-radius: 9px;
+    --filter-chip-radius: 8px;
 }
 
 html, body {
@@ -356,7 +356,7 @@ body {
 .type-filter button {
     border: none;
     background: transparent;
-    padding: calc(var(--filter-padding-y) + 2px) var(--filter-padding-x);
+    padding: var(--filter-padding-y) var(--filter-padding-x);
     font-size: var(--filter-font-size);
     font-weight: var(--filter-font-weight);
     line-height: 1.2;
@@ -392,7 +392,7 @@ body {
 .time-chip {
     border: none;
     background: transparent;
-    padding: calc(var(--filter-padding-y) + 2px) var(--filter-padding-x);
+    padding: var(--filter-padding-y) var(--filter-padding-x);
     font-size: var(--filter-font-size);
     font-weight: var(--filter-font-weight);
     line-height: 1.2;
