@@ -418,13 +418,24 @@ def run_index_lauf(config: CentralConfig) -> Dict[str, int]:
             WARN_CONTEXT.path = None
             touch_heartbeat()
 
+    exclude_set = {p.lower() for p in getattr(config.indexer, "exclude_dirs", []) if p}
+
     def iter_files():
         for root, source in root_entries:
             if not root.exists():
                 logger.error("Wurzelpfad nicht gefunden: %s", root)
                 counters["errors"] += 1
                 continue
-            for dirpath, _, filenames in os.walk(root):
+            for dirpath, dirnames, filenames in os.walk(root):
+                # prune directories
+                pruned = []
+                for d in list(dirnames):
+                    rel = Path(dirpath, d).relative_to(root)
+                    rel_str = str(rel)
+                    if d.lower() in exclude_set or rel_str.lower() in exclude_set:
+                        pruned.append(d)
+                for d in pruned:
+                    dirnames.remove(d)
                 for name in filenames:
                     path = Path(dirpath) / name
                     if path.suffix.lower() in SUPPORTED_EXTENSIONS:

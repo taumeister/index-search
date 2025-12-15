@@ -639,6 +639,7 @@ def create_app(config: Optional[CentralConfig] = None) -> FastAPI:
                 "admin": admin_flag,
                 "file_ops_enabled": ops_state["file_ops_enabled"],
                 "quarantine_ready_sources": ops_state["quarantine_ready_sources"],
+                "index_exclude_dirs": getattr(config.indexer, "exclude_dirs", []),
                 "total_docs": int(status["total_docs"]),
                 "ext_counts": ext_counts,
                 "last_run": last_run,

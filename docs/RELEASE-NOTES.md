@@ -1,5 +1,12 @@
 # Release-Notizen
 
+## v0.3.8
+- Explorer/Quarantäne: Admin-Login (Passwort nur via `ADMIN_PASSWORD`), Kontextmenü „Löschen“ verschiebt Dateien nach `<root>/.quarantine/<YYYY-MM-DD>/docid__name`, entfernt sie sofort aus dem Index und schreibt Audit nach `data/audit/file_ops.jsonl`.
+- Quarantäne-Readiness pro Quelle mit Write-Test; Admin-Status liefert `file_ops_enabled`, Quarantäne-Quellen und `index_exclude_dirs`.
+- Index-Excludes per `INDEX_EXCLUDE_DIRS` (Default `.quarantine`), Verzeichnisse werden beim Traversieren gepruned (z. B. `.git`, `node_modules`), Quarantäne wird nie indiziert.
+- UI: Admin-Modal/Logout, Delete-Confirm, Kontextmenü-Eintrag nur bei aktivem Admin und freigegebenem Root.
+- Tests ergänzt (Admin-Auth/Delete/Quarantäne, Exclude-Pruning); Version erhöht.
+
 ## v0.3.6
 - Quellen-Filter neben dem Suchfeld platziert, Optik an andere Filter angepasst (weißer Hintergrund, klare Umrandung, blauer Aktivzustand, gemeinsame Filtergruppe).
 - Dokumentation aktualisiert; Version erhöht.

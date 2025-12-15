@@ -35,6 +35,7 @@
 - Entfernt Einträge für fehlende Dateien am Ende des Laufs.
 - Fehlerbehandlung pro Datei, Laufstatus in `index_runs`; `file_errors` enthält Details.
 - Worker parallelisiert per ThreadPool; Limit per Config.
+- Ausschlüsse: `INDEX_EXCLUDE_DIRS` (kommagetrennt, Default `.quarantine`) schließt Ordner/Pfade pro Quelle beim Traversieren aus (z. B. `.git`, `node_modules`, `.quarantine`), damit sie gar nicht indiziert werden.
 
 ## Web-API
 - `GET /`: Hauptseite.
@@ -46,7 +47,8 @@
 - `GET /api/document/{id}`: Metadaten + Volltext.
 - `GET /api/document/{id}/file`: Originaldatei (Download/Inline).
 - `GET /api/sources`: Deduplizierte aktive Quellen-Labels (Basis für Quellen-Filter im UI).
-- `GET /api/admin/status`: Gesamtanzahl, letzter Lauf, Historie.
+- `GET /api/admin/status`: Gesamtanzahl, letzter Lauf, Historie, Admin-/File-Op-Status, `index_exclude_dirs`.
+- Admin/Explorer: `POST /api/admin/login`/`logout` (Passwort via `ADMIN_PASSWORD`, Session-Cookie), `/api/admin/status` liefert `file_ops_enabled` und Quarantäne-Readiness; `/api/files/{doc_id}/quarantine-delete` verschiebt Treffer in `<root>/.quarantine/<YYYY-MM-DD>/` und entfernt ihn aus dem Index.
 - `GET/POST/DELETE /api/admin/roots`: Roots verwalten (aktiv, Pfad, Label). Add-Root validiert: Pfad muss existieren, unter `base_data_root` liegen, kein Fallback auf `/data`.
 - `POST /api/admin/index/run`: Indexlauf starten, optional Reset.
 - `GET /api/admin/errors`: Fehlerliste.

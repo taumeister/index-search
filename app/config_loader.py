@@ -32,6 +32,7 @@ class IndexerConfig(BaseModel):
     worker_count: int = 2
     run_interval_cron: Optional[str] = None
     max_file_size_mb: Optional[int] = None
+    exclude_dirs: list[str] = []
 
     @field_validator("worker_count")
     def validate_worker(cls, value: int) -> int:
@@ -127,10 +128,17 @@ def load_config(path: Path = Path("config/central_config.ini"), use_env: bool = 
     if worker_raw < 1:
         raise ValueError("INDEX_WORKER_COUNT muss >=1 sein")
     max_size_raw = int(os.getenv("INDEX_MAX_FILE_SIZE_MB", "0") or 0) if use_env else 0
+    exclude_raw = os.getenv("INDEX_EXCLUDE_DIRS", ".quarantine") if use_env else ".quarantine"
+    exclude_dirs = []
+    for item in exclude_raw.split(","):
+        trimmed = item.strip()
+        if trimmed:
+            exclude_dirs.append(trimmed)
     indexer_cfg = IndexerConfig(
         worker_count=worker_raw,
         run_interval_cron=None,
         max_file_size_mb=max_size_raw or None,
+        exclude_dirs=exclude_dirs,
     )
 
     smtp_host = os.getenv("SMTP_HOST", "") if use_env else ""
