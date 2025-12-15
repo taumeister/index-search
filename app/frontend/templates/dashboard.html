@@ -241,38 +241,38 @@
                         <div class="btn-group" id="auto-mode-buttons">
                             <button class="btn-ghost" data-mode="daily">Täglich</button>
                             <button class="btn-ghost" data-mode="weekly">Wöchentlich</button>
-                            <button class="btn-ghost" data-mode="interval">Alle 6/12h</button>
+                            <button class="btn-ghost" data-mode="interval">Intervall</button>
                         </div>
                         <div class="inline-field">
                             <label for="auto-time">Uhrzeit</label>
-                            <input type="time" id="auto-time" value="02:00">
+                            <input type="time" id="auto-time" value="02:00" style="max-width: 160px;">
                         </div>
                         <div class="btn-group">
                             <button class="btn-ghost" id="auto-save">Plan speichern</button>
+                            <button class="btn-ghost" id="auto-run-now">Jetzt ausführen</button>
                         </div>
                     </div>
                     <div class="auto-card">
                         <div class="inline-field">
-                            <label for="auto-weekday">Wochentag (wöchentlich)</label>
-                            <select id="auto-weekday">
-                                <option value="0">Montag</option>
-                                <option value="1">Dienstag</option>
-                                <option value="2">Mittwoch</option>
-                                <option value="3">Donnerstag</option>
-                                <option value="4">Freitag</option>
-                                <option value="5">Samstag</option>
-                                <option value="6">Sonntag</option>
-                            </select>
+                            <label>Wochentag (wöchentlich)</label>
+                            <div class="btn-group" id="auto-weekdays">
+                                <button class="btn-ghost" data-day="0">Mo</button>
+                                <button class="btn-ghost" data-day="1">Di</button>
+                                <button class="btn-ghost" data-day="2">Mi</button>
+                                <button class="btn-ghost" data-day="3">Do</button>
+                                <button class="btn-ghost" data-day="4">Fr</button>
+                                <button class="btn-ghost" data-day="5">Sa</button>
+                                <button class="btn-ghost" data-day="6">So</button>
+                            </div>
                         </div>
                         <div class="inline-field">
-                            <label for="auto-interval">Intervall (Stunden)</label>
-                            <select id="auto-interval">
-                                <option value="6">Alle 6 Stunden</option>
-                                <option value="12">Alle 12 Stunden</option>
-                            </select>
-                        </div>
-                        <div class="btn-group">
-                            <button class="btn-ghost" id="auto-run-now">Jetzt ausführen</button>
+                            <label>Intervall (Stunden)</label>
+                            <div class="btn-group" id="auto-interval-buttons">
+                                <button class="btn-ghost" data-interval="1">1h</button>
+                                <button class="btn-ghost" data-interval="2">2h</button>
+                                <button class="btn-ghost" data-interval="6">6h</button>
+                                <button class="btn-ghost" data-interval="12">12h</button>
+                            </div>
                         </div>
                     </div>
                     <div class="auto-card">
@@ -373,6 +373,22 @@
             });
         }
 
+        function renderWeekdayButtons(activeDay) {
+            document.querySelectorAll("#auto-weekdays button").forEach((btn) => {
+                const isActive = parseInt(btn.dataset.day, 10) === activeDay;
+                btn.classList.toggle("active", isActive);
+                btn.setAttribute("aria-pressed", isActive ? "true" : "false");
+            });
+        }
+
+        function renderIntervalButtons(active) {
+            document.querySelectorAll("#auto-interval-buttons button").forEach((btn) => {
+                const isActive = parseInt(btn.dataset.interval, 10) === active;
+                btn.classList.toggle("active", isActive);
+                btn.setAttribute("aria-pressed", isActive ? "true" : "false");
+            });
+        }
+
         function updateAutoStatusPill(text, code) {
             const pill = document.getElementById("auto-status-pill");
             if (!pill) return;
@@ -383,8 +399,10 @@
         function currentAutoConfigFromUI() {
             const enabled = document.getElementById("auto-enabled").checked;
             const time = document.getElementById("auto-time").value || "02:00";
-            const weekday = parseInt(document.getElementById("auto-weekday").value, 10) || 0;
-            const interval = parseInt(document.getElementById("auto-interval").value, 10) || 6;
+            const weekdayBtn = document.querySelector("#auto-weekdays button.active");
+            const weekday = weekdayBtn ? parseInt(weekdayBtn.dataset.day, 10) : 0;
+            const intervalBtn = document.querySelector("#auto-interval-buttons button.active");
+            const interval = intervalBtn ? parseInt(intervalBtn.dataset.interval, 10) : 6;
             return {
                 enabled,
                 mode: state.autoMode || "daily",
@@ -416,9 +434,9 @@
             const enabled = Boolean(cfg.enabled);
             document.getElementById("auto-enabled").checked = enabled;
             document.getElementById("auto-time").value = cfg.time || "02:00";
-            document.getElementById("auto-weekday").value = String(cfg.weekday ?? 0);
-            document.getElementById("auto-interval").value = String(cfg.interval_hours ?? 6);
             renderAutoModeButtons(state.autoMode);
+            renderWeekdayButtons(cfg.weekday ?? 0);
+            renderIntervalButtons(cfg.interval_hours ?? 6);
             const running = Boolean(st.running);
             state.autoRunning = running;
             document.getElementById("auto-run-now").disabled = running;
@@ -766,8 +784,18 @@
             });
         });
         document.getElementById("auto-time").addEventListener("change", saveAutoConfig);
-        document.getElementById("auto-weekday").addEventListener("change", saveAutoConfig);
-        document.getElementById("auto-interval").addEventListener("change", saveAutoConfig);
+        document.querySelectorAll("#auto-weekdays button").forEach((btn) => {
+            btn.addEventListener("click", () => {
+                renderWeekdayButtons(parseInt(btn.dataset.day, 10));
+                saveAutoConfig();
+            });
+        });
+        document.querySelectorAll("#auto-interval-buttons button").forEach((btn) => {
+            btn.addEventListener("click", () => {
+                renderIntervalButtons(parseInt(btn.dataset.interval, 10));
+                saveAutoConfig();
+            });
+        });
         document.getElementById("auto-save").addEventListener("click", saveAutoConfig);
         document.getElementById("auto-run-now").addEventListener("click", async () => {
             try {
