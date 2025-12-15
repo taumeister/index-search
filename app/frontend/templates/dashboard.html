@@ -81,8 +81,8 @@
         .add-root-row input { padding: 6px 8px; border-radius: 6px; border: 1px solid #d1d5db; }
         .meta-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 8px; margin-bottom: 6px; }
         .pill { border-radius: 12px; padding: 4px 8px; font-size: 12px; border: 1px solid #cbd5e1; background: #f8fafc; color: #1f2937; }
-        .auto-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 10px; }
-        .auto-card { display: flex; flex-direction: column; gap: 8px; }
+        .auto-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 12px; align-items: start; }
+        .auto-card { display: flex; flex-direction: column; gap: 10px; }
         .btn-group { display: inline-flex; gap: 6px; flex-wrap: wrap; }
         .btn-ghost { padding: 8px 10px; border-radius: 8px; border: 1px solid #cbd5e1; background: #fff; cursor: pointer; font-size: 13px; }
         .btn-ghost.active { background: linear-gradient(135deg, #1b3a5d, #2b5999); color: #f8fafc; border-color: #b1c5f6; }
@@ -243,9 +243,9 @@
                             <button class="btn-ghost" data-mode="weekly">Wöchentlich</button>
                             <button class="btn-ghost" data-mode="interval">Intervall</button>
                         </div>
-                        <div class="inline-field">
+                        <div class="inline-field" id="auto-time-wrap">
                             <label for="auto-time">Uhrzeit</label>
-                            <input type="time" id="auto-time" value="02:00" style="max-width: 160px;">
+                            <input type="time" id="auto-time" value="02:00" style="max-width: 200px;">
                         </div>
                         <div class="btn-group">
                             <button class="btn-ghost" id="auto-save">Plan speichern</button>
@@ -253,7 +253,7 @@
                         </div>
                     </div>
                     <div class="auto-card">
-                        <div class="inline-field">
+                        <div class="inline-field" id="auto-weekday-wrap">
                             <label>Wochentag (wöchentlich)</label>
                             <div class="btn-group" id="auto-weekdays">
                                 <button class="btn-ghost" data-day="0">Mo</button>
@@ -265,7 +265,7 @@
                                 <button class="btn-ghost" data-day="6">So</button>
                             </div>
                         </div>
-                        <div class="inline-field">
+                        <div class="inline-field" id="auto-interval-wrap">
                             <label>Intervall (Stunden)</label>
                             <div class="btn-group" id="auto-interval-buttons">
                                 <button class="btn-ghost" data-interval="1">1h</button>
@@ -389,6 +389,15 @@
             });
         }
 
+        function toggleAutoInputs(mode) {
+            const timeWrap = document.getElementById("auto-time-wrap");
+            const weekdayWrap = document.getElementById("auto-weekday-wrap");
+            const intervalWrap = document.getElementById("auto-interval-wrap");
+            if (timeWrap) timeWrap.style.display = mode === "interval" ? "none" : "flex";
+            if (weekdayWrap) weekdayWrap.style.display = mode === "weekly" ? "flex" : "none";
+            if (intervalWrap) intervalWrap.style.display = mode === "interval" ? "flex" : "none";
+        }
+
         function updateAutoStatusPill(text, code) {
             const pill = document.getElementById("auto-status-pill");
             if (!pill) return;
@@ -435,6 +444,7 @@
             document.getElementById("auto-enabled").checked = enabled;
             document.getElementById("auto-time").value = cfg.time || "02:00";
             renderAutoModeButtons(state.autoMode);
+            toggleAutoInputs(state.autoMode);
             renderWeekdayButtons(cfg.weekday ?? 0);
             renderIntervalButtons(cfg.interval_hours ?? 6);
             const running = Boolean(st.running);
@@ -780,6 +790,7 @@
                 if (!mode) return;
                 state.autoMode = mode;
                 renderAutoModeButtons(mode);
+                toggleAutoInputs(mode);
                 saveAutoConfig();
             });
         });
