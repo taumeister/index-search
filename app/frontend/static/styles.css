@@ -3,13 +3,13 @@
     --panel-width: clamp(320px, 32vw, 520px);
     --border: #d7dde7;
     --muted: #6b7280;
-    --filter-font-size: 12px;
+    --filter-font-size: 11px;
     --filter-font-weight: 400;
-    --filter-padding-y: 7px;
-    --filter-padding-x: 11px;
-    --filter-group-height: 38px;
-    --filter-radius: 10px;
-    --filter-chip-radius: 8px;
+    --filter-padding-y: 6px;
+    --filter-padding-x: 10px;
+    --filter-group-height: 34px;
+    --filter-radius: 9px;
+    --filter-chip-radius: 7px;
 }
 
 html, body {
@@ -309,6 +309,7 @@ body {
     align-items: center;
     gap: 6px;
     cursor: pointer;
+    border-radius: var(--filter-chip-radius);
 }
 
 .search-mode button + button {
@@ -362,6 +363,7 @@ body {
     letter-spacing: 0.01em;
     color: #0f172a;
     cursor: pointer;
+    border-radius: var(--filter-chip-radius);
 }
 
 .type-filter button + button {
