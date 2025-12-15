@@ -1,5 +1,9 @@
 # Release-Notizen
 
+## v0.3.6
+- Quellen-Filter neben dem Suchfeld platziert, Optik an andere Filter angepasst (weißer Hintergrund, klare Umrandung, blauer Aktivzustand, gemeinsame Filtergruppe).
+- Dokumentation aktualisiert; Version erhöht.
+
 ## v0.3.5
 - Neuer Quellen-Filter in der Index-Suche: lädt dynamisch Labels der konfigurierten Quellen, Mehrfachauswahl (OR), gleiches UI-Pattern wie andere Filter, Persistenz per localStorage.
 - Suche akzeptiert `source_labels` (mehrere) und filtert entsprechend; `/api/sources` liefert deduplizierte Labels.
