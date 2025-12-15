@@ -46,6 +46,7 @@
         {% include "partials/header_top.html" with context %}
         <div class="search-bar">
             <input id="search-input" type="text" placeholder="Suche wie im Explorer..." />
+            <div class="source-filter" id="source-filter" aria-label="Quellen" role="group"></div>
             <div class="search-mode" id="search-mode" role="radiogroup" aria-label="Search Mode">
                 <button type="button" data-mode="strict" title="Exakte Worttreffer, alle Wörter müssen vorkommen. Keine Teilwort- oder Fuzzy-Treffer.">
                     <span class="mode-label">Strikt</span>
@@ -68,7 +69,6 @@
                 <button type="button" data-ext=".txt" title="Nur Textdateien">TEXT</button>
             </div>
             <div class="filters">
-                <div class="source-filter" id="source-filter" aria-label="Quellen" role="group"></div>
                 <div class="time-filter-chips" id="time-filter-chips" role="radiogroup" aria-label="Zeitraum">
                     <button type="button" class="time-chip" data-time="" aria-label="Alle Zeiträume" title="Alle Zeiträume">Alle</button>
                     <button type="button" class="time-chip" data-time="yesterday" aria-label="Gestern" title="Gestern">Gestern</button>
