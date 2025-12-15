@@ -34,6 +34,9 @@ let currentTimeFilter = "";
 const METRICS_ENABLED = true;
 let availableSources = [];
 let activeSourceLabels = new Set();
+let adminState = { admin: false, fileOpsEnabled: false, readySources: [] };
+let adminReadySources = new Set();
+let pendingDeleteId = null;
 const dateFormatter = new Intl.DateTimeFormat("de-DE", {
     year: "numeric",
     month: "2-digit",
@@ -414,6 +417,143 @@ async function setupSourceFilter() {
     renderSourceFilter();
 }
 
+function renderAdminUi() {
+    const btn = document.getElementById("admin-button");
+    const statusLabel = document.getElementById("admin-status-label");
+    const readyListEl = document.getElementById("admin-ready-list");
+    const available = adminState.fileOpsEnabled && adminReadySources.size > 0;
+    const showButton = available || adminState.admin;
+    if (btn) {
+        btn.classList.toggle("hidden", !showButton);
+        btn.classList.toggle("active", adminState.admin);
+        btn.title = available ? "Admin" : "Admin-Funktionen nicht verfügbar";
+    }
+    if (statusLabel) {
+        statusLabel.textContent = adminState.admin ? "Admin-Modus aktiv" : "Admin-Modus aus";
+    }
+    if (readyListEl) {
+        if (!available) {
+            readyListEl.textContent = "Keine Quelle bereit";
+        } else {
+            readyListEl.textContent = Array.from(adminReadySources).join(", ");
+        }
+    }
+}
+
+function updateAdminState(data) {
+    adminState.admin = Boolean(data && data.admin);
+    adminState.fileOpsEnabled = Boolean(data && data.file_ops_enabled);
+    const readyList = Array.isArray(data && data.quarantine_ready_sources) ? data.quarantine_ready_sources : [];
+    adminState.readySources = readyList;
+    adminReadySources = new Set(readyList.map((item) => String(item.label || item)));
+    renderAdminUi();
+}
+
+function canUseFileOpsForSource(label) {
+    return Boolean(adminState.admin && adminState.fileOpsEnabled && adminReadySources.has(label));
+}
+
+async function refreshAdminStatus() {
+    try {
+        const res = await fetch("/api/admin/status");
+        if (!res.ok) return;
+        const data = await res.json();
+        updateAdminState(data);
+    } catch (_) {
+        /* ignore */
+    }
+}
+
+function setupAdminControls() {
+    renderAdminUi();
+    const btn = document.getElementById("admin-button");
+    const modal = document.getElementById("admin-modal");
+    const closeBtn = document.getElementById("admin-close");
+    const loginBtn = document.getElementById("admin-login");
+    const logoutBtn = document.getElementById("admin-logout");
+    const input = document.getElementById("admin-password");
+    const statusEl = document.getElementById("admin-modal-status");
+    if (!btn || !modal || !loginBtn || !logoutBtn || !input || !statusEl) return;
+
+    function setStatus(kind, text) {
+        statusEl.classList.remove("error", "success", "hidden");
+        if (!text) {
+            statusEl.classList.add("hidden");
+            statusEl.textContent = "";
+            return;
+        }
+        statusEl.classList.add(kind === "error" ? "error" : "success");
+        statusEl.textContent = text;
+    }
+
+    function openModal() {
+        renderAdminUi();
+        modal.classList.remove("hidden");
+        setStatus("", "");
+        input.value = "";
+        input.focus();
+    }
+
+    function closeModal() {
+        modal.classList.add("hidden");
+        setStatus("", "");
+        input.value = "";
+    }
+
+    async function submitLogin() {
+        const password = input.value || "";
+        setStatus("", "");
+        try {
+            const res = await fetch("/api/admin/login", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ password }),
+            });
+            if (!res.ok) {
+                let detail = "Login fehlgeschlagen.";
+                try {
+                    const data = await res.json();
+                    detail = data.detail || detail;
+                } catch (_) {
+                    /* ignore */
+                }
+                setStatus("error", detail);
+                return;
+            }
+            const data = await res.json();
+            updateAdminState({ ...data, admin: true });
+            setStatus("success", "Admin-Modus aktiviert.");
+            setTimeout(() => closeModal(), 400);
+        } catch (_) {
+            setStatus("error", "Login fehlgeschlagen.");
+        }
+    }
+
+    async function submitLogout() {
+        setStatus("", "");
+        try {
+            await fetch("/api/admin/logout", { method: "POST" });
+        } catch (_) {
+            /* ignore */
+        }
+        updateAdminState({ admin: false, file_ops_enabled: adminState.fileOpsEnabled, quarantine_ready_sources: adminState.readySources });
+        closeModal();
+    }
+
+    btn.addEventListener("click", () => {
+        if (btn.classList.contains("hidden")) return;
+        openModal();
+    });
+    loginBtn.addEventListener("click", submitLogin);
+    logoutBtn.addEventListener("click", submitLogout);
+    closeBtn?.addEventListener("click", closeModal);
+    input.addEventListener("keydown", (e) => {
+        if (e.key === "Enter") {
+            submitLogin();
+        }
+    });
+}
+
 function normalizeTypeFilter(value) {
     if (value === null || value === undefined) return "";
     const normalized = String(value).toLowerCase();
@@ -595,6 +735,7 @@ function renderResults(results, { append = false } = {}) {
         const tr = document.createElement("tr");
         const rowId = row.id || row.doc_id;
         tr.dataset.id = rowId;
+        tr.dataset.source = row.source || "";
         const sizeLabel = typeof row.size_bytes === "number" ? `${(row.size_bytes / 1024).toFixed(1)} KB` : "–";
         const mtimeLabel = row.mtime ? dateFormatter.format(new Date(row.mtime * 1000)) : "–";
         const pathLabel = row.path || "";
@@ -935,6 +1076,9 @@ setupSearchModeSwitch();
 setupTypeFilterSwitch();
 setupTimeFilterChips();
 setupSourceFilter();
+setupAdminControls();
+setupDeleteConfirm();
+refreshAdminStatus();
 document.getElementById("search-input").addEventListener("input", debounceSearch);
 const loadMoreBtn = document.getElementById("load-more");
 if (loadMoreBtn) {
@@ -993,6 +1137,126 @@ function setupResizableColumns() {
     });
 }
 
+function removeResultRow(id) {
+    const row = document.querySelector(`#results-table tbody tr[data-id="${id}"]`);
+    if (row) {
+        row.remove();
+    }
+    if (currentDocId && String(currentDocId) === String(id)) {
+        closePreviewPanel();
+    }
+    const tbody = document.querySelector("#results-table tbody");
+    if (tbody && !tbody.children.length) {
+        renderMessageRow("Keine Treffer gefunden.");
+    }
+}
+
+function closeDeleteConfirm() {
+    const modal = document.getElementById("delete-confirm");
+    const errorEl = document.getElementById("delete-error");
+    const confirmBtn = document.getElementById("delete-confirm-btn");
+    pendingDeleteId = null;
+    if (modal) {
+        modal.classList.add("hidden");
+        modal.dataset.source = "";
+    }
+    if (errorEl) {
+        errorEl.textContent = "";
+        errorEl.classList.add("hidden");
+    }
+    if (confirmBtn) {
+        confirmBtn.disabled = false;
+    }
+}
+
+function showDeleteConfirm(docId, filename, sourceLabel) {
+    const modal = document.getElementById("delete-confirm");
+    const nameEl = document.getElementById("delete-filename");
+    const errorEl = document.getElementById("delete-error");
+    const confirmBtn = document.getElementById("delete-confirm-btn");
+    if (!modal || !nameEl || !confirmBtn || !errorEl) return;
+    pendingDeleteId = docId;
+    modal.dataset.source = sourceLabel || "";
+    nameEl.textContent = filename || "Datei";
+    errorEl.textContent = "";
+    errorEl.classList.add("hidden");
+    confirmBtn.disabled = false;
+    modal.classList.remove("hidden");
+}
+
+async function performDelete() {
+    const modal = document.getElementById("delete-confirm");
+    const errorEl = document.getElementById("delete-error");
+    const confirmBtn = document.getElementById("delete-confirm-btn");
+    const sourceLabel = modal?.dataset.source || "";
+    if (!pendingDeleteId || !modal) return;
+    if (!canUseFileOpsForSource(sourceLabel)) {
+        if (errorEl) {
+            errorEl.textContent = "Aktion nicht erlaubt.";
+            errorEl.classList.remove("hidden");
+        }
+        return;
+    }
+    if (confirmBtn) confirmBtn.disabled = true;
+    try {
+        const res = await fetch(`/api/files/${pendingDeleteId}/quarantine-delete`, { method: "POST" });
+        if (!res.ok) {
+            let detail = "Verschieben fehlgeschlagen.";
+            try {
+                const data = await res.json();
+                detail = data.detail || detail;
+            } catch (_) {
+                /* ignore */
+            }
+            if (res.status === 401 || res.status === 403) {
+                updateAdminState({ admin: false, file_ops_enabled: adminState.fileOpsEnabled, quarantine_ready_sources: adminState.readySources });
+            }
+            if (errorEl) {
+                errorEl.textContent = detail;
+                errorEl.classList.remove("hidden");
+            }
+            if (confirmBtn) confirmBtn.disabled = false;
+            return;
+        }
+        removeResultRow(pendingDeleteId);
+        closeDeleteConfirm();
+    } catch (_) {
+        if (errorEl) {
+            errorEl.textContent = "Verschieben fehlgeschlagen.";
+            errorEl.classList.remove("hidden");
+        }
+        if (confirmBtn) confirmBtn.disabled = false;
+    }
+}
+
+function setupDeleteConfirm() {
+    const modal = document.getElementById("delete-confirm");
+    if (!modal) return;
+    const confirmBtn = document.getElementById("delete-confirm-btn");
+    const cancelBtn = document.getElementById("delete-cancel");
+    const closeBtn = document.getElementById("delete-close");
+    confirmBtn?.addEventListener("click", performDelete);
+    cancelBtn?.addEventListener("click", closeDeleteConfirm);
+    closeBtn?.addEventListener("click", closeDeleteConfirm);
+    modal.addEventListener("click", (e) => {
+        if (e.target === modal) {
+            closeDeleteConfirm();
+        }
+    });
+}
+
+function handleDeleteAction(id) {
+    const row = document.querySelector(`#results-table tbody tr[data-id="${id}"]`);
+    const sourceLabel = row?.dataset.source || "";
+    if (!canUseFileOpsForSource(sourceLabel)) {
+        closeContextMenu();
+        return;
+    }
+    const name = row?.querySelector(".filename")?.textContent?.trim() || "Datei";
+    closeContextMenu();
+    showDeleteConfirm(id, name, sourceLabel);
+}
+
 // Context menu
 let contextMenuEl = null;
 function showContextMenu(e, id) {
@@ -1001,18 +1265,36 @@ function showContextMenu(e, id) {
     const menu = document.createElement("div");
     menu.className = "context-menu";
     const ul = document.createElement("ul");
-    ul.innerHTML = `
-        <li data-action="preview">Preview</li>
-        <li data-action="popup">Pop-up</li>
-        <li data-action="download">Download</li>
-        <li data-action="print">Drucken</li>
-    `;
+    const row = document.querySelector(`#results-table tbody tr[data-id="${id}"]`);
+    const sourceLabel = row?.dataset.source || "";
+    const items = [
+        { action: "preview", label: "Preview" },
+        { action: "popup", label: "Pop-up" },
+        { action: "download", label: "Download" },
+        { action: "print", label: "Drucken" },
+    ];
+    if (canUseFileOpsForSource(sourceLabel)) {
+        items.push({ action: "delete", label: "Löschen", danger: true });
+    }
+    items.forEach((item) => {
+        const li = document.createElement("li");
+        li.dataset.action = item.action;
+        li.textContent = item.label;
+        if (item.danger) {
+            li.classList.add("danger");
+        }
+        ul.appendChild(li);
+    });
     ul.addEventListener("click", (ev) => {
         const action = ev.target.dataset.action;
         if (action === "preview") openPreview(id, true);
         if (action === "popup") openPopupForRow(id);
         if (action === "download") window.open(`/api/document/${id}/file?download=1`, "_blank");
         if (action === "print") printDocument(id);
+        if (action === "delete") {
+            handleDeleteAction(id);
+            return;
+        }
         closeContextMenu();
     });
     menu.appendChild(ul);
@@ -1072,6 +1354,8 @@ document.addEventListener("click", (e) => {
     if (e.target.closest("#results-table")) return;
     if (e.target.closest("#results-pane")) return;
     if (e.target.closest(".context-menu")) return;
+    if (e.target.closest("#admin-modal")) return;
+    if (e.target.closest("#delete-confirm")) return;
     closePreviewPanel();
 });
 
@@ -1080,6 +1364,11 @@ document.addEventListener("keydown", (e) => {
         closePreviewPanel();
         closeContextMenu();
         closeFeedbackOverlay();
+        closeDeleteConfirm();
+        const adminModal = document.getElementById("admin-modal");
+        if (adminModal && !adminModal.classList.contains("hidden")) {
+            adminModal.classList.add("hidden");
+        }
     }
 });
 

@@ -162,6 +162,11 @@ def remove_documents_by_paths(conn: sqlite3.Connection, missing_paths: Iterable[
     return len(ids)
 
 
+def remove_document_by_id(conn: sqlite3.Connection, doc_id: int) -> None:
+    conn.execute("DELETE FROM documents WHERE id = ?", (doc_id,))
+    conn.execute("DELETE FROM documents_fts WHERE doc_id = ?", (doc_id,))
+
+
 def search_documents(
     conn: sqlite3.Connection,
     query: str,

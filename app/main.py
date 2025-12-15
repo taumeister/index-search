@@ -1,11 +1,13 @@
+import hashlib
+import hmac
 import logging
+import secrets
 import subprocess
 from pathlib import Path
 from typing import Optional, Dict, Any
 
 import uvicorn
-import secrets
-from fastapi import Cookie, Depends, FastAPI, HTTPException, Header, Query, Request
+from fastapi import Cookie, Depends, FastAPI, HTTPException, Header, Query, Request, Response
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
@@ -31,12 +33,15 @@ from app import config_db
 from app.feedback import MAX_FEEDBACK_CHARS, check_rate_limit, send_feedback_email
 from app.index_runner import start_index_run
 from app.auto_index_scheduler import AutoIndexScheduler, AutoIndexConfig, load_config_from_db, load_status_from_db, persist_config
+from app.services import file_ops
 
 logging.basicConfig(level=logging.INFO)
 _metrics_thread_started = False
 _metrics_thread_lock = threading.Lock()
 logger = logging.getLogger(__name__)
 _auto_scheduler: Optional[AutoIndexScheduler] = None
+ADMIN_SESSION_COOKIE = "admin_session"
+ADMIN_SESSION_TTL_SEC = 12 * 3600
 
 
 def get_config() -> CentralConfig:
@@ -101,6 +106,74 @@ def ensure_app_secret(env_path: Path = Path(".env")) -> str:
     return secret
 
 
+def get_admin_password(env_path: Path = Path(".env")) -> str:
+    value = os.getenv("ADMIN_PASSWORD")
+    if value and value.strip():
+        return value.strip()
+    try:
+        if env_path.exists():
+            for line in env_path.read_text(encoding="utf-8").splitlines():
+                if line.strip().startswith("ADMIN_PASSWORD="):
+                    candidate = line.split("=", 1)[1].strip()
+                    if candidate:
+                        os.environ["ADMIN_PASSWORD"] = candidate
+                        return candidate
+    except Exception:
+        pass
+    raise ValueError("ADMIN_PASSWORD muss gesetzt sein")
+
+
+def _admin_token_secret() -> str:
+    return f"{ensure_app_secret()}::{get_admin_password()}"
+
+
+def issue_admin_token() -> str:
+    issued = int(time.time())
+    nonce = secrets.token_hex(8)
+    payload = f"{issued}:{nonce}"
+    secret = _admin_token_secret().encode("utf-8")
+    sig = hmac.new(secret, payload.encode("utf-8"), hashlib.sha256).hexdigest()
+    return f"{payload}.{sig}"
+
+
+def verify_admin_token(token: Optional[str]) -> bool:
+    if not token:
+        return False
+    try:
+        payload, sig = token.split(".", 1)
+    except ValueError:
+        return False
+    secret = _admin_token_secret().encode("utf-8")
+    expected = hmac.new(secret, payload.encode("utf-8"), hashlib.sha256).hexdigest()
+    if not hmac.compare_digest(expected, sig):
+        return False
+    ts_part = payload.split(":", 1)[0]
+    try:
+        issued = int(ts_part)
+    except ValueError:
+        return False
+    if issued + ADMIN_SESSION_TTL_SEC < time.time():
+        return False
+    return True
+
+
+def is_admin(request: Request) -> bool:
+    token = request.cookies.get(ADMIN_SESSION_COOKIE)
+    return verify_admin_token(token)
+
+
+def init_quarantine_state(config: CentralConfig) -> None:
+    try:
+        roots = resolve_active_roots(config)
+    except Exception as exc:
+        try:
+            roots = getattr(config.paths, "roots", [])
+        except Exception:
+            roots = []
+        logger.warning("Quarantäne-Setup übersprungen: %s", exc)
+    file_ops.init_sources(roots)
+
+
 def get_test_flags(request: Request) -> tuple[bool, Optional[str]]:
     params = request.query_params
     is_test = params.get("metrics_test") == "1" or request.headers.get("X-Metrics-Test") == "1"
@@ -150,6 +223,12 @@ def require_secret(
     return True
 
 
+def require_admin(request: Request, _auth: bool = Depends(require_secret)):
+    if not is_admin(request):
+        raise HTTPException(status_code=403, detail="Admin erforderlich")
+    return True
+
+
 def read_version() -> str:
     candidates = [
         Path(__file__).resolve().parent.parent / "VERSION",
@@ -168,8 +247,10 @@ def read_version() -> str:
 
 def create_app(config: Optional[CentralConfig] = None) -> FastAPI:
     config = config or load_config()
+    get_admin_password()
     ensure_app_secret()
     ensure_dirs(config)
+    init_quarantine_state(config)
     db.init_db()
     metrics.init_metrics()
     ensure_metrics_background()
@@ -528,9 +609,24 @@ def create_app(config: Optional[CentralConfig] = None) -> FastAPI:
 
         return StreamingResponse(file_iter(), media_type=media_type, headers=headers)
 
+    @app.post("/api/files/{doc_id}/quarantine-delete")
+    def quarantine_delete(doc_id: int, request: Request, _admin: bool = Depends(require_admin)):
+        file_ops.refresh_quarantine_state()
+        try:
+            result = file_ops.quarantine_delete(doc_id, actor="admin")
+        except file_ops.FileOpError as exc:
+            raise HTTPException(status_code=exc.status_code, detail=str(exc))
+        except Exception as exc:
+            logger.error("Quarantäne-Verschiebung fehlgeschlagen: %s", exc)
+            raise HTTPException(status_code=500, detail="Quarantäne fehlgeschlagen")
+        return {"status": "ok", **result}
+
     @app.get("/api/admin/status")
-    def admin_status(_auth: bool = Depends(require_secret)):
+    def admin_status(request: Request, _auth: bool = Depends(require_secret)):
         db.init_db()
+        file_ops.refresh_quarantine_state()
+        ops_state = file_ops.get_status()
+        admin_flag = is_admin(request)
         with db.get_conn() as conn:
             status = db.get_status(conn)
             ext_counts = [
@@ -540,6 +636,9 @@ def create_app(config: Optional[CentralConfig] = None) -> FastAPI:
             recent_runs = [dict(r) for r in status["recent_runs"]]
             last_run = dict(status["last_run"]) if status["last_run"] else None
             return {
+                "admin": admin_flag,
+                "file_ops_enabled": ops_state["file_ops_enabled"],
+                "quarantine_ready_sources": ops_state["quarantine_ready_sources"],
                 "total_docs": int(status["total_docs"]),
                 "ext_counts": ext_counts,
                 "last_run": last_run,
@@ -547,6 +646,29 @@ def create_app(config: Optional[CentralConfig] = None) -> FastAPI:
                 "errors_total": db.error_count(conn),
                 "send_report_enabled": config_db.get_setting("send_report_enabled", "0") == "1",
             }
+
+    @app.post("/api/admin/login")
+    def admin_login(payload: Dict[str, Any], response: Response, _auth: bool = Depends(require_secret)):
+        password = (payload.get("password") or "").strip()
+        if not secrets.compare_digest(password, get_admin_password()):
+            raise HTTPException(status_code=401, detail="Ungültiges Passwort")
+        token = issue_admin_token()
+        response.set_cookie(
+            ADMIN_SESSION_COOKIE,
+            token,
+            max_age=ADMIN_SESSION_TTL_SEC,
+            httponly=True,
+            samesite="lax",
+            path="/",
+        )
+        file_ops.refresh_quarantine_state()
+        ops_state = file_ops.get_status()
+        return {"admin": True, "file_ops_enabled": ops_state["file_ops_enabled"], "quarantine_ready_sources": ops_state["quarantine_ready_sources"]}
+
+    @app.post("/api/admin/logout")
+    def admin_logout(response: Response, _auth: bool = Depends(require_secret)):
+        response.delete_cookie(ADMIN_SESSION_COOKIE, path="/")
+        return {"admin": False}
 
     @app.get("/api/admin/roots")
     def admin_roots(_auth: bool = Depends(require_secret)):

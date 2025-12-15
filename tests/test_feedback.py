@@ -13,6 +13,7 @@ from app.main import create_app
 def setup_env(monkeypatch, tmp_path):
     monkeypatch.setattr(db, "DB_PATH", tmp_path / "feedback.db")
     monkeypatch.setattr(config_db, "CONFIG_DB_PATH", tmp_path / "config.db")
+    os.environ["ADMIN_PASSWORD"] = "admin"
     for key in [
         "INDEX_ROOTS",
         "INDEX_WORKER_COUNT",

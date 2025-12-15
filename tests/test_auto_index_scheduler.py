@@ -14,6 +14,7 @@ from app.main import create_app
 def setup_env(monkeypatch, tmp_path: Path):
     monkeypatch.setattr(config_db, "CONFIG_DB_PATH", tmp_path / "config.db")
     os.environ["APP_SECRET"] = "secret"
+    os.environ["ADMIN_PASSWORD"] = "admin"
     os.environ["AUTO_INDEX_DISABLE"] = "1"
     for key in [
         "INDEX_ROOTS",

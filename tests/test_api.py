@@ -11,6 +11,7 @@ from app import config_db
 
 def test_search_endpoint(tmp_path, monkeypatch):
     os.environ["APP_SECRET"] = "testsecret"
+    os.environ["ADMIN_PASSWORD"] = "admin"
     monkeypatch.setattr(db, "DB_PATH", tmp_path / "api.db")
     cfg_file = tmp_path / "central_config.ini"
     cfg_file.write_text(
@@ -53,6 +54,7 @@ log_dir = logs
 
 def test_add_root_validation(tmp_path, monkeypatch):
     os.environ["APP_SECRET"] = "testsecret"
+    os.environ["ADMIN_PASSWORD"] = "admin"
     monkeypatch.setattr(db, "DB_PATH", tmp_path / "api.db")
     monkeypatch.setattr(config_db, "CONFIG_DB_PATH", tmp_path / "config.db")
     base = tmp_path / "data"

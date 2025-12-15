@@ -34,14 +34,14 @@
     {% set header_slogan = "Kanzlei Schmitt, wir können nur Enterprise..." %}
     {% set header_eyebrow = None %}
     {% set version_badge = app_version or 'v?' %}
-    {% set header_actions = [
-        {"type":"icon","href":"/metrics","label":"Metrics","icon":"metrics"},
-        {"type":"icon","href":"/dashboard","label":"Dashboard","icon":"dashboard"},
-        {"type":"icon_button","label":"Feedback","icon_text":"F","id":"feedback-trigger","classes":"feedback-icon"}
-    ] if feedback_enabled else [
+    {% set base_actions = [
         {"type":"icon","href":"/metrics","label":"Metrics","icon":"metrics"},
         {"type":"icon","href":"/dashboard","label":"Dashboard","icon":"dashboard"}
     ] %}
+    {% set header_actions = base_actions
+        + ([{"type":"icon_button","label":"Feedback","icon_text":"F","id":"feedback-trigger","classes":"feedback-icon"}] if feedback_enabled else [])
+        + [{"type":"icon_button","label":"Admin","icon_text":"A","id":"admin-button","classes":"admin-entry"}]
+    %}
     <header class="app-header">
         {% include "partials/header_top.html" with context %}
         <div class="search-bar">
@@ -143,6 +143,46 @@
                 <button id="close-popup">Schließen</button>
             </div>
             <div id="popup-body"></div>
+        </div>
+    </div>
+
+    <div id="admin-modal" class="dialog-overlay hidden">
+        <div class="dialog-card">
+            <div class="dialog-title-row">
+                <div>
+                    <div class="dialog-eyebrow">Admin</div>
+                    <div class="dialog-title">Explorer-Modus</div>
+                </div>
+                <button type="button" class="btn btn-ghost" id="admin-close">Schließen</button>
+            </div>
+            <div class="dialog-status hidden" id="admin-modal-status"></div>
+            <div class="dialog-body">
+                <div class="dialog-label">Status</div>
+                <div id="admin-status-label" class="dialog-muted">Admin-Modus aus</div>
+                <div class="dialog-label">Quellen bereit</div>
+                <div id="admin-ready-list" class="dialog-muted">Keine Quelle bereit</div>
+                <label for="admin-password" class="dialog-label">Passwort</label>
+                <input type="password" id="admin-password" class="dialog-input" placeholder="Admin-Passwort" autocomplete="current-password" />
+            </div>
+            <div class="dialog-actions">
+                <button type="button" class="btn btn-ghost" id="admin-logout">Logout</button>
+                <button type="button" class="btn btn-primary" id="admin-login">Login</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="delete-confirm" class="dialog-overlay hidden">
+        <div class="dialog-card narrow">
+            <div class="dialog-title">In Quarantäne verschieben?</div>
+            <div class="dialog-body">
+                <div class="dialog-label">Datei</div>
+                <div class="dialog-strong" id="delete-filename"></div>
+                <div class="dialog-status hidden" id="delete-error"></div>
+            </div>
+            <div class="dialog-actions">
+                <button type="button" class="btn btn-ghost" id="delete-cancel">Abbrechen</button>
+                <button type="button" class="btn btn-danger" id="delete-confirm-btn">Verschieben</button>
+            </div>
         </div>
     </div>
 
