@@ -176,9 +176,14 @@ def search_documents(
     filters = filters or {}
     where_clauses = []
     params: List[Any] = []
-    if "source" in filters:
-        where_clauses.append("d.source = ?")
-        params.append(filters["source"])
+    sources_filter: List[str] = []
+    if "source_labels" in filters:
+        sources_filter = [s for s in filters["source_labels"] if s]
+    elif "source" in filters and filters["source"]:
+        sources_filter = [filters["source"]]
+    if sources_filter:
+        where_clauses.append(f"d.source IN ({','.join('?' * len(sources_filter))})")
+        params.extend(sources_filter)
     if "extension" in filters:
         where_clauses.append("d.extension = ?")
         params.append(filters["extension"])

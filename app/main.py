@@ -255,6 +255,7 @@ def create_app(config: Optional[CentralConfig] = None) -> FastAPI:
     def search(
         q: str = Query("", description="Suchbegriff"),
         source: Optional[str] = None,
+        source_labels: Optional[list[str]] = Query(None, alias="source_labels"),
         extension: Optional[str] = None,
         time_filter: Optional[str] = None,
         sort_key: Optional[str] = None,
@@ -270,8 +271,11 @@ def create_app(config: Optional[CentralConfig] = None) -> FastAPI:
         db.init_db()
         with db.get_conn() as conn:
             filters = {}
-            if source:
-                filters["source"] = source
+            label_filter = [s.strip() for s in (source_labels or []) if s and s.strip()]
+            if source and not label_filter:
+                label_filter = [source]
+            if label_filter:
+                filters["source_labels"] = label_filter
             if extension:
                 filters["extension"] = extension.lower()
             if time_filter:
@@ -303,6 +307,19 @@ def create_app(config: Optional[CentralConfig] = None) -> FastAPI:
                 "has_more": has_more,
                 "mode": effective_mode.value,
             }
+
+    @app.get("/api/sources")
+    def list_sources(_auth: bool = Depends(require_secret)):
+        labels: list[str] = []
+        try:
+            labels = [label for _, label in resolve_active_roots(config)]
+        except Exception:
+            try:
+                labels = [label for _, label in getattr(config.paths, "roots", [])]
+            except Exception:
+                labels = []
+        cleaned = sorted({(lbl or "").strip() for lbl in labels if (lbl or "").strip()})
+        return {"labels": cleaned}
 
     @app.get("/api/document/{doc_id}")
     def document_details(doc_id: int, request: Request, _auth: bool = Depends(require_secret)):

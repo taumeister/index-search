@@ -19,6 +19,7 @@ const DEFAULT_SEARCH_MODE = normalizeSearchMode(window.searchDefaultMode) || "st
 const TYPE_FILTER_KEY = "searchTypeFilter";
 const TYPE_FILTER_SET = new Set(["", ".pdf", ".rtf", ".msg", ".txt"]);
 const TIME_FILTER_KEY = "searchTimeFilter";
+const SOURCE_FILTER_KEY = "searchSourceFilter";
 const TIME_YEAR_MAX = 2025;
 const TIME_YEAR_MIN = 2000;
 const TIME_PRIMARY_OPTIONS = ["", "yesterday", "last7", "last30"];
@@ -31,6 +32,8 @@ let currentSearchMode = DEFAULT_SEARCH_MODE;
 let currentTypeFilter = "";
 let currentTimeFilter = "";
 const METRICS_ENABLED = true;
+let availableSources = [];
+let activeSourceLabels = new Set();
 const dateFormatter = new Intl.DateTimeFormat("de-DE", {
     year: "numeric",
     month: "2-digit",
@@ -143,6 +146,27 @@ function persistTimeFilter(value) {
     currentTimeFilter = normalizeTimeFilter(value);
     try {
         localStorage.setItem(TIME_FILTER_KEY, currentTimeFilter);
+    } catch (_) {
+        /* ignore */
+    }
+}
+
+function readStoredSourceFilter() {
+    try {
+        const raw = localStorage.getItem(SOURCE_FILTER_KEY);
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed)) {
+            return new Set(parsed.map((v) => String(v)));
+        }
+    } catch (_) {
+        /* ignore */
+    }
+    return new Set();
+}
+
+function persistSourceFilter() {
+    try {
+        localStorage.setItem(SOURCE_FILTER_KEY, JSON.stringify(Array.from(activeSourceLabels)));
     } catch (_) {
         /* ignore */
     }
@@ -327,6 +351,69 @@ function setupTimeFilterChips() {
         });
     }
 }
+
+function normalizeSourceList(list) {
+    return Array.from(
+        new Set(
+            (list || [])
+                .map((v) => (v === null || v === undefined ? "" : String(v).trim()))
+                .filter(Boolean)
+        )
+    ).sort((a, b) => a.localeCompare(b, "de"));
+}
+
+async function loadSourceLabels() {
+    try {
+        const res = await fetch("/api/sources");
+        if (!res.ok) return [];
+        const data = await res.json();
+        return normalizeSourceList(data.labels || []);
+    } catch (_) {
+        return [];
+    }
+}
+
+function renderSourceFilter() {
+    const container = document.getElementById("source-filter");
+    if (!container) return;
+    container.innerHTML = "";
+    if (!availableSources.length) {
+        return;
+    }
+    availableSources.forEach((label) => {
+        const btn = document.createElement("button");
+        btn.type = "button";
+        btn.className = "source-chip time-chip";
+        btn.textContent = label;
+        btn.dataset.label = label;
+        const active = activeSourceLabels.has(label);
+        btn.classList.toggle("active", active);
+        btn.setAttribute("aria-pressed", active ? "true" : "false");
+        btn.addEventListener("click", () => {
+            if (activeSourceLabels.has(label)) {
+                activeSourceLabels.delete(label);
+            } else {
+                activeSourceLabels.add(label);
+            }
+            persistSourceFilter();
+            renderSourceFilter();
+            search({ append: false });
+            scheduleFocusSearchInput();
+        });
+        container.appendChild(btn);
+    });
+}
+
+async function setupSourceFilter() {
+    const container = document.getElementById("source-filter");
+    if (!container) return;
+    activeSourceLabels = readStoredSourceFilter();
+    availableSources = await loadSourceLabels();
+    activeSourceLabels = new Set([...activeSourceLabels].filter((lbl) => availableSources.includes(lbl)));
+    persistSourceFilter();
+    renderSourceFilter();
+}
+
 function normalizeTypeFilter(value) {
     if (value === null || value === undefined) return "";
     const normalized = String(value).toLowerCase();
@@ -387,6 +474,7 @@ async function search({ append = false } = {}) {
     const trimmed = q.trim();
     const ext = normalizeTypeFilter(currentTypeFilter);
     const time = normalizeTimeFilter(currentTimeFilter);
+    const sources = Array.from(activeSourceLabels || []);
 
     if (!append) {
         searchOffset = 0;
@@ -411,7 +499,7 @@ async function search({ append = false } = {}) {
         return;
     }
 
-    if (trimmed === "*" && !ext && !time) {
+    if (trimmed === "*" && !ext && !time && !sources.length) {
         if (currentSearchController) {
             currentSearchController.abort();
             currentSearchController = null;
@@ -431,6 +519,9 @@ async function search({ append = false } = {}) {
     const params = new URLSearchParams({ q, limit: SEARCH_LIMIT, offset: append ? searchOffset : 0 });
     if (ext) params.append("extension", ext.toLowerCase());
     if (time) params.append("time_filter", time);
+    if (sources.length) {
+        sources.forEach((label) => params.append("source_labels", label));
+    }
     if (sortState.key) {
         params.append("sort_key", sortState.key);
         params.append("sort_dir", sortState.dir);
@@ -843,6 +934,7 @@ function setupPopup() {
 setupSearchModeSwitch();
 setupTypeFilterSwitch();
 setupTimeFilterChips();
+setupSourceFilter();
 document.getElementById("search-input").addEventListener("input", debounceSearch);
 const loadMoreBtn = document.getElementById("load-more");
 if (loadMoreBtn) {

@@ -39,12 +39,13 @@
 ## Web-API
 - `GET /`: Hauptseite.
 - `GET /dashboard`: System/Dashboard mit Roots/Status.
-- `GET /api/search`: Parameter `q`, optional `source`, `extension`, `limit`, `offset`; liefert Treffer mit Snippet.
+- `GET /api/search`: Parameter `q`, optional `source_labels` (mehrfach) bzw. `source`, `extension`, `limit`, `offset`; liefert Treffer mit Snippet.
 - Suchmodi: Strikt (AND, Whole-Token, keine Prefix/Fuzzy, leere Suche blockt), Standard (AND, Whole-Word oder Prefix ab `SEARCH_PREFIX_MINLEN`, Default), Locker (OR, Prefix/Teilwort tolerant). `SEARCH_DEFAULT_MODE` und `SEARCH_PREFIX_MINLEN` per ENV.
 - Requests senden `mode=strict|standard|loose`; Wildcard `*` nur mit aktivem Filter.
 - Suchlogik: leere Suche blockiert; Snippets werden serverseitig erzeugt, Matches folgen dem gewählten Modus.
 - `GET /api/document/{id}`: Metadaten + Volltext.
 - `GET /api/document/{id}/file`: Originaldatei (Download/Inline).
+- `GET /api/sources`: Deduplizierte aktive Quellen-Labels (Basis für Quellen-Filter im UI).
 - `GET /api/admin/status`: Gesamtanzahl, letzter Lauf, Historie.
 - `GET/POST/DELETE /api/admin/roots`: Roots verwalten (aktiv, Pfad, Label). Add-Root validiert: Pfad muss existieren, unter `base_data_root` liegen, kein Fallback auf `/data`.
 - `POST /api/admin/index/run`: Indexlauf starten, optional Reset.
@@ -55,6 +56,7 @@
 - Layout: oben kompakter Header (Titel, Zoom-Controls, Dashboard) auf allen Seiten, darunter Suche + Filter; Trefferliste links, Preview rechts (umschaltbar auf Popup).
 - Header und Tabellenkopf bleiben beim Scrollen sichtbar; Trefferliste scrollt unabhängig in einem eigenen Scroll-Bereich.
 - Header zeigt die aktuelle Versionsnummer (aus `VERSION`) neben dem Titel.
+- Filter: Dateityp, Zeitraum (Chips + More-Menü), Quellen-Filter (dynamisch aus aktiven Labels, Mehrfachauswahl, Persistenz per localStorage).
 - Preview-Panel: Breite per Griff verstellbar (Session-Scoped gespeichert), enthält Download-, Druck- und Pop-up-Aktionen; Schließen per Klick außerhalb/Escape.
 - Tabelle: Spalten sortierbar (Dateiname, Typ, Größe, Geändert) und per sichtbarem Handle in der Breite anpassbar (Persistenz via Storage), Kontextmenü mit Preview/Pop-up/Download/Druck.
 - PDF-Preview via pdf.js Iframe, MSG mit Header/Body, RTF/TXT als Text.
@@ -64,7 +66,7 @@
 
 ## Tests
 - `pytest` deckt Config-Validierung, DB/FTS-Funktion, Indexlauf und API-Suche ab.
-- E2E (Playwright): `tests/test_feedback_ui.py` simuliert den Feedback-Flow (Overlay öffnen, Text/Toolbar, Confirm, Erfolg) mit gemocktem `/api/feedback`; Start mit laufendem Container auf `http://localhost:8010` und optional `APP_BASE_URL` zum Überschreiben. Playwright-Assets via `pip install -r requirements-dev.txt` und `playwright install chromium`.
+- E2E (Playwright): `tests/test_feedback_ui.py` simuliert den Feedback-Flow (Overlay öffnen, Text/Toolbar, Confirm, Erfolg) mit gemocktem `/api/feedback`; `tests/test_source_filter_ui.py` prüft Quellen-Filter (Chips laden, Request-Parameter). Start mit laufendem Container auf `http://localhost:8010` und optional `APP_BASE_URL` zum Überschreiben. Playwright-Assets via `pip install -r requirements-dev.txt` und `playwright install chromium`.
 
 ## Betrieb
 - Start (lokal): `uvicorn app.main:app --reload`.

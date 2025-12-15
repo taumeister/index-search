@@ -1,5 +1,10 @@
 # Release-Notizen
 
+## v0.3.5
+- Neuer Quellen-Filter in der Index-Suche: lädt dynamisch Labels der konfigurierten Quellen, Mehrfachauswahl (OR), gleiches UI-Pattern wie andere Filter, Persistenz per localStorage.
+- Suche akzeptiert `source_labels` (mehrere) und filtert entsprechend; `/api/sources` liefert deduplizierte Labels.
+- Frontend/Backend-Tests ergänzt (Playwright + API) für Quellen-Filter.
+
 ## v0.3.4
 - Feedback-UI wieder funktionsfähig: Overlay/Toolbar/Zähler/Bestätigung verdrahtet, Versand gegen `/api/feedback` inkl. Cookie-Secret-Fallback und Statusmeldungen.
 - E2E-Absicherung via Playwright (`tests/test_feedback_ui.py`) mit gemocktem Feedback-Endpunkt; Dev-Dependencies ausgelagert in `requirements-dev.txt`.
