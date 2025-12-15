@@ -81,6 +81,14 @@
         .add-root-row input { padding: 6px 8px; border-radius: 6px; border: 1px solid #d1d5db; }
         .meta-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 8px; margin-bottom: 6px; }
         .pill { border-radius: 12px; padding: 4px 8px; font-size: 12px; border: 1px solid #cbd5e1; background: #f8fafc; color: #1f2937; }
+        .auto-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 10px; }
+        .auto-card { display: flex; flex-direction: column; gap: 8px; }
+        .btn-group { display: inline-flex; gap: 6px; flex-wrap: wrap; }
+        .btn-ghost { padding: 8px 10px; border-radius: 8px; border: 1px solid #cbd5e1; background: #fff; cursor: pointer; font-size: 13px; }
+        .btn-ghost.active { background: linear-gradient(135deg, #1b3a5d, #2b5999); color: #f8fafc; border-color: #b1c5f6; }
+        .inline-field { display: flex; flex-direction: column; gap: 4px; }
+        .inline-field input, .inline-field select { padding: 7px 8px; border-radius: 8px; border: 1px solid #d1d5db; font-size: 13px; }
+        .status-line { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 6px; font-size: 13px; color: #1f2937; }
     </style>
 </head>
 <body>
@@ -233,8 +241,73 @@
             </section>
         </div>
     </div>
+    <div class="system-layout">
+        <div class="row middle">
+            <section class="panel">
+                <div class="panel-head">
+                    <div>
+                        <div class="eyebrow">Auto-Index</div>
+                        <h2>Zeitplan</h2>
+                        <div class="subtext">Geplante Re-Indexierung aller Quellen</div>
+                    </div>
+                    <div class="status-pill" id="auto-status-pill" data-state="idle">Wartet</div>
+                </div>
+                <div class="auto-grid">
+                    <div class="auto-card">
+                        <label style="display:flex;align-items:center;gap:8px;">
+                            <input type="checkbox" id="auto-enabled"> Auto-Index aktivieren
+                        </label>
+                        <div class="btn-group" id="auto-mode-buttons">
+                            <button class="btn-ghost" data-mode="daily">Täglich</button>
+                            <button class="btn-ghost" data-mode="weekly">Wöchentlich</button>
+                            <button class="btn-ghost" data-mode="interval">Alle 6/12h</button>
+                        </div>
+                        <div class="inline-field">
+                            <label for="auto-time">Uhrzeit</label>
+                            <input type="time" id="auto-time" value="02:00">
+                        </div>
+                    </div>
+                    <div class="auto-card">
+                        <div class="inline-field">
+                            <label for="auto-weekday">Wochentag (wöchentlich)</label>
+                            <select id="auto-weekday">
+                                <option value="0">Montag</option>
+                                <option value="1">Dienstag</option>
+                                <option value="2">Mittwoch</option>
+                                <option value="3">Donnerstag</option>
+                                <option value="4">Freitag</option>
+                                <option value="5">Samstag</option>
+                                <option value="6">Sonntag</option>
+                            </select>
+                        </div>
+                        <div class="inline-field">
+                            <label for="auto-interval">Intervall (Stunden)</label>
+                            <select id="auto-interval">
+                                <option value="6">Alle 6 Stunden</option>
+                                <option value="12">Alle 12 Stunden</option>
+                            </select>
+                        </div>
+                        <div class="btn-group">
+                            <button class="btn-ghost" id="auto-run-now">Jetzt ausführen</button>
+                        </div>
+                    </div>
+                    <div class="auto-card">
+                        <div class="status-line">
+                            <div><strong>Nächster Lauf:</strong> <span id="auto-next">–</span></div>
+                            <div><strong>Letzter Lauf:</strong> <span id="auto-last">–</span></div>
+                            <div><strong>Dauer:</strong> <span id="auto-duration">–</span></div>
+                        </div>
+                        <div class="status-line">
+                            <div><strong>Status:</strong> <span id="auto-status-label">Idle</span></div>
+                            <div><strong>Fehler:</strong> <span id="auto-error">–</span></div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+        </div>
+    </div>
     <script>
-        const state = { errorOffset: 0, errorLimit: 50, logOffset: 0, logPointer: 0, logTail: 400, logTotal: 0, autoScrollLog: true };
+        const state = { errorOffset: 0, errorLimit: 50, logOffset: 0, logPointer: 0, logTail: 400, logTotal: 0, autoScrollLog: true, autoMode: "daily", autoRunning: false };
         const POLL_STATUS_MS = 2000;
         const POLL_LOG_MS = 2000;
         const POLL_ERRORS_MS = 15000;
@@ -271,6 +344,90 @@
             const m = Math.floor((total % 3600) / 60).toString().padStart(2, "0");
             const s = Math.floor(total % 60).toString().padStart(2, "0");
             return `${h}:${m}:${s}`;
+        }
+
+        function renderAutoModeButtons(active) {
+            const btns = document.querySelectorAll("#auto-mode-buttons button");
+            btns.forEach((b) => {
+                const isActive = b.dataset.mode === active;
+                b.classList.toggle("active", isActive);
+                b.setAttribute("aria-pressed", isActive ? "true" : "false");
+            });
+        }
+
+        function updateAutoStatusPill(text, code) {
+            const pill = document.getElementById("auto-status-pill");
+            if (!pill) return;
+            pill.textContent = text;
+            pill.dataset.state = code || "idle";
+        }
+
+        function currentAutoConfigFromUI() {
+            const enabled = document.getElementById("auto-enabled").checked;
+            const time = document.getElementById("auto-time").value || "02:00";
+            const weekday = parseInt(document.getElementById("auto-weekday").value, 10) || 0;
+            const interval = parseInt(document.getElementById("auto-interval").value, 10) || 6;
+            return {
+                enabled,
+                mode: state.autoMode || "daily",
+                time,
+                weekday,
+                interval_hours: interval,
+            };
+        }
+
+        async function saveAutoConfig() {
+            try {
+                const cfg = currentAutoConfigFromUI();
+                const res = await fetchJSON("/api/auto-index/config", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify(cfg),
+                });
+                renderAutoConfig(res);
+            } catch (err) {
+                console.error("Auto-Index speichern fehlgeschlagen", err);
+            }
+        }
+
+        function renderAutoConfig(res) {
+            if (!res || !res.config) return;
+            const cfg = res.config;
+            const st = res.status || {};
+            state.autoMode = cfg.mode || "daily";
+            const enabled = Boolean(cfg.enabled);
+            document.getElementById("auto-enabled").checked = enabled;
+            document.getElementById("auto-time").value = cfg.time || "02:00";
+            document.getElementById("auto-weekday").value = String(cfg.weekday ?? 0);
+            document.getElementById("auto-interval").value = String(cfg.interval_hours ?? 6);
+            renderAutoModeButtons(state.autoMode);
+            const running = Boolean(st.running);
+            state.autoRunning = running;
+            document.getElementById("auto-run-now").disabled = running;
+            updateAutoStatusPill(running ? "Läuft" : "Wartet", running ? "running" : (st.last_status || "idle"));
+            document.getElementById("auto-status-label").textContent = running ? "Läuft" : (st.last_status || "Idle");
+            document.getElementById("auto-next").textContent = st.next_run_at ? fmtDateTime(st.next_run_at) : "–";
+            document.getElementById("auto-last").textContent = st.last_run_at ? fmtDateTime(st.last_run_at) : "–";
+            document.getElementById("auto-duration").textContent = st.last_duration_sec ? fmtDuration(st.last_duration_sec) : "–";
+            document.getElementById("auto-error").textContent = st.last_error || "–";
+        }
+
+        async function loadAutoConfig() {
+            try {
+                const res = await fetchJSON("/api/auto-index/config");
+                renderAutoConfig(res);
+            } catch (err) {
+                console.error("Auto-Index Config laden fehlgeschlagen", err);
+            }
+        }
+
+        async function loadAutoStatus() {
+            try {
+                const res = await fetchJSON("/api/auto-index/status");
+                renderAutoConfig(res);
+            } catch (err) {
+                /* ignore */
+            }
         }
 
         function statusLabel(code) {
@@ -579,6 +736,30 @@
             });
         }
 
+        document.getElementById("auto-enabled").addEventListener("change", saveAutoConfig);
+        document.querySelectorAll("#auto-mode-buttons button").forEach((btn) => {
+            btn.addEventListener("click", () => {
+                const mode = btn.dataset.mode;
+                if (!mode) return;
+                state.autoMode = mode;
+                renderAutoModeButtons(mode);
+                saveAutoConfig();
+            });
+        });
+        document.getElementById("auto-time").addEventListener("change", saveAutoConfig);
+        document.getElementById("auto-weekday").addEventListener("change", saveAutoConfig);
+        document.getElementById("auto-interval").addEventListener("change", saveAutoConfig);
+        document.getElementById("auto-run-now").addEventListener("click", async () => {
+            try {
+                const res = await fetch("/api/auto-index/run", { method: "POST" });
+                if (res.status === 409) {
+                    alert("Indexlauf läuft bereits");
+                }
+            } catch (err) {
+                console.error("Auto-Index-Run fehlgeschlagen", err);
+            }
+        });
+
         async function triggerRun(fullReset = false) {
             const res = await fetch(`/api/admin/index/run?full_reset=${fullReset}`, { method: "POST" });
             if (res.status === 409) {
@@ -606,13 +787,14 @@
         });
 
         async function refreshAll() {
-            await Promise.all([loadTree(), loadRoots(), refreshStatus(), loadLog({ forceReplace: true })]);
+            await Promise.all([loadTree(), loadRoots(), refreshStatus(), loadLog({ forceReplace: true }), loadAutoConfig()]);
         }
 
         refreshAll();
         updateAutoScrollButton();
         setInterval(() => { refreshStatus(); }, POLL_STATUS_MS);
         setInterval(() => { if (state.logOffset === 0) loadLog({ live: true }); }, POLL_LOG_MS);
+        setInterval(() => { loadAutoStatus(); }, 5000);
     </script>
 </body>
 </html>

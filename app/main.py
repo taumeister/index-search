@@ -19,7 +19,6 @@ from app import config_db
 from app.config_loader import CentralConfig, ensure_dirs, load_config
 from app.db import datenbank as db
 from app.indexer.index_lauf_service import (
-    run_index_lauf,
     stop_event,
     load_run_id,
     get_live_status,
@@ -30,12 +29,14 @@ from app import metrics
 from app.search_modes import SearchMode, build_search_plan, normalize_mode
 from app import config_db
 from app.feedback import MAX_FEEDBACK_CHARS, check_rate_limit, send_feedback_email
+from app.index_runner import start_index_run
+from app.auto_index_scheduler import AutoIndexScheduler, AutoIndexConfig, load_config_from_db, load_status_from_db, persist_config
 
 logging.basicConfig(level=logging.INFO)
-index_lock = threading.Lock()
 _metrics_thread_started = False
 _metrics_thread_lock = threading.Lock()
 logger = logging.getLogger(__name__)
+_auto_scheduler: Optional[AutoIndexScheduler] = None
 
 
 def get_config() -> CentralConfig:
@@ -172,6 +173,12 @@ def create_app(config: Optional[CentralConfig] = None) -> FastAPI:
     db.init_db()
     metrics.init_metrics()
     ensure_metrics_background()
+    global _auto_scheduler
+    if not os.getenv("AUTO_INDEX_DISABLE", "").lower() == "1":
+        _auto_scheduler = AutoIndexScheduler(
+            lambda **kwargs: start_index_run(resolve_roots=resolve_active_roots, **kwargs)
+        )
+        _auto_scheduler.start()
     feedback_enabled = bool(getattr(config, "feedback", None) and config.feedback.enabled)
     feedback_recipients = list(getattr(config.feedback, "recipients", []))
     app_version = read_version()
@@ -219,6 +226,70 @@ def create_app(config: Optional[CentralConfig] = None) -> FastAPI:
     @app.get("/metrics", response_class=HTMLResponse)
     def metrics_page(request: Request):
         return templates.TemplateResponse("metrics.html", {"request": request, "app_version": app_version})
+
+    def serialize_status(st: Any) -> Dict[str, Any]:
+        return {
+            "last_run_at": st.last_run_at.isoformat() if getattr(st, "last_run_at", None) else None,
+            "last_duration_sec": st.last_duration_sec,
+            "last_status": st.last_status,
+            "last_error": st.last_error,
+            "next_run_at": st.next_run_at.isoformat() if getattr(st, "next_run_at", None) else None,
+            "running": bool(getattr(st, "running", False)),
+        }
+
+    def serialize_config(cfg: AutoIndexConfig) -> Dict[str, Any]:
+        return {
+            "enabled": cfg.enabled,
+            "mode": cfg.mode,
+            "time": cfg.time,
+            "weekday": cfg.weekday,
+            "interval_hours": cfg.interval_hours,
+        }
+
+    @app.get("/api/auto-index/config")
+    def auto_index_get_config(_auth: bool = Depends(require_secret)):
+        cfg = load_config_from_db()
+        st = _auto_scheduler.status() if _auto_scheduler else load_status_from_db()
+        return {"config": serialize_config(cfg), "status": serialize_status(st)}
+
+    @app.post("/api/auto-index/config")
+    async def auto_index_set_config(payload: Dict[str, Any], _auth: bool = Depends(require_secret)):
+        mode = (payload.get("mode") or "daily").strip().lower()
+        if mode not in {"daily", "weekly", "interval"}:
+            raise HTTPException(status_code=400, detail="Ungültiger Modus")
+        enabled = bool(payload.get("enabled", False))
+        time_str = payload.get("time") or "02:00"
+        weekday = int(payload.get("weekday") or 0)
+        interval_hours = int(payload.get("interval_hours") or 6)
+        cfg = AutoIndexConfig(
+            enabled=enabled,
+            mode=mode,
+            time=time_str,
+            weekday=weekday,
+            interval_hours=interval_hours,
+        )
+        persist_config(cfg)
+        if _auto_scheduler:
+            _auto_scheduler.update_config(cfg)
+            st = _auto_scheduler.status()
+        else:
+            st = load_status_from_db()
+        return {"config": serialize_config(cfg), "status": serialize_status(st)}
+
+    @app.post("/api/auto-index/run")
+    def auto_index_run(_auth: bool = Depends(require_secret)):
+        if _auto_scheduler:
+            res = _auto_scheduler.trigger_now()
+        else:
+            res = start_index_run(resolve_roots=resolve_active_roots)
+        if res == "busy":
+            raise HTTPException(status_code=409, detail="Lauf läuft bereits")
+        return {"status": res}
+
+    @app.get("/api/auto-index/status")
+    def auto_index_status(_auth: bool = Depends(require_secret)):
+        st = _auto_scheduler.status() if _auto_scheduler else load_status_from_db()
+        return {"status": serialize_status(st)}
 
     @app.post("/api/feedback")
     async def submit_feedback(payload: Dict[str, Any], request: Request, _auth: bool = Depends(require_secret)):
@@ -509,20 +580,6 @@ def create_app(config: Optional[CentralConfig] = None) -> FastAPI:
         config_db.update_root_active(root_id, active)
         return {"status": "ok"}
 
-    def _start_index(full_reset: bool = False, cfg_override: Optional[CentralConfig] = None, roots_override: Optional[list[tuple[Path, str]]] = None) -> str:
-        if not index_lock.acquire(blocking=False):
-            return "busy"
-        def runner():
-            try:
-                cfg = cfg_override or load_config()
-                if roots_override is not None:
-                    cfg.paths.roots = roots_override
-                run_index_lauf(cfg)
-            finally:
-                index_lock.release()
-        threading.Thread(target=runner, daemon=True).start()
-        return "started"
-
     @app.post("/api/admin/index/run")
     def trigger_index(full_reset: bool = Query(False), _auth: bool = Depends(require_secret)):
         cfg = load_config()
@@ -530,48 +587,24 @@ def create_app(config: Optional[CentralConfig] = None) -> FastAPI:
             roots = resolve_active_roots(cfg)
         except ValueError as exc:
             return JSONResponse({"status": "error", "detail": str(exc)}, status_code=400)
-        status = _start_index(full_reset, cfg_override=cfg, roots_override=roots)
+        status = start_index_run(full_reset, cfg_override=cfg, roots_override=roots, resolve_roots=resolve_active_roots)
         if status == "busy":
             return JSONResponse({"status": "busy"}, status_code=409)
         return {"status": status}
 
     @app.post("/api/admin/index/reset")
     def reset_index(_auth: bool = Depends(require_secret)):
-        if not index_lock.acquire(blocking=False):
+        status = start_index_run(full_reset=True, reason="reset", resolve_roots=resolve_active_roots)
+        if status == "busy":
             return JSONResponse({"status": "busy"}, status_code=409)
-        try:
-            for suffix in ["data/index.db", "data/index.db-wal", "data/index.db-shm"]:
-                p = Path(suffix)
-                if p.exists():
-                    p.unlink()
-            db.init_db()
-        finally:
-            index_lock.release()
-        return {"status": "reset"}
+        return {"status": status}
 
     @app.post("/api/admin/index/reset_run")
     def reset_and_run(_auth: bool = Depends(require_secret)):
-        if not index_lock.acquire(blocking=False):
+        status = start_index_run(full_reset=True, reason="reset_run", resolve_roots=resolve_active_roots)
+        if status == "busy":
             return JSONResponse({"status": "busy"}, status_code=409)
-        def runner():
-            try:
-                for suffix in ["data/index.db", "data/index.db-wal", "data/index.db-shm"]:
-                    p = Path(suffix)
-                    if p.exists():
-                        p.unlink()
-                db.init_db()
-                cfg = load_config()
-                try:
-                    roots = resolve_active_roots(cfg)
-                except ValueError as exc:
-                    logger.error("Indexlauf abgebrochen: %s", exc)
-                    return
-                cfg.paths.roots = roots
-                run_index_lauf(cfg)
-            finally:
-                index_lock.release()
-        threading.Thread(target=runner, daemon=True).start()
-        return {"status": "started_after_reset"}
+        return {"status": status}
 
     @app.post("/api/admin/index/stop")
     def stop_index(_auth: bool = Depends(require_secret)):
@@ -832,6 +865,15 @@ def create_app(config: Optional[CentralConfig] = None) -> FastAPI:
         except ValueError:
             target = base_root
         return {"base": str(base_root), "parent": str(target), "children": list_children(target)}
+
+    @app.on_event("shutdown")
+    def shutdown_scheduler():
+        global _auto_scheduler
+        if _auto_scheduler:
+            try:
+                _auto_scheduler.stop()
+            except Exception:
+                pass
 
     return app
 

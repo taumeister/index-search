@@ -40,6 +40,16 @@ def seed_defaults(conn: sqlite3.Connection) -> None:
         "log_dir": "logs",
         "rotation_mb": "10",
         "send_report_enabled": "0",
+        "auto_index_enabled": "0",
+        "auto_index_mode": "daily",
+        "auto_index_time": "02:00",
+        "auto_index_weekday": "0",
+        "auto_index_interval_hours": "6",
+        "auto_index_last_run_at": "",
+        "auto_index_last_duration": "",
+        "auto_index_last_status": "",
+        "auto_index_last_error": "",
+        "auto_index_next_run_at": "",
     }
     for key, value in defaults.items():
         conn.execute(
@@ -72,6 +82,50 @@ def set_setting(key: str, value: str) -> None:
             "INSERT INTO settings(key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value=excluded.value",
             (key, value),
         )
+
+
+def get_auto_index_config() -> Dict[str, str]:
+    keys = [
+        "auto_index_enabled",
+        "auto_index_mode",
+        "auto_index_time",
+        "auto_index_weekday",
+        "auto_index_interval_hours",
+    ]
+    with get_conn() as conn:
+        cfg = {k: get_setting(k, None) for k in keys}
+    return cfg
+
+
+def set_auto_index_config(values: Dict[str, str]) -> None:
+    with get_conn() as conn:
+        for key, value in values.items():
+            conn.execute(
+                "INSERT INTO settings(key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value=excluded.value",
+                (key, value),
+            )
+
+
+def get_auto_index_status() -> Dict[str, str]:
+    keys = [
+        "auto_index_last_run_at",
+        "auto_index_last_duration",
+        "auto_index_last_status",
+        "auto_index_last_error",
+        "auto_index_next_run_at",
+    ]
+    with get_conn() as conn:
+        status = {k: get_setting(k, None) for k in keys}
+    return status
+
+
+def set_auto_index_status(values: Dict[str, str]) -> None:
+    with get_conn() as conn:
+        for key, value in values.items():
+            conn.execute(
+                "INSERT INTO settings(key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value=excluded.value",
+                (key, value),
+            )
 
 
 def list_roots(active_only: bool = True) -> List[Tuple[str, str, int, bool]]:
