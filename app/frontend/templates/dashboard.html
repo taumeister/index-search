@@ -35,6 +35,7 @@
         .row { display: grid; gap: 12px; }
         .row.top { grid-template-columns: 2fr 1fr; }
         .row.middle { grid-template-columns: 1fr; }
+        .row.quarantine-row { grid-template-columns: 1fr; }
         .row.bottom { grid-template-columns: 1fr; }
         @media (max-width: 1100px) { .row.top { grid-template-columns: 1fr; } }
         .panel { background: var(--panel); border: 1px solid var(--border); border-radius: 12px; padding: 14px; box-shadow: 0 8px 20px rgba(15,23,42,0.06); }
@@ -90,6 +91,19 @@
         .inline-field input, .inline-field select { padding: 7px 8px; border-radius: 8px; border: 1px solid #d1d5db; font-size: 13px; }
         .status-line { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 6px; font-size: 13px; color: #1f2937; }
         .muted { color: var(--muted); font-size: 12px; }
+        .quarantine-controls { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 8px; }
+        .quarantine-controls input, .quarantine-controls select { padding: 7px 8px; border-radius: 8px; border: 1px solid var(--border); font-size: 13px; }
+        .quarantine-controls button { padding: 8px 10px; border-radius: 8px; border: 1px solid var(--border); background: #fff; cursor: pointer; font-size: 13px; }
+        .quarantine-table-wrap { max-height: 420px; overflow: auto; border: 1px solid var(--border); border-radius: 10px; }
+        .quarantine-table { width: 100%; border-collapse: collapse; }
+        .quarantine-table th, .quarantine-table td { border-bottom: 1px solid var(--border); padding: 6px 8px; text-align: left; font-size: 13px; }
+        .quarantine-table td.path { max-width: 260px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .quarantine-table td.quarantine-col { max-width: 200px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .quarantine-table td.actions { white-space: nowrap; }
+        .quarantine-actions { display: flex; gap: 6px; flex-wrap: wrap; }
+        .quarantine-actions button { padding: 6px 8px; border-radius: 6px; border: 1px solid #cbd5e1; background: #f8fafc; cursor: pointer; font-size: 12px; }
+        .quarantine-actions button.restore { background: #ecfeff; border-color: #bae6fd; color: #0ea5e9; }
+        .quarantine-actions button.delete { background: #fef2f2; border-color: #fecdd3; color: #b91c1c; }
     </style>
 </head>
 <body>
@@ -290,6 +304,53 @@
                 </div>
             </section>
         </div>
+        <div class="row quarantine-row">
+            <section class="panel quarantine-panel">
+                <div class="panel-head">
+                    <div>
+                        <div class="eyebrow">Quarantäne</div>
+                        <h2>Gesperrte Dateien</h2>
+                        <div class="subtext">Restore oder endgültig löschen</div>
+                    </div>
+                    <div class="status-pill" id="quarantine-availability" data-state="idle">Status</div>
+                </div>
+                <div class="chip-row" id="quarantine-meta">
+                    <span class="pill" id="quarantine-retention">Retention: –</span>
+                    <span class="pill" id="quarantine-schedule">Cleanup: –</span>
+                </div>
+                <div class="quarantine-controls">
+                    <select id="quarantine-source-filter" aria-label="Quelle filtern">
+                        <option value="">Alle Quellen</option>
+                    </select>
+                    <select id="quarantine-age-filter" aria-label="Alter filtern">
+                        <option value="">Alter: alle</option>
+                        <option value="7">≤ 7 Tage</option>
+                        <option value="30">≤ 30 Tage</option>
+                        <option value="90">≤ 90 Tage</option>
+                    </select>
+                    <input type="search" id="quarantine-search" placeholder="Suche nach Name/Pfad" aria-label="Quarantäne-Suche">
+                    <button id="quarantine-refresh">Aktualisieren</button>
+                </div>
+                <div class="quarantine-table-wrap">
+                    <table class="quarantine-table">
+                        <thead>
+                            <tr>
+                                <th>Datei</th>
+                                <th>Quelle</th>
+                                <th>Originalpfad</th>
+                                <th>Quarantäne</th>
+                                <th>Größe</th>
+                                <th>Seit</th>
+                                <th>Aktionen</th>
+                            </tr>
+                        </thead>
+                        <tbody id="quarantine-rows">
+                            <tr><td colspan="7" class="muted">Lade…</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </section>
+        </div>
         <div class="row bottom">
             <section class="panel log-panel">
                 <div class="panel-head">
@@ -316,6 +377,8 @@
         const POLL_STATUS_MS = 2000;
         const POLL_LOG_MS = 2000;
         const POLL_ERRORS_MS = 15000;
+        const quarantineState = { entries: [], sourceFilter: "", ageFilter: "", search: "", loading: false };
+        let quarantineSearchTimer = null;
 
         async function fetchJSON(url, opts = {}) {
             const res = await fetch(url, opts);
@@ -324,6 +387,24 @@
                 throw new Error(text || res.statusText);
             }
             return res.json();
+        }
+
+        function escapeHtml(str) {
+            return String(str || "")
+                .replace(/&/g, "&amp;")
+                .replace(/</g, "&lt;")
+                .replace(/>/g, "&gt;")
+                .replace(/"/g, "&quot;")
+                .replace(/'/g, "&#39;");
+        }
+
+        function formatSize(bytes) {
+            const n = Number(bytes);
+            if (!Number.isFinite(n) || n < 0) return "–";
+            if (n < 1024) return `${n} B`;
+            if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`;
+            if (n < 1024 * 1024 * 1024) return `${(n / (1024 * 1024)).toFixed(1)} MB`;
+            return `${(n / (1024 * 1024 * 1024)).toFixed(1)} GB`;
         }
 
         function setText(id, value) {
@@ -349,6 +430,159 @@
             const m = Math.floor((total % 3600) / 60).toString().padStart(2, "0");
             const s = Math.floor(total % 60).toString().padStart(2, "0");
             return `${h}:${m}:${s}`;
+        }
+
+        function updateQuarantineMeta(statusData) {
+            const pill = document.getElementById("quarantine-availability");
+            const readyList = Array.isArray(statusData && statusData.quarantine_ready_sources) ? statusData.quarantine_ready_sources : [];
+            const enabled = Boolean(statusData && statusData.file_ops_enabled && readyList.length);
+            if (pill) {
+                pill.textContent = enabled ? "Bereit" : "Nicht bereit";
+                pill.dataset.state = enabled ? "running" : "idle";
+            }
+            const retention = document.getElementById("quarantine-retention");
+            if (retention) {
+                const days = statusData && statusData.quarantine_retention_days != null ? statusData.quarantine_retention_days : "–";
+                retention.textContent = `Retention: ${days} Tage`;
+            }
+            const schedule = document.getElementById("quarantine-schedule");
+            if (schedule) {
+                const sched = (statusData && statusData.quarantine_cleanup_schedule) || "–";
+                const dry = statusData && statusData.quarantine_cleanup_dry_run ? " (Dry-run)" : "";
+                schedule.textContent = `Cleanup: ${sched}${dry}`;
+            }
+            const sourceSelect = document.getElementById("quarantine-source-filter");
+            if (sourceSelect) {
+                const prev = sourceSelect.value;
+                sourceSelect.innerHTML = '<option value="">Alle Quellen</option>';
+                readyList.forEach((item) => {
+                    const val = item.label || item;
+                    if (!val) return;
+                    const opt = document.createElement("option");
+                    opt.value = val;
+                    opt.textContent = val;
+                    sourceSelect.appendChild(opt);
+                });
+                if (Array.from(sourceSelect.options).some((opt) => opt.value === prev)) {
+                    sourceSelect.value = prev;
+                }
+            }
+        }
+
+        function renderQuarantine(entries) {
+            const body = document.getElementById("quarantine-rows");
+            if (!body) return;
+            if (!Array.isArray(entries) || entries.length === 0) {
+                body.innerHTML = '<tr><td colspan="7" class="muted">Keine Quarantäne-Einträge</td></tr>';
+                return;
+            }
+            body.innerHTML = "";
+            entries.forEach((e) => {
+                const tr = document.createElement("tr");
+                const movedAt = e.moved_at ? fmtDateTime(e.moved_at) : "–";
+                const sizeLabel = formatSize(e.size_bytes);
+                const originalPath = e.original_path || "";
+                const quarantinePath = e.quarantine_path || "";
+                tr.innerHTML = `
+                    <td>${escapeHtml(e.original_filename || "")}</td>
+                    <td>${escapeHtml(e.source || "")}</td>
+                    <td class="path" title="${escapeHtml(originalPath)}">${escapeHtml(originalPath)}</td>
+                    <td class="quarantine-col" title="${escapeHtml(quarantinePath)}">${escapeHtml(quarantinePath)}</td>
+                    <td class="small">${sizeLabel}</td>
+                    <td class="small">${movedAt}</td>
+                    <td class="actions">
+                        <div class="quarantine-actions" data-id="${e.id}">
+                            <button class="restore" data-action="restore">Restore</button>
+                            <button class="delete" data-action="hard-delete">Löschen</button>
+                        </div>
+                    </td>`;
+                body.appendChild(tr);
+            });
+            body.querySelectorAll(".quarantine-actions").forEach((wrap) => {
+                const id = wrap.dataset.id;
+                wrap.addEventListener("click", (ev) => {
+                    const action = ev.target.dataset.action;
+                    if (action === "restore") {
+                        restoreEntry(id);
+                    } else if (action === "hard-delete") {
+                        const row = ev.target.closest("tr");
+                        const name = row ? row.children[0].textContent.trim() : "";
+                        hardDeleteEntry(id, name);
+                    }
+                });
+            });
+        }
+
+        async function loadQuarantine() {
+            const body = document.getElementById("quarantine-rows");
+            if (!body) return;
+            quarantineState.loading = true;
+            body.innerHTML = '<tr><td colspan="7" class="muted">Lade…</td></tr>';
+            const params = [];
+            if (quarantineState.sourceFilter) params.push(`source=${encodeURIComponent(quarantineState.sourceFilter)}`);
+            if (quarantineState.search) params.push(`q=${encodeURIComponent(quarantineState.search)}`);
+            if (quarantineState.ageFilter) params.push(`max_age_days=${quarantineState.ageFilter}`);
+            const url = `/api/quarantine/list${params.length ? "?" + params.join("&") : ""}`;
+            try {
+                const data = await fetchJSON(url);
+                quarantineState.entries = Array.isArray(data.entries) ? data.entries : [];
+                renderQuarantine(quarantineState.entries);
+            } catch (err) {
+                body.innerHTML = `<tr><td colspan="7" class="muted">Quarantäne nicht verfügbar (${escapeHtml(err.message || err)})</td></tr>`;
+            } finally {
+                quarantineState.loading = false;
+            }
+        }
+
+        async function restoreEntry(id) {
+            if (!id) return;
+            if (!confirm("Datei wiederherstellen?")) return;
+            try {
+                await fetchJSON(`/api/quarantine/${id}/restore`, { method: "POST" });
+                await loadQuarantine();
+                await refreshStatus();
+            } catch (err) {
+                alert(`Restore fehlgeschlagen: ${err}`);
+            }
+        }
+
+        async function hardDeleteEntry(id, name) {
+            if (!id) return;
+            const label = name ? ` ${name}` : "";
+            if (!confirm(`Endgültig löschen${label}?`)) return;
+            if (!confirm("Sicher? Datei wird dauerhaft entfernt.")) return;
+            try {
+                await fetchJSON(`/api/quarantine/${id}/hard-delete`, { method: "POST" });
+                await loadQuarantine();
+                await refreshStatus();
+            } catch (err) {
+                alert(`Löschen fehlgeschlagen: ${err}`);
+            }
+        }
+
+        function wireQuarantineControls() {
+            const sourceSelect = document.getElementById("quarantine-source-filter");
+            const ageSelect = document.getElementById("quarantine-age-filter");
+            const searchInput = document.getElementById("quarantine-search");
+            const refreshBtn = document.getElementById("quarantine-refresh");
+            sourceSelect?.addEventListener("change", () => {
+                quarantineState.sourceFilter = sourceSelect.value;
+                loadQuarantine();
+            });
+            ageSelect?.addEventListener("change", () => {
+                quarantineState.ageFilter = ageSelect.value;
+                loadQuarantine();
+            });
+            if (searchInput) {
+                searchInput.addEventListener("input", () => {
+                    window.clearTimeout(quarantineSearchTimer);
+                    quarantineSearchTimer = window.setTimeout(() => {
+                        quarantineState.search = searchInput.value.trim();
+                        loadQuarantine();
+                    }, 250);
+                });
+            }
+            refreshBtn?.addEventListener("click", () => loadQuarantine());
         }
 
         function describePlan(cfg) {
@@ -544,6 +778,7 @@
                 const finished = last.finished_at ? fmtDateTime(last.finished_at) : "läuft";
                 setText("last-run-label", `${fmtDateTime(last.started_at)} → ${finished}`);
             }
+            updateQuarantineMeta(statusData);
             const toggle = document.getElementById("toggle-report");
             if (toggle) toggle.checked = Boolean(statusData.send_report_enabled);
             renderExtCounts(statusData.ext_counts || []);
@@ -845,8 +1080,15 @@
             scrollLogIfNeeded(true);
         });
 
+        wireQuarantineControls();
+
         async function refreshAll() {
-            await Promise.all([loadTree(), loadRoots(), refreshStatus(), loadLog({ forceReplace: true }), loadAutoConfig()]);
+            try {
+                await Promise.all([loadTree(), loadRoots(), refreshStatus(), loadLog({ forceReplace: true }), loadAutoConfig()]);
+            } catch (err) {
+                console.error("Initiales Laden fehlgeschlagen", err);
+            }
+            loadQuarantine();
         }
 
         refreshAll();
@@ -854,6 +1096,7 @@
         setInterval(() => { refreshStatus(); }, POLL_STATUS_MS);
         setInterval(() => { if (state.logOffset === 0) loadLog({ live: true }); }, POLL_LOG_MS);
         setInterval(() => { loadAutoStatus(); }, 5000);
+        setInterval(() => { loadQuarantine(); }, 20000);
     </script>
 </body>
 </html>

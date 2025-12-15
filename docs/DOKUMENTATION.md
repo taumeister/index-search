@@ -22,6 +22,7 @@
 - Tabelle `documents`: Metadaten (Quelle, Pfad, Größe, Zeiten, Besitzer, MSG-Felder, Tags).
 - FTS5 `documents_fts`: `doc_id`, `content`, `title_or_subject`.
 - Logging: `index_runs` (Laufstatus) und `file_errors`.
+- Quarantäne-Registry: `quarantine_entries` speichert pro Move `doc_id`, Quelle, Original-/Quarantänepfad, Filename, Actor, Größe, Zeitstempel, Status (`quarantined|restored|hard_deleted|cleanup_deleted`), optionale Restore-/Delete-Zeitpunkte.
 - WAL-Mode aktiviert.
 
 ## Konfiguration (`config/config.db`)
@@ -37,6 +38,11 @@
 - Worker parallelisiert per ThreadPool; Limit per Config.
 - Ausschlüsse: `INDEX_EXCLUDE_DIRS` (kommagetrennt, Default `.quarantine`) schließt Ordner/Pfade pro Quelle beim Traversieren aus (z. B. `.git`, `node_modules`, `.quarantine`), damit sie gar nicht indiziert werden.
 
+## Quarantäne & Cleanup
+- ENV: `QUARANTINE_RETENTION_DAYS` (Default 30), `QUARANTINE_CLEANUP_SCHEDULE` (Default `daily`, `hourly` oder `off`), `QUARANTINE_CLEANUP_DRYRUN` (optional Dry-Run).
+- Cleanup-Thread läuft im App-Prozess (nicht unter Pytest), löscht ausschließlich unter `<root>/.quarantine/` anhand `mtime`/Datumsordner und schreibt Audit nach `data/audit/file_ops.jsonl`; Locking schützt vor parallelem Restore/Move.
+- Registry-Status wird nach Cleanup auf `cleanup_deleted`, nach Hard-Delete auf `hard_deleted`, nach Restore auf `restored` gesetzt. Sidecar-Dateien werden nicht genutzt, alles landet in `quarantine_entries`.
+
 ## Web-API
 - `GET /`: Hauptseite.
 - `GET /dashboard`: System/Dashboard mit Roots/Status.
@@ -48,7 +54,7 @@
 - `GET /api/document/{id}/file`: Originaldatei (Download/Inline).
 - `GET /api/sources`: Deduplizierte aktive Quellen-Labels (Basis für Quellen-Filter im UI).
 - `GET /api/admin/status`: Gesamtanzahl, letzter Lauf, Historie, Admin-/File-Op-Status, `index_exclude_dirs`.
-- Admin/Explorer: `POST /api/admin/login`/`logout` (Passwort via `ADMIN_PASSWORD`, Session-Cookie), `/api/admin/status` liefert `file_ops_enabled` und Quarantäne-Readiness; `/api/files/{doc_id}/quarantine-delete` verschiebt Treffer in `<root>/.quarantine/<YYYY-MM-DD>/` und entfernt ihn aus dem Index.
+- Admin/Explorer/Quarantäne: `POST /api/admin/login`/`logout` (Passwort via `ADMIN_PASSWORD`, Session-Cookie), `/api/admin/status` liefert `file_ops_enabled`, Quarantäne-Ready-Liste und Cleanup-Konfig; `POST /api/files/{doc_id}/quarantine-delete` verschiebt Treffer in `<root>/.quarantine/<YYYY-MM-DD>/docid__name`, schreibt Metadaten in `quarantine_entries` und entfernt ihn aus dem Index; `GET /api/quarantine/list` listet Registry-Einträge (Filter Quelle/Alter/Text), `POST /api/quarantine/{id}/restore` stellt Dateien wieder her (bei Konflikt Suffix `_restored_<timestamp>`), `POST /api/quarantine/{id}/hard-delete` entfernt Quarantäne-Datei + Registry-Eintrag. Alle File-Ops: Admin-Pflicht, Pfad-Guard (realpath innerhalb Quelle/.quarantine), Locking pro Datei.
 - `GET/POST/DELETE /api/admin/roots`: Roots verwalten (aktiv, Pfad, Label). Add-Root validiert: Pfad muss existieren, unter `base_data_root` liegen, kein Fallback auf `/data`.
 - `POST /api/admin/index/run`: Indexlauf starten, optional Reset.
 - `GET /api/admin/errors`: Fehlerliste.
@@ -66,7 +72,7 @@
 - Download-Link öffnet Originaldatei.
 - Pop-up/Viewer: kleinere Fenstergröße (ca. 60%/70% des Bildschirms), Druck-Button, minimierte Toolbar; Print öffnet den Dialog ohne neues Browser-Tab.
 - Feedback-Overlay: öffnet bei Klick auf den Header-Button, dimmt Hintergrund, Editor mit Toolbar und Zeichenzähler, Abbruch/Senden-Buttons plus zweistufige Bestätigung; ESC oder Klick außerhalb schließt.
-- Dashboard: Auto-Index-Zeitplaner (Toggle, Modus-Buttons täglich/wöchentlich/intervall, Uhrzeit, Wochentags-/Intervall-Buttons, Plan speichern, Jetzt ausführen, Plan-/Status-Anzeige), Index-Live-Status, Roots/Explorer, Live-Log, Fehlerliste.
+- Dashboard: Auto-Index-Zeitplaner (Toggle, Modus-Buttons täglich/wöchentlich/intervall, Uhrzeit, Wochentags-/Intervall-Buttons, Plan speichern, Jetzt ausführen, Plan-/Status-Anzeige), Index-Live-Status, Roots/Explorer, Live-Log, Fehlerliste, Quarantäne-Panel (Liste der Registry-Einträge mit Filter Quelle/Alter/Suche, Aktionen Restore/Hard-Delete mit Bestätigung, Anzeige Retention/Cleanup-Konfig, Auto-Refresh).
 
 ## Tests
 - `pytest` deckt Config-Validierung, DB/FTS-Funktion, Indexlauf und API-Suche ab.

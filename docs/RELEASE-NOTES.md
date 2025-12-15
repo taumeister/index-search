@@ -1,5 +1,15 @@
 # Release-Notizen
 
+## v0.3.10
+- Neue Quarantäne-Doku (`docs/QUARANTAENE.md`) mit End-to-End-Flow (Registry, Restore, Hard-Delete, Cleanup, ENV/Locks/Safety).
+- Version angehoben.
+
+## v0.3.9
+- Quarantäne-Retention: Cleanup-Thread in der App (ENV `QUARANTINE_RETENTION_DAYS`, optional `QUARANTINE_CLEANUP_SCHEDULE`/`QUARANTINE_CLEANUP_DRYRUN`), löscht nur unter `.quarantine`, Audit/Locking pro Datei.
+- Registry beim Quarantäne-Move (SQLite `quarantine_entries` mit Pflichtfeldern doc_id/Quelle/Original-/Quarantänepfad/Filename/Actor/moved_at/size), Operation bricht ohne Metadaten ab; Status-Updates für Restore/Hard-Delete/Cleanup.
+- Neue Quarantäne-APIs (`/api/quarantine/list|{id}/restore|{id}/hard-delete`) mit Admin-Pflicht und Pfad-Guards; Dashboard-Panel mit Filter (Quelle/Alter/Suche), Restore/Hard-Delete mit Confirm, Anzeige Retention/Cleanup.
+- Tests ergänzt (Retention löscht alt, Registry geschrieben, Restore/HARD-Delete, Safety: keine Löschungen außerhalb `.quarantine`, Admin-Pflicht).
+
 ## v0.3.8
 - Explorer/Quarantäne: Admin-Login (Passwort nur via `ADMIN_PASSWORD`), Kontextmenü „Löschen“ verschiebt Dateien nach `<root>/.quarantine/<YYYY-MM-DD>/docid__name`, entfernt sie sofort aus dem Index und schreibt Audit nach `data/audit/file_ops.jsonl`.
 - Quarantäne-Readiness pro Quelle mit Write-Test; Admin-Status liefert `file_ops_enabled`, Quarantäne-Quellen und `index_exclude_dirs`.

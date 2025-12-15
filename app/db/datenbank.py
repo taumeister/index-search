@@ -29,6 +29,25 @@ class DocumentMeta:
     title_or_subject: str = ""
 
 
+@dataclass
+class QuarantineEntry:
+    doc_id: int
+    source: str
+    source_root: str
+    original_path: str
+    quarantine_path: str
+    original_filename: str
+    moved_at: str
+    actor: str
+    size_bytes: Optional[int] = None
+    hash: Optional[str] = None
+    status: str = "quarantined"
+    restored_path: Optional[str] = None
+    restored_at: Optional[str] = None
+    hard_deleted_at: Optional[str] = None
+    cleanup_deleted_at: Optional[str] = None
+
+
 def connect() -> sqlite3.Connection:
     DB_PATH.parent.mkdir(parents=True, exist_ok=True)
     conn = sqlite3.connect(DB_PATH)
@@ -108,7 +127,28 @@ def init_db() -> None:
                 path TEXT NOT NULL,
                 PRIMARY KEY(run_id, path)
             );
-            """
+
+            CREATE TABLE IF NOT EXISTS quarantine_entries (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                doc_id INTEGER,
+                source TEXT NOT NULL,
+                source_root TEXT NOT NULL,
+                original_path TEXT NOT NULL,
+                quarantine_path TEXT NOT NULL UNIQUE,
+                original_filename TEXT NOT NULL,
+                moved_at TEXT NOT NULL,
+                actor TEXT NOT NULL,
+                size_bytes INTEGER,
+                hash TEXT,
+                status TEXT NOT NULL DEFAULT 'quarantined',
+                restored_path TEXT,
+                restored_at TEXT,
+                hard_deleted_at TEXT,
+                cleanup_deleted_at TEXT
+            );
+            CREATE INDEX IF NOT EXISTS idx_quarantine_status ON quarantine_entries(status);
+            CREATE INDEX IF NOT EXISTS idx_quarantine_moved_at ON quarantine_entries(moved_at);
+        """
         )
 
 
@@ -283,6 +323,94 @@ def get_document_content(conn: sqlite3.Connection, doc_id: int) -> Optional[str]
     cursor = conn.execute("SELECT content FROM documents_fts WHERE doc_id = ?", (doc_id,))
     row = cursor.fetchone()
     return row[0] if row else None
+
+
+def insert_quarantine_entry(conn: sqlite3.Connection, entry: QuarantineEntry) -> int:
+    payload = asdict(entry)
+    cur = conn.execute(
+        """
+        INSERT INTO quarantine_entries (
+            doc_id, source, source_root, original_path, quarantine_path, original_filename, moved_at, actor,
+            size_bytes, hash, status, restored_path, restored_at, hard_deleted_at, cleanup_deleted_at
+        ) VALUES (
+            :doc_id, :source, :source_root, :original_path, :quarantine_path, :original_filename, :moved_at, :actor,
+            :size_bytes, :hash, :status, :restored_path, :restored_at, :hard_deleted_at, :cleanup_deleted_at
+        );
+        """,
+        payload,
+    )
+    return cur.lastrowid
+
+
+def get_quarantine_entry(conn: sqlite3.Connection, entry_id: int) -> Optional[sqlite3.Row]:
+    cur = conn.execute("SELECT * FROM quarantine_entries WHERE id = ?", (entry_id,))
+    return cur.fetchone()
+
+
+def get_quarantine_entry_by_path(conn: sqlite3.Connection, quarantine_path: str) -> Optional[sqlite3.Row]:
+    cur = conn.execute("SELECT * FROM quarantine_entries WHERE quarantine_path = ?", (quarantine_path,))
+    return cur.fetchone()
+
+
+def list_quarantine_entries(
+    conn: sqlite3.Connection, status: Optional[str] = None, source: Optional[str] = None
+) -> List[sqlite3.Row]:
+    sql = "SELECT * FROM quarantine_entries"
+    params: List[Any] = []
+    clauses: List[str] = []
+    if status:
+        clauses.append("status = ?")
+        params.append(status)
+    if source:
+        clauses.append("source = ?")
+        params.append(source)
+    if clauses:
+        sql += " WHERE " + " AND ".join(clauses)
+    sql += " ORDER BY moved_at DESC, id DESC"
+    cur = conn.execute(sql, params)
+    return cur.fetchall()
+
+
+def update_quarantine_entry(conn: sqlite3.Connection, entry_id: int, **fields: Any) -> None:
+    if not fields:
+        return
+    cols = []
+    params: List[Any] = []
+    for key, value in fields.items():
+        cols.append(f"{key} = ?")
+        params.append(value)
+    params.append(entry_id)
+    conn.execute(f"UPDATE quarantine_entries SET {', '.join(cols)} WHERE id = ?", params)
+
+
+def mark_quarantine_restored(
+    conn: sqlite3.Connection, entry_id: int, restored_path: str, restored_at: str
+) -> None:
+    update_quarantine_entry(
+        conn,
+        entry_id,
+        status="restored",
+        restored_path=restored_path,
+        restored_at=restored_at,
+    )
+
+
+def mark_quarantine_hard_deleted(conn: sqlite3.Connection, entry_id: int, deleted_at: str) -> None:
+    update_quarantine_entry(
+        conn,
+        entry_id,
+        status="hard_deleted",
+        hard_deleted_at=deleted_at,
+    )
+
+
+def mark_quarantine_cleanup_deleted(conn: sqlite3.Connection, entry_id: int, deleted_at: str) -> None:
+    update_quarantine_entry(
+        conn,
+        entry_id,
+        status="cleanup_deleted",
+        cleanup_deleted_at=deleted_at,
+    )
 
 
 def record_index_run_start(

@@ -95,6 +95,13 @@ class FeedbackConfig(BaseModel):
 
 
 @dataclasses.dataclass
+class QuarantineConfig:
+    retention_days: int = 30
+    cleanup_schedule: str = "daily"
+    cleanup_dry_run: bool = False
+
+
+@dataclasses.dataclass
 class CentralConfig:
     paths: PathsConfig
     indexer: IndexerConfig
@@ -103,6 +110,7 @@ class CentralConfig:
     logging: LoggingConfig
     report_enabled: bool = False
     feedback: FeedbackConfig = field(default_factory=FeedbackConfig)
+    quarantine: QuarantineConfig = field(default_factory=QuarantineConfig)
     raw: Optional[configparser.ConfigParser] = None
 
 
@@ -171,6 +179,13 @@ def load_config(path: Path = Path("config/central_config.ini"), use_env: bool = 
         recipients=[r.strip() for r in (os.getenv("FEEDBACK_TO", "") if use_env else "").split(",") if r.strip()],
     )
 
+    quarantine_cfg = QuarantineConfig(
+        retention_days=max(0, int(os.getenv("QUARANTINE_RETENTION_DAYS", "30") or 30)) if use_env else 30,
+        cleanup_schedule=(os.getenv("QUARANTINE_CLEANUP_SCHEDULE", "daily") if use_env else "daily").strip().lower()
+        or "daily",
+        cleanup_dry_run=os.getenv("QUARANTINE_CLEANUP_DRYRUN", "false").lower() == "true" if use_env else False,
+    )
+
     return CentralConfig(
         paths=paths_cfg,
         indexer=indexer_cfg,
@@ -179,6 +194,7 @@ def load_config(path: Path = Path("config/central_config.ini"), use_env: bool = 
         logging=logging_cfg,
         report_enabled=False,  # Dashboard steuert das Flag
         feedback=feedback_cfg,
+        quarantine=quarantine_cfg,
         raw=None,
     )
 

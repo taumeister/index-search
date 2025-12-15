@@ -1,14 +1,20 @@
 import errno
 import json
+import logging
 import os
 import shutil
+import threading
 import time
+from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, Iterable, List, Optional, Tuple
 
 from app.db import datenbank as db
+from app.db.datenbank import QuarantineEntry
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -19,6 +25,13 @@ class SourceInfo:
     ready: bool
 
 
+@dataclass
+class QuarantineSettings:
+    retention_days: int = 30
+    cleanup_schedule: str = "daily"
+    cleanup_dry_run: bool = False
+
+
 class FileOpError(Exception):
     def __init__(self, message: str, status_code: int = 400):
         super().__init__(message)
@@ -27,6 +40,11 @@ class FileOpError(Exception):
 
 AUDIT_LOG = Path("data/audit/file_ops.jsonl")
 _sources: Dict[str, SourceInfo] = {}
+_settings = QuarantineSettings()
+_locks: Dict[str, threading.Lock] = {}
+_locks_guard = threading.Lock()
+_cleanup_thread: Optional[threading.Thread] = None
+_cleanup_stop = threading.Event()
 
 
 def _canonical(path: Path) -> Path:
@@ -34,6 +52,26 @@ def _canonical(path: Path) -> Path:
         return path.resolve()
     except Exception:
         return Path(os.path.abspath(path))
+
+
+def check_within_root(path: Path, root: Path) -> bool:
+    try:
+        canonical_path = _canonical(path)
+        canonical_root = _canonical(root)
+        return canonical_path.is_relative_to(canonical_root)
+    except Exception:
+        return False
+
+
+def _audit(entry: Dict[str, object]) -> None:
+    payload = dict(entry) if isinstance(entry, dict) else {}
+    payload.setdefault("timestamp", datetime.now(timezone.utc).isoformat())
+    try:
+        AUDIT_LOG.parent.mkdir(parents=True, exist_ok=True)
+        with AUDIT_LOG.open("a", encoding="utf-8") as f:
+            f.write(json.dumps(payload, ensure_ascii=False) + "\n")
+    except Exception:
+        logger.debug("Audit-Log schreiben fehlgeschlagen", exc_info=True)
 
 
 def ensure_quarantine(root: Path) -> Tuple[Path, bool]:
@@ -70,6 +108,17 @@ def refresh_quarantine_state() -> None:
         _sources[label] = SourceInfo(label=label, root=info.root, quarantine_dir=quarantine_dir, ready=ready)
 
 
+def apply_settings(settings: Optional[QuarantineSettings]) -> None:
+    global _settings
+    if settings is None:
+        return
+    _settings = QuarantineSettings(
+        retention_days=max(0, int(getattr(settings, "retention_days", _settings.retention_days))),
+        cleanup_schedule=(getattr(settings, "cleanup_schedule", _settings.cleanup_schedule) or "daily").strip().lower(),
+        cleanup_dry_run=bool(getattr(settings, "cleanup_dry_run", _settings.cleanup_dry_run)),
+    )
+
+
 def get_status() -> Dict[str, object]:
     ready_sources = [
         {"label": info.label, "root": str(info.root), "quarantine_dir": str(info.quarantine_dir), "ready": info.ready}
@@ -79,7 +128,52 @@ def get_status() -> Dict[str, object]:
     return {
         "file_ops_enabled": any(info.ready for info in _sources.values()),
         "quarantine_ready_sources": ready_sources,
+        "quarantine_retention_days": _settings.retention_days,
+        "quarantine_cleanup_schedule": _settings.cleanup_schedule,
+        "quarantine_cleanup_dry_run": _settings.cleanup_dry_run,
     }
+
+
+@contextmanager
+def _locked_paths(paths: Iterable[Path]):
+    keys = sorted({str(_canonical(p)) for p in paths if p})
+    locks: List[threading.Lock] = []
+    with _locks_guard:
+        for key in keys:
+            lock = _locks.get(key)
+            if lock is None:
+                lock = threading.Lock()
+                _locks[key] = lock
+            locks.append(lock)
+    for lock in locks:
+        lock.acquire()
+    try:
+        yield
+    finally:
+        for lock in reversed(locks):
+            try:
+                lock.release()
+            except Exception:
+                pass
+
+
+def _copy_file_with_fsync(src: Path, dest: Path) -> None:
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    with src.open("rb") as fsrc, dest.open("wb") as fdst:
+        shutil.copyfileobj(fsrc, fdst, length=1024 * 1024)
+        fdst.flush()
+        os.fsync(fdst.fileno())
+
+
+def _move_file(src: Path, dest: Path) -> None:
+    try:
+        os.replace(src, dest)
+        return
+    except OSError as exc:
+        if exc.errno != errno.EXDEV:
+            raise
+    _copy_file_with_fsync(src, dest)
+    os.unlink(src)
 
 
 def resolve_doc(doc_id: int) -> Optional[Dict[str, object]]:
@@ -99,41 +193,25 @@ def resolve_doc(doc_id: int) -> Optional[Dict[str, object]]:
     return data
 
 
-def check_within_root(path: Path, root: Path) -> bool:
-    try:
-        canonical_path = _canonical(path)
-        canonical_root = _canonical(root)
-        return canonical_path.is_relative_to(canonical_root)
-    except Exception:
-        return False
+def _resolve_source(label: str, fallback_root: Optional[str] = None) -> SourceInfo:
+    info = _sources.get(label)
+    if info:
+        quarantine_dir, ready = ensure_quarantine(info.root)
+        info = SourceInfo(label=label, root=info.root, quarantine_dir=quarantine_dir, ready=ready)
+        _sources[label] = info
+        return info
+    if not fallback_root:
+        raise FileOpError("Quelle nicht verfügbar", status_code=400)
+    root_path = _canonical(Path(fallback_root))
+    quarantine_dir, ready = ensure_quarantine(root_path)
+    info = SourceInfo(label=label, root=root_path, quarantine_dir=quarantine_dir, ready=ready)
+    _sources[label] = info
+    return info
 
 
-def _copy_file_with_fsync(src: Path, dest: Path) -> None:
-    dest.parent.mkdir(parents=True, exist_ok=True)
-    with src.open("rb") as fsrc, dest.open("wb") as fdst:
-        shutil.copyfileobj(fsrc, fdst, length=1024 * 1024)
-        fdst.flush()
-        os.fsync(fdst.fileno())
-
-
-def _move_to_quarantine(src: Path, dest: Path) -> None:
-    try:
-        os.replace(src, dest)
-        return
-    except OSError as exc:
-        if exc.errno != errno.EXDEV:
-            raise
-    _copy_file_with_fsync(src, dest)
-    os.unlink(src)
-
-
-def _audit(entry: Dict[str, object]) -> None:
-    try:
-        AUDIT_LOG.parent.mkdir(parents=True, exist_ok=True)
-        with AUDIT_LOG.open("a", encoding="utf-8") as f:
-            f.write(json.dumps(entry, ensure_ascii=False) + "\n")
-    except Exception:
-        pass
+def _assert_quarantine_ready(info: SourceInfo) -> None:
+    if not info.ready:
+        raise FileOpError("Quarantäne nicht verfügbar", status_code=400)
 
 
 def quarantine_delete(doc_id: int, actor: str = "admin") -> Dict[str, object]:
@@ -142,15 +220,8 @@ def quarantine_delete(doc_id: int, actor: str = "admin") -> Dict[str, object]:
         raise FileOpError("Dokument nicht gefunden", status_code=404)
 
     source_label = doc.get("source") or ""
-    info = _sources.get(source_label)
-    if not info:
-        raise FileOpError("Quelle nicht verfügbar", status_code=400)
-
-    quarantine_dir, ready = ensure_quarantine(info.root)
-    info = SourceInfo(label=info.label, root=info.root, quarantine_dir=quarantine_dir, ready=ready)
-    _sources[source_label] = info
-    if not info.ready:
-        raise FileOpError("Quarantäne nicht verfügbar", status_code=400)
+    info = _resolve_source(source_label)
+    _assert_quarantine_ready(info)
 
     abs_path = doc.get("abs_path")
     if not isinstance(abs_path, Path):
@@ -160,38 +231,321 @@ def quarantine_delete(doc_id: int, actor: str = "admin") -> Dict[str, object]:
     if not abs_path.exists():
         raise FileOpError("Datei nicht gefunden", status_code=404)
 
-    date_folder = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    date_folder = datetime.now().strftime("%Y-%m-%d")
     target_dir = info.quarantine_dir / date_folder
-    target_dir.mkdir(parents=True, exist_ok=True)
     target_path = target_dir / f"{doc_id}__{abs_path.name}"
+    if target_path.exists():
+        raise FileOpError("Quarantäne-Ziel existiert bereits", status_code=409)
 
     audit_base = {
-        "timestamp": datetime.now(timezone.utc).isoformat(),
         "actor": actor or "admin",
         "doc_id": doc_id,
         "source": source_label,
         "source_root": str(info.root),
         "original_path": str(abs_path),
         "quarantine_path": str(target_path),
+        "action": "quarantine_delete",
     }
+    entry_id: Optional[int] = None
+    moved = False
+    with _locked_paths([abs_path, target_path]):
+        target_dir.mkdir(parents=True, exist_ok=True)
+        entry = QuarantineEntry(
+            doc_id=doc_id,
+            source=source_label,
+            source_root=str(info.root),
+            original_path=str(abs_path),
+            quarantine_path=str(target_path),
+            original_filename=abs_path.name,
+            moved_at=datetime.now(timezone.utc).isoformat(),
+            actor=actor or "admin",
+            size_bytes=doc.get("size_bytes"),
+        )
+        try:
+            with db.get_conn() as conn:
+                entry_id = db.insert_quarantine_entry(conn, entry)
+                db.remove_document_by_id(conn, doc_id)
+                _move_file(abs_path, target_path)
+                moved = True
+        except FileOpError:
+            _audit({**audit_base, "status": "error", "error": "validation"})
+            raise
+        except Exception as exc:
+            if moved and target_path.exists() and not abs_path.exists():
+                try:
+                    _move_file(target_path, abs_path)
+                except Exception:
+                    pass
+            _audit({**audit_base, "status": "error", "error": str(exc)})
+            raise
+
+    _audit({**audit_base, "status": "ok", "entry_id": entry_id})
+    return {
+        "doc_id": doc_id,
+        "source": source_label,
+        "original_path": str(abs_path),
+        "quarantine_path": str(target_path),
+        "removed_from_index": True,
+        "entry_id": entry_id,
+    }
+
+
+def _load_entry(entry_id: int) -> Dict[str, object]:
+    with db.get_conn() as conn:
+        row = db.get_quarantine_entry(conn, entry_id)
+    if not row:
+        raise FileOpError("Quarantäne-Eintrag nicht gefunden", status_code=404)
+    return dict(row)
+
+
+def _validate_quarantine_entry(entry: Dict[str, object]) -> None:
+    status = (entry.get("status") or "").lower()
+    if status != "quarantined":
+        raise FileOpError("Eintrag ist nicht mehr in Quarantäne", status_code=400)
+
+
+def list_quarantine_entries(
+    source: Optional[str] = None,
+    text: Optional[str] = None,
+    max_age_days: Optional[int] = None,
+) -> List[Dict[str, object]]:
+    with db.get_conn() as conn:
+        rows = db.list_quarantine_entries(conn, status="quarantined", source=source)
+    now = datetime.now(timezone.utc)
+    results: List[Dict[str, object]] = []
+    for row in rows:
+        entry = dict(row)
+        moved_at = entry.get("moved_at")
+        if max_age_days is not None and moved_at:
+            try:
+                moved_dt = datetime.fromisoformat(moved_at)
+                age_days = (now - moved_dt).total_seconds() / 86400
+                if age_days > max_age_days:
+                    continue
+            except Exception:
+                pass
+        if text:
+            needle = text.lower()
+            hay = f"{entry.get('original_filename','')} {entry.get('original_path','')}".lower()
+            if needle not in hay:
+                continue
+        results.append(entry)
+    return results
+
+
+def quarantine_restore(entry_id: int, actor: str = "admin") -> Dict[str, object]:
+    entry = _load_entry(entry_id)
+    _validate_quarantine_entry(entry)
+    info = _resolve_source(entry.get("source") or "", fallback_root=entry.get("source_root"))
+    _assert_quarantine_ready(info)
+
+    quarantine_path = _canonical(Path(entry["quarantine_path"]))
+    if not check_within_root(quarantine_path, info.quarantine_dir):
+        raise FileOpError("Ungültiger Quarantänepfad", status_code=400)
+    if not quarantine_path.exists():
+        raise FileOpError("Datei in Quarantäne nicht gefunden", status_code=404)
+
+    original_path = _canonical(Path(entry["original_path"]))
+    if not check_within_root(original_path, info.root):
+        raise FileOpError("Originalpfad liegt außerhalb der Quelle", status_code=400)
+
+    target_path = original_path
+    if target_path.exists():
+        suffix = datetime.now(timezone.utc).strftime("%Y%m%d%H%M%S")
+        target_path = target_path.with_name(f"{target_path.name}_restored_{suffix}")
+
+    audit_base = {
+        "action": "restore",
+        "actor": actor or "admin",
+        "entry_id": entry_id,
+        "source": info.label,
+        "source_root": str(info.root),
+        "original_path": str(original_path),
+        "quarantine_path": str(quarantine_path),
+        "target_path": str(target_path),
+    }
+
+    with _locked_paths([quarantine_path, target_path]):
+        target_path.parent.mkdir(parents=True, exist_ok=True)
+        _move_file(quarantine_path, target_path)
+        try:
+            os.utime(target_path, None)
+        except Exception:
+            pass
+        try:
+            with db.get_conn() as conn:
+                db.mark_quarantine_restored(conn, entry_id, str(target_path), datetime.now(timezone.utc).isoformat())
+        except Exception as exc:
+            _audit({**audit_base, "status": "error", "error": str(exc)})
+            raise
+
+    _audit({**audit_base, "status": "ok"})
+    return {
+        "entry_id": entry_id,
+        "restored_path": str(target_path),
+        "source": info.label,
+    }
+
+
+def quarantine_hard_delete(entry_id: int, actor: str = "admin") -> Dict[str, object]:
+    entry = _load_entry(entry_id)
+    _validate_quarantine_entry(entry)
+    info = _resolve_source(entry.get("source") or "", fallback_root=entry.get("source_root"))
+    _assert_quarantine_ready(info)
+
+    quarantine_path = _canonical(Path(entry["quarantine_path"]))
+    if not check_within_root(quarantine_path, info.quarantine_dir):
+        raise FileOpError("Ungültiger Quarantänepfad", status_code=400)
+
+    audit_base = {
+        "action": "hard_delete",
+        "actor": actor or "admin",
+        "entry_id": entry_id,
+        "source": info.label,
+        "source_root": str(info.root),
+        "quarantine_path": str(quarantine_path),
+    }
+
+    with _locked_paths([quarantine_path]):
+        if not quarantine_path.exists():
+            raise FileOpError("Datei bereits entfernt", status_code=404)
+        try:
+            quarantine_path.unlink()
+        except Exception as exc:
+            _audit({**audit_base, "status": "error", "error": str(exc)})
+            raise
+        try:
+            with db.get_conn() as conn:
+                db.mark_quarantine_hard_deleted(conn, entry_id, datetime.now(timezone.utc).isoformat())
+        except Exception as exc:
+            _audit({**audit_base, "status": "error", "error": str(exc)})
+            raise
+
+    _audit({**audit_base, "status": "ok"})
+    return {"entry_id": entry_id, "deleted": True}
+
+
+def _parse_folder_age_days(path: Path, now: datetime) -> Optional[float]:
     try:
-        _move_to_quarantine(abs_path, target_path)
-        with db.get_conn() as conn:
-            db.remove_document_by_id(conn, doc_id)
-        audit_entry = {**audit_base, "status": "ok"}
-        _audit(audit_entry)
-        return {
-            "doc_id": doc_id,
-            "source": source_label,
-            "original_path": str(abs_path),
-            "quarantine_path": str(target_path),
-            "removed_from_index": True,
-        }
-    except FileOpError:
-        audit_entry = {**audit_base, "status": "error", "error": "validation"}
-        _audit(audit_entry)
-        raise
-    except Exception as exc:
-        audit_entry = {**audit_base, "status": "error", "error": str(exc)}
-        _audit(audit_entry)
-        raise
+        folder_name = path.parent.name
+        dt = datetime.fromisoformat(folder_name)
+        delta = now - dt
+        return max(0.0, delta.total_seconds() / 86400)
+    except Exception:
+        return None
+
+
+def run_cleanup_now(now: Optional[datetime] = None) -> Dict[str, int]:
+    refresh_quarantine_state()
+    now = now or datetime.now(timezone.utc)
+    retention_days = max(0, _settings.retention_days)
+    summary = {"deleted": 0, "dry_run": 0, "skipped": 0, "errors": 0}
+    for info in _sources.values():
+        if not info.ready:
+            continue
+        base = info.quarantine_dir
+        if not base.exists():
+            continue
+        for path in base.rglob("*"):
+            if not path.is_file():
+                continue
+            if path.name.startswith(".rw_test"):
+                continue
+            if not check_within_root(path, base):
+                _audit(
+                    {
+                        "action": "cleanup_delete",
+                        "source_root": str(info.root),
+                        "quarantine_path": str(path),
+                        "age_days": None,
+                        "status": "error",
+                        "error": "outside_quarantine",
+                    }
+                )
+                summary["errors"] += 1
+                continue
+            try:
+                stat = path.stat()
+            except FileNotFoundError:
+                summary["errors"] += 1
+                continue
+            except Exception:
+                summary["errors"] += 1
+                continue
+            age_mtime = max(0.0, (now - datetime.fromtimestamp(stat.st_mtime, tz=timezone.utc)).total_seconds() / 86400)
+            age_folder = _parse_folder_age_days(path, now)
+            age_days = max(age_mtime, age_folder) if age_folder is not None else age_mtime
+            if age_days < retention_days:
+                summary["skipped"] += 1
+                continue
+
+            audit_base = {
+                "action": "cleanup_delete",
+                "source_root": str(info.root),
+                "quarantine_path": str(path),
+                "age_days": age_days,
+            }
+            with _locked_paths([path]):
+                if _settings.cleanup_dry_run:
+                    _audit({**audit_base, "status": "dry_run"})
+                    summary["dry_run"] += 1
+                    continue
+                try:
+                    path.unlink(missing_ok=True)
+                    with db.get_conn() as conn:
+                        entry = db.get_quarantine_entry_by_path(conn, str(path))
+                        if entry:
+                            db.mark_quarantine_cleanup_deleted(conn, entry["id"], datetime.now(timezone.utc).isoformat())
+                    _audit({**audit_base, "status": "ok"})
+                    summary["deleted"] += 1
+                except Exception as exc:
+                    _audit({**audit_base, "status": "error", "error": str(exc)})
+                    summary["errors"] += 1
+                    continue
+            try:
+                parent = path.parent
+                while parent != base and parent.exists() and not any(parent.iterdir()):
+                    parent.rmdir()
+                    parent = parent.parent
+            except Exception:
+                pass
+    return summary
+
+
+def _cleanup_interval_seconds() -> int:
+    schedule = (_settings.cleanup_schedule or "daily").strip().lower()
+    if schedule in {"off", "disabled", "none"}:
+        return 0
+    if schedule in {"hourly", "1h"}:
+        return 3600
+    return 24 * 3600
+
+
+def start_cleanup_scheduler() -> None:
+    global _cleanup_thread
+    interval = _cleanup_interval_seconds()
+    if interval <= 0:
+        return
+    if _cleanup_thread and _cleanup_thread.is_alive():
+        return
+    if os.getenv("PYTEST_CURRENT_TEST"):
+        return
+
+    _cleanup_stop.clear()
+
+    def worker():
+        while not _cleanup_stop.is_set():
+            try:
+                run_cleanup_now()
+            except Exception as exc:
+                logger.error("Quarantäne-Cleanup fehlgeschlagen: %s", exc)
+            _cleanup_stop.wait(interval)
+
+    _cleanup_thread = threading.Thread(target=worker, daemon=True)
+    _cleanup_thread.start()
+
+
+def stop_cleanup_scheduler() -> None:
+    _cleanup_stop.set()
+    if _cleanup_thread and _cleanup_thread.is_alive():
+        _cleanup_thread.join(timeout=2)

@@ -164,6 +164,7 @@ def is_admin(request: Request) -> bool:
 
 def init_quarantine_state(config: CentralConfig) -> None:
     try:
+        file_ops.apply_settings(getattr(config, "quarantine", None))
         roots = resolve_active_roots(config)
     except Exception as exc:
         try:
@@ -172,6 +173,10 @@ def init_quarantine_state(config: CentralConfig) -> None:
             roots = []
         logger.warning("Quarantäne-Setup übersprungen: %s", exc)
     file_ops.init_sources(roots)
+    try:
+        file_ops.start_cleanup_scheduler()
+    except Exception as exc:
+        logger.error("Cleanup-Scheduler konnte nicht gestartet werden: %s", exc)
 
 
 def get_test_flags(request: Request) -> tuple[bool, Optional[str]]:
@@ -621,6 +626,51 @@ def create_app(config: Optional[CentralConfig] = None) -> FastAPI:
             raise HTTPException(status_code=500, detail="Quarantäne fehlgeschlagen")
         return {"status": "ok", **result}
 
+    @app.get("/api/quarantine/list")
+    def quarantine_list(
+        source: Optional[str] = Query(None),
+        q: Optional[str] = Query(None, description="Textsuche in Dateiname/Pfad"),
+        max_age_days: Optional[int] = Query(None, ge=0),
+        _admin: bool = Depends(require_admin),
+    ):
+        file_ops.refresh_quarantine_state()
+        try:
+            entries = file_ops.list_quarantine_entries(
+                source=source,
+                text=q,
+                max_age_days=max_age_days if max_age_days is not None else None,
+            )
+        except file_ops.FileOpError as exc:
+            raise HTTPException(status_code=exc.status_code, detail=str(exc))
+        except Exception as exc:
+            logger.error("Quarantäne-Liste fehlgeschlagen: %s", exc)
+            raise HTTPException(status_code=500, detail="Quarantäne-Liste fehlgeschlagen")
+        return {"entries": entries}
+
+    @app.post("/api/quarantine/{entry_id}/restore")
+    def quarantine_restore(entry_id: int, _admin: bool = Depends(require_admin)):
+        file_ops.refresh_quarantine_state()
+        try:
+            result = file_ops.quarantine_restore(entry_id, actor="admin")
+        except file_ops.FileOpError as exc:
+            raise HTTPException(status_code=exc.status_code, detail=str(exc))
+        except Exception as exc:
+            logger.error("Quarantäne-Restore fehlgeschlagen: %s", exc)
+            raise HTTPException(status_code=500, detail="Restore fehlgeschlagen")
+        return {"status": "ok", **result}
+
+    @app.post("/api/quarantine/{entry_id}/hard-delete")
+    def quarantine_hard_delete(entry_id: int, _admin: bool = Depends(require_admin)):
+        file_ops.refresh_quarantine_state()
+        try:
+            result = file_ops.quarantine_hard_delete(entry_id, actor="admin")
+        except file_ops.FileOpError as exc:
+            raise HTTPException(status_code=exc.status_code, detail=str(exc))
+        except Exception as exc:
+            logger.error("Quarantäne Hard-Delete fehlgeschlagen: %s", exc)
+            raise HTTPException(status_code=500, detail="Hard-Delete fehlgeschlagen")
+        return {"status": "ok", **result}
+
     @app.get("/api/admin/status")
     def admin_status(request: Request, _auth: bool = Depends(require_secret)):
         db.init_db()
@@ -639,6 +689,9 @@ def create_app(config: Optional[CentralConfig] = None) -> FastAPI:
                 "admin": admin_flag,
                 "file_ops_enabled": ops_state["file_ops_enabled"],
                 "quarantine_ready_sources": ops_state["quarantine_ready_sources"],
+                "quarantine_retention_days": ops_state.get("quarantine_retention_days"),
+                "quarantine_cleanup_schedule": ops_state.get("quarantine_cleanup_schedule"),
+                "quarantine_cleanup_dry_run": ops_state.get("quarantine_cleanup_dry_run"),
                 "index_exclude_dirs": getattr(config.indexer, "exclude_dirs", []),
                 "total_docs": int(status["total_docs"]),
                 "ext_counts": ext_counts,
