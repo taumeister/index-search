@@ -4,6 +4,11 @@
 - Quellen-Filter neben dem Suchfeld platziert, Optik an andere Filter angepasst (weißer Hintergrund, klare Umrandung, blauer Aktivzustand, gemeinsame Filtergruppe).
 - Dokumentation aktualisiert; Version erhöht.
 
+## v0.3.7
+- Auto-Index-Zeitplaner im Dashboard: Toggle, Modus-Buttons (täglich/wöchentlich/intervall), Wochentags-/Intervall-Buttons, Uhrzeit, „Plan speichern“ und „Jetzt ausführen“, Status/Plan-Details und Polling.
+- Hintergrund-Scheduler/Runner mit Config-/Status-Persistenz (Config-DB), Locking gegen parallele Läufe, Endpunkte für Config/Status/Run.
+- UI-Verfeinerungen (kompaktere Layouts, Buttons statt Dropdowns) und Tests ergänzt.
+
 ## v0.3.5
 - Neuer Quellen-Filter in der Index-Suche: lädt dynamisch Labels der konfigurierten Quellen, Mehrfachauswahl (OR), gleiches UI-Pattern wie andere Filter, Persistenz per localStorage.
 - Suche akzeptiert `source_labels` (mehrere) und filtert entsprechend; `/api/sources` liefert deduplizierte Labels.

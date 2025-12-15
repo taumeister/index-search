@@ -51,6 +51,7 @@
 - `POST /api/admin/index/run`: Indexlauf starten, optional Reset.
 - `GET /api/admin/errors`: Fehlerliste.
 - `GET /api/admin/tree`: Verzeichnisbaum unter `base_data_root`.
+- Auto-Index: `GET/POST /api/auto-index/config` (Plan laden/speichern + Status), `POST /api/auto-index/run` (manuell starten), `GET /api/auto-index/status` (Status/Polling). Scheduler läuft als Hintergrund-Thread, Lock verhindert parallele Läufe.
 
 ## Frontend
 - Layout: oben kompakter Header (Titel, Zoom-Controls, Dashboard) auf allen Seiten, darunter Suche + Filter; Trefferliste links, Preview rechts (umschaltbar auf Popup).
@@ -63,10 +64,12 @@
 - Download-Link öffnet Originaldatei.
 - Pop-up/Viewer: kleinere Fenstergröße (ca. 60%/70% des Bildschirms), Druck-Button, minimierte Toolbar; Print öffnet den Dialog ohne neues Browser-Tab.
 - Feedback-Overlay: öffnet bei Klick auf den Header-Button, dimmt Hintergrund, Editor mit Toolbar und Zeichenzähler, Abbruch/Senden-Buttons plus zweistufige Bestätigung; ESC oder Klick außerhalb schließt.
+- Dashboard: Auto-Index-Zeitplaner (Toggle, Modus-Buttons täglich/wöchentlich/intervall, Uhrzeit, Wochentags-/Intervall-Buttons, Plan speichern, Jetzt ausführen, Plan-/Status-Anzeige), Index-Live-Status, Roots/Explorer, Live-Log, Fehlerliste.
 
 ## Tests
 - `pytest` deckt Config-Validierung, DB/FTS-Funktion, Indexlauf und API-Suche ab.
 - E2E (Playwright): `tests/test_feedback_ui.py` simuliert den Feedback-Flow (Overlay öffnen, Text/Toolbar, Confirm, Erfolg) mit gemocktem `/api/feedback`; `tests/test_source_filter_ui.py` prüft Quellen-Filter (Chips laden, Request-Parameter). Start mit laufendem Container auf `http://localhost:8010` und optional `APP_BASE_URL` zum Überschreiben. Playwright-Assets via `pip install -r requirements-dev.txt` und `playwright install chromium`.
+- Scheduler-Tests: `tests/test_auto_index_scheduler.py` validiert Next-Run-Berechnung, Busy-Handling und Auto-Index-Endpunkte.
 
 ## Betrieb
 - Start (lokal): `uvicorn app.main:app --reload`.
