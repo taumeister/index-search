@@ -3,6 +3,13 @@
     --panel-width: clamp(320px, 32vw, 520px);
     --border: #d7dde7;
     --muted: #6b7280;
+    --filter-font-size: 12px;
+    --filter-font-weight: 400;
+    --filter-padding-y: 7px;
+    --filter-padding-x: 11px;
+    --filter-group-height: 38px;
+    --filter-radius: 10px;
+    --filter-chip-radius: 8px;
 }
 
 html, body {
@@ -281,17 +288,22 @@ body {
     display: inline-flex;
     align-items: center;
     border: 1px solid var(--border);
-    border-radius: 10px;
+    border-radius: var(--filter-radius);
     overflow: hidden;
     background: #fff;
     box-shadow: 0 1px 2px rgba(0,0,0,0.05);
+    padding: 2px;
+    min-height: var(--filter-group-height);
 }
 
 .search-mode button {
     border: none;
     background: transparent;
-    padding: 8px 10px;
-    font-size: 12px;
+    padding: var(--filter-padding-y) var(--filter-padding-x);
+    font-size: var(--filter-font-size);
+    font-weight: var(--filter-font-weight);
+    letter-spacing: 0.01em;
+    line-height: 1.2;
     color: #0f172a;
     display: inline-flex;
     align-items: center;
@@ -306,7 +318,6 @@ body {
 .search-mode button.active {
     background: linear-gradient(180deg, #5c7edc, #3b64c7);
     color: #ffffff;
-    font-weight: 600;
     box-shadow: inset 0 1px 0 rgba(255,255,255,0.8), 0 0 0 1px #b1c5f6;
 }
 
@@ -333,19 +344,23 @@ body {
     display: inline-flex;
     align-items: center;
     border: 1px solid var(--border);
-    border-radius: 10px;
+    border-radius: var(--filter-radius);
     overflow: hidden;
     background: #fff;
     box-shadow: 0 1px 2px rgba(0,0,0,0.05);
+    padding: 2px;
+    min-height: var(--filter-group-height);
 }
 
 .type-filter button {
     border: none;
     background: transparent;
-    padding: 6px 10px;
-    font-size: 12px;
+    padding: var(--filter-padding-y) var(--filter-padding-x);
+    font-size: var(--filter-font-size);
+    font-weight: var(--filter-font-weight);
+    line-height: 1.2;
+    letter-spacing: 0.01em;
     color: #0f172a;
-    letter-spacing: 0.02em;
     cursor: pointer;
 }
 
@@ -356,7 +371,6 @@ body {
 .type-filter button.active {
     background: linear-gradient(180deg, #5c7edc, #3b64c7);
     color: #ffffff;
-    font-weight: 600;
     box-shadow: inset 0 1px 0 rgba(255,255,255,0.8), 0 0 0 1px #b1c5f6;
 }
 
@@ -365,22 +379,25 @@ body {
     align-items: center;
     gap: 4px;
     border: 1px solid var(--border);
-    border-radius: 10px;
+    border-radius: var(--filter-radius);
     background: #fff;
     box-shadow: 0 1px 2px rgba(0,0,0,0.05);
     padding: 2px;
     position: relative;
+    min-height: var(--filter-group-height);
 }
 
 .time-chip {
     border: none;
     background: transparent;
-    padding: 6px 10px;
-    font-size: 12px;
+    padding: var(--filter-padding-y) var(--filter-padding-x);
+    font-size: var(--filter-font-size);
+    font-weight: var(--filter-font-weight);
+    line-height: 1.2;
     color: #0f172a;
     letter-spacing: 0.01em;
     cursor: pointer;
-    border-radius: 8px;
+    border-radius: var(--filter-chip-radius);
 }
 
 .time-chip:hover {
@@ -390,7 +407,6 @@ body {
 .time-chip.active {
     background: linear-gradient(180deg, #5c7edc, #3b64c7);
     color: #ffffff;
-    font-weight: 600;
     box-shadow: inset 0 1px 0 rgba(255,255,255,0.8), 0 0 0 1px #b1c5f6;
 }
 
