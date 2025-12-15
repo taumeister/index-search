@@ -221,27 +221,6 @@
                 </div>
             </section>
         </div>
-        <div class="row bottom">
-            <section class="panel log-panel">
-                <div class="panel-head">
-                    <div>
-                        <div class="eyebrow">Indexer</div>
-                        <h2>Live-Log</h2>
-                        <div class="subtext">Letzte Zeilen + Streaming</div>
-                    </div>
-                    <div class="chip-row action-row">
-                        <button id="live-log">Live</button>
-                        <button id="older-log">Ältere</button>
-                        <button id="refresh-log">Neu laden</button>
-                        <button id="toggle-autoscroll">Autoscroll an</button>
-                    </div>
-                </div>
-                <div class="log-box" id="indexer-log"></div>
-                <div class="subtext" id="log-info">–</div>
-            </section>
-        </div>
-    </div>
-    <div class="system-layout">
         <div class="row middle">
             <section class="panel">
                 <div class="panel-head">
@@ -305,6 +284,26 @@
                 </div>
             </section>
         </div>
+        <div class="row bottom">
+            <section class="panel log-panel">
+                <div class="panel-head">
+                    <div>
+                        <div class="eyebrow">Indexer</div>
+                        <h2>Live-Log</h2>
+                        <div class="subtext">Letzte Zeilen + Streaming</div>
+                    </div>
+                    <div class="chip-row action-row">
+                        <button id="live-log">Live</button>
+                        <button id="older-log">Ältere</button>
+                        <button id="refresh-log">Neu laden</button>
+                        <button id="toggle-autoscroll">Autoscroll an</button>
+                    </div>
+                </div>
+                <div class="log-box" id="indexer-log"></div>
+                <div class="subtext" id="log-info">–</div>
+            </section>
+        </div>
+    </div>
     </div>
     <script>
         const state = { errorOffset: 0, errorLimit: 50, logOffset: 0, logPointer: 0, logTail: 400, logTotal: 0, autoScrollLog: true, autoMode: "daily", autoRunning: false };
