@@ -1,5 +1,10 @@
 # Release-Notizen
 
+## v0.3.4
+- Feedback-UI wieder funktionsfähig: Overlay/Toolbar/Zähler/Bestätigung verdrahtet, Versand gegen `/api/feedback` inkl. Cookie-Secret-Fallback und Statusmeldungen.
+- E2E-Absicherung via Playwright (`tests/test_feedback_ui.py`) mit gemocktem Feedback-Endpunkt; Dev-Dependencies ausgelagert in `requirements-dev.txt`.
+- Version angehoben.
+
 ## v0.3.3
 - Suchmodi (Strikt | Standard | Locker) als UI-Schalter mit Persistenz (localStorage/URL) und serverseitigem Contract (`mode`-Parameter). Prefix-Minimum konfigurierbar (`SEARCH_PREFIX_MINLEN`), Default-Mode via `SEARCH_DEFAULT_MODE`.
 - Such-Engine-Modi zentral definiert: Strikt = Whole-Token AND, Standard = Whole/PREFIX ab Mindestlänge AND, Locker = Prefix/Teilwort OR. Wildcard nur mit Filter, leere Eingaben blockiert.

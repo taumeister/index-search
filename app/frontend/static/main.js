@@ -38,6 +38,7 @@ const dateFormatter = new Intl.DateTimeFormat("de-DE", {
     hour: "2-digit",
     minute: "2-digit",
 });
+let closeFeedbackOverlay = () => {};
 
 function escapeHtml(str) {
     return String(str || "")
@@ -986,6 +987,7 @@ document.addEventListener("keydown", (e) => {
     if (e.key === "Escape") {
         closePreviewPanel();
         closeContextMenu();
+        closeFeedbackOverlay();
     }
 });
 
@@ -1050,3 +1052,220 @@ function initZoomControls() {
 function bootstrapZoom() {
     applyZoom(readSavedZoom(), { persist: false });
 }
+
+// Feedback overlay
+const MAX_FEEDBACK_LEN = 5000;
+
+function setupFeedback() {
+    const enabled = window.feedbackEnabled === true || String(window.feedbackEnabled || "").toLowerCase() === "true";
+    if (!enabled) return;
+    const overlay = document.getElementById("feedback-overlay");
+    const trigger = document.getElementById("feedback-trigger");
+    const editor = document.getElementById("feedback-editor");
+    const limitEl = document.getElementById("feedback-limit");
+    const closeBtn = document.getElementById("feedback-close");
+    const cancelBtn = document.getElementById("feedback-cancel");
+    const sendBtn = document.getElementById("feedback-send");
+    const confirmWrap = document.getElementById("feedback-confirm");
+    const confirmYes = document.getElementById("feedback-confirm-yes");
+    const confirmNo = document.getElementById("feedback-confirm-no");
+    const statusEl = document.getElementById("feedback-status");
+    const toolbarBtns = document.querySelectorAll(".feedback-toolbar button[data-cmd]");
+    if (!overlay || !trigger || !editor || !limitEl || !sendBtn || !confirmWrap || !statusEl) return;
+
+    let sending = false;
+
+    function readCookie(name) {
+        const m = document.cookie.match(new RegExp(`(?:^|; )${name}=([^;]*)`));
+        return m ? decodeURIComponent(m[1]) : null;
+    }
+
+    function setStatus(kind, text) {
+        if (!statusEl) return;
+        statusEl.classList.remove("hidden", "success", "error");
+        statusEl.classList.add(kind === "error" ? "error" : "success");
+        statusEl.textContent = text || "";
+    }
+
+    function clearStatus() {
+        if (!statusEl) return;
+        statusEl.classList.add("hidden");
+        statusEl.classList.remove("success", "error");
+        statusEl.textContent = "";
+    }
+
+    function getPlainText() {
+        return (editor.textContent || "").trim();
+    }
+
+    function updateLimit() {
+        const len = getPlainText().length;
+        limitEl.textContent = `${len} / ${MAX_FEEDBACK_LEN}`;
+        const over = len > MAX_FEEDBACK_LEN;
+        limitEl.classList.toggle("over-limit", over);
+        sendBtn.disabled = sending || !len || over;
+    }
+
+    function placeCaretAtEnd(el) {
+        try {
+            const range = document.createRange();
+            range.selectNodeContents(el);
+            range.collapse(false);
+            const sel = window.getSelection();
+            sel.removeAllRanges();
+            sel.addRange(range);
+        } catch (_) {
+            /* ignore */
+        }
+    }
+
+    function openOverlay() {
+        overlay.classList.remove("hidden");
+        overlay.setAttribute("aria-hidden", "false");
+        confirmWrap.classList.add("hidden");
+        clearStatus();
+        updateLimit();
+        editor.focus({ preventScroll: true });
+        placeCaretAtEnd(editor);
+        document.body.style.overflow = "hidden";
+    }
+
+    closeFeedbackOverlay = function closeFeedbackOverlay() {
+        overlay.classList.add("hidden");
+        overlay.setAttribute("aria-hidden", "true");
+        confirmWrap.classList.add("hidden");
+        clearStatus();
+        sending = false;
+        document.body.style.overflow = "";
+    };
+
+    function resetEditor() {
+        editor.innerHTML = "";
+        updateLimit();
+    }
+
+    function showConfirm(show) {
+        confirmWrap.classList.toggle("hidden", !show);
+    }
+
+    function setSending(state) {
+        sending = state;
+        sendBtn.disabled = state || !getPlainText().length || getPlainText().length > MAX_FEEDBACK_LEN;
+        confirmYes.disabled = state;
+        confirmNo.disabled = state;
+        sendBtn.textContent = state ? "Senden…" : "Senden";
+    }
+
+    async function submitFeedback() {
+        const text = getPlainText();
+        if (!text) {
+            setStatus("error", "Bitte Feedback eingeben.");
+            return;
+        }
+        if (text.length > MAX_FEEDBACK_LEN) {
+            setStatus("error", `Maximal ${MAX_FEEDBACK_LEN} Zeichen.`);
+            return;
+        }
+        setSending(true);
+        clearStatus();
+        showConfirm(false);
+        const headers = { "Content-Type": "application/json" };
+        const cookieSecret = readCookie("app_secret");
+        if (cookieSecret) {
+            headers["X-App-Secret"] = cookieSecret;
+        }
+        try {
+            const res = await fetch("/api/feedback", {
+                method: "POST",
+                headers,
+                body: JSON.stringify({
+                    message_html: editor.innerHTML,
+                    message_text: text,
+                }),
+            });
+            if (!res.ok) {
+                let detail = "";
+                try {
+                    const data = await res.json();
+                    detail = data.detail || "";
+                } catch (_) {
+                    /* ignore */
+                }
+                const msg =
+                    res.status === 401
+                        ? "Nicht autorisiert."
+                        : res.status === 429
+                          ? "Zu viele Feedbacks. Bitte später erneut versuchen."
+                          : detail || "Feedback konnte nicht gesendet werden.";
+                setStatus("error", msg);
+                return;
+            }
+            setStatus("success", "Feedback wurde gesendet. Vielen Dank!");
+            resetEditor();
+        } catch (err) {
+            setStatus("error", "Verbindung fehlgeschlagen. Bitte erneut versuchen.");
+        } finally {
+            setSending(false);
+        }
+    }
+
+    trigger.addEventListener("click", openOverlay);
+    closeBtn?.addEventListener("click", closeFeedbackOverlay);
+    cancelBtn?.addEventListener("click", closeFeedbackOverlay);
+    overlay.addEventListener("click", (e) => {
+        if (e.target === overlay) {
+            closeFeedbackOverlay();
+        }
+    });
+    document.addEventListener("keydown", (e) => {
+        if (e.key === "Escape" && !overlay.classList.contains("hidden")) {
+            closeFeedbackOverlay();
+        }
+    });
+
+    toolbarBtns.forEach((btn) => {
+        btn.addEventListener("click", () => {
+            const cmd = btn.dataset.cmd;
+            if (!cmd) return;
+            editor.focus();
+            try {
+                document.execCommand(cmd, false, null);
+            } catch (_) {
+                /* ignore */
+            }
+            updateLimit();
+        });
+    });
+
+    editor.addEventListener("input", updateLimit);
+    editor.addEventListener("paste", (e) => {
+        e.preventDefault();
+        const text = (e.clipboardData || window.clipboardData).getData("text");
+        try {
+            document.execCommand("insertText", false, text);
+        } catch (_) {
+            editor.textContent += text;
+        }
+        updateLimit();
+    });
+
+    sendBtn.addEventListener("click", () => {
+        clearStatus();
+        if (getPlainText().length > MAX_FEEDBACK_LEN) {
+            setStatus("error", `Maximal ${MAX_FEEDBACK_LEN} Zeichen.`);
+            return;
+        }
+        if (!getPlainText().length) {
+            setStatus("error", "Bitte Feedback eingeben.");
+            return;
+        }
+        showConfirm(true);
+    });
+
+    confirmNo?.addEventListener("click", () => showConfirm(false));
+    confirmYes?.addEventListener("click", submitFeedback);
+
+    updateLimit();
+}
+
+setupFeedback();

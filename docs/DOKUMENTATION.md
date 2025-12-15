@@ -6,6 +6,7 @@
 - Frontend: Explorer-ähnliche Oberfläche (Suchfeld, Tabelle, Preview rechts/Popup), PDF via pdf.js, andere Formate als Text/HTML.
 - Konfiguration: zentrale Datei `config/central_config.ini`, wird beim Start validiert.
 - Auth: Alle API-Endpunkte (Suche, Dokument, Admin) verlangen `APP_SECRET`, das aus `.env` gelesen oder beim ersten Start erzeugt wird.
+- Feedback: Aktivierbar über `FEEDBACK_ENABLED`/`FEEDBACK_TO` und SMTP-Settings; im UI öffnet der Feedback-Button ein Overlay mit WYSIWYG-Light-Toolbar (Fett/Kursiv/Listen), 5000-Zeichen-Limit, Bestätigung und Versand via `/api/feedback`.
 
 ## Verzeichnisstruktur
 - `app/config_loader.py`: Laden/Validieren der zentralen Konfiguration.
@@ -59,9 +60,11 @@
 - PDF-Preview via pdf.js Iframe, MSG mit Header/Body, RTF/TXT als Text.
 - Download-Link öffnet Originaldatei.
 - Pop-up/Viewer: kleinere Fenstergröße (ca. 60%/70% des Bildschirms), Druck-Button, minimierte Toolbar; Print öffnet den Dialog ohne neues Browser-Tab.
+- Feedback-Overlay: öffnet bei Klick auf den Header-Button, dimmt Hintergrund, Editor mit Toolbar und Zeichenzähler, Abbruch/Senden-Buttons plus zweistufige Bestätigung; ESC oder Klick außerhalb schließt.
 
 ## Tests
 - `pytest` deckt Config-Validierung, DB/FTS-Funktion, Indexlauf und API-Suche ab.
+- E2E (Playwright): `tests/test_feedback_ui.py` simuliert den Feedback-Flow (Overlay öffnen, Text/Toolbar, Confirm, Erfolg) mit gemocktem `/api/feedback`; Start mit laufendem Container auf `http://localhost:8010` und optional `APP_BASE_URL` zum Überschreiben. Playwright-Assets via `pip install -r requirements-dev.txt` und `playwright install chromium`.
 
 ## Betrieb
 - Start (lokal): `uvicorn app.main:app --reload`.
