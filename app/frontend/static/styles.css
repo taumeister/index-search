@@ -3,13 +3,13 @@
     --panel-width: clamp(320px, 32vw, 520px);
     --border: #d7dde7;
     --muted: #6b7280;
-    --filter-font-size: 11px;
+    --filter-font-size: 9px;
     --filter-font-weight: 400;
-    --filter-padding-y: 6px;
-    --filter-padding-x: 10px;
-    --filter-group-height: 34px;
-    --filter-radius: 9px;
-    --filter-chip-radius: 7px;
+    --filter-padding-y: 5px;
+    --filter-padding-x: 8px;
+    --filter-group-height: 27px;
+    --filter-radius: 7px;
+    --filter-chip-radius: 6px;
 }
 
 html, body {
