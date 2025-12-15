@@ -89,6 +89,7 @@
         .inline-field { display: flex; flex-direction: column; gap: 4px; }
         .inline-field input, .inline-field select { padding: 7px 8px; border-radius: 8px; border: 1px solid #d1d5db; font-size: 13px; }
         .status-line { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 6px; font-size: 13px; color: #1f2937; }
+        .muted { color: var(--muted); font-size: 12px; }
     </style>
 </head>
 <body>
@@ -236,6 +237,7 @@
                         <label style="display:flex;align-items:center;gap:8px;">
                             <input type="checkbox" id="auto-enabled"> Auto-Index aktivieren
                         </label>
+                        <div class="muted">Einstellungen speichern oder ändern, um Zeitplan zu aktivieren.</div>
                         <div class="btn-group" id="auto-mode-buttons">
                             <button class="btn-ghost" data-mode="daily">Täglich</button>
                             <button class="btn-ghost" data-mode="weekly">Wöchentlich</button>
@@ -244,6 +246,9 @@
                         <div class="inline-field">
                             <label for="auto-time">Uhrzeit</label>
                             <input type="time" id="auto-time" value="02:00">
+                        </div>
+                        <div class="btn-group">
+                            <button class="btn-ghost" id="auto-save">Plan speichern</button>
                         </div>
                     </div>
                     <div class="auto-card">
@@ -279,6 +284,7 @@
                         <div class="status-line">
                             <div><strong>Status:</strong> <span id="auto-status-label">Idle</span></div>
                             <div><strong>Fehler:</strong> <span id="auto-error">–</span></div>
+                            <div><strong>Plan:</strong> <span id="auto-plan">–</span></div>
                         </div>
                     </div>
                 </div>
@@ -345,6 +351,19 @@
             return `${h}:${m}:${s}`;
         }
 
+        function describePlan(cfg) {
+            if (!cfg.enabled) return "aus";
+            const t = cfg.time || "02:00";
+            if (cfg.mode === "daily") return `täglich ${t}`;
+            if (cfg.mode === "weekly") {
+                const days = ["Mo", "Di", "Mi", "Do", "Fr", "Sa", "So"];
+                const d = days[(cfg.weekday ?? 0) % 7] || "Mo";
+                return `wöchentlich ${d} ${t}`;
+            }
+            if (cfg.mode === "interval") return `alle ${cfg.interval_hours || 6}h`;
+            return "aus";
+        }
+
         function renderAutoModeButtons(active) {
             const btns = document.querySelectorAll("#auto-mode-buttons button");
             btns.forEach((b) => {
@@ -409,6 +428,7 @@
             document.getElementById("auto-last").textContent = st.last_run_at ? fmtDateTime(st.last_run_at) : "–";
             document.getElementById("auto-duration").textContent = st.last_duration_sec ? fmtDuration(st.last_duration_sec) : "–";
             document.getElementById("auto-error").textContent = st.last_error || "–";
+            document.getElementById("auto-plan").textContent = describePlan(cfg);
         }
 
         async function loadAutoConfig() {
@@ -748,6 +768,7 @@
         document.getElementById("auto-time").addEventListener("change", saveAutoConfig);
         document.getElementById("auto-weekday").addEventListener("change", saveAutoConfig);
         document.getElementById("auto-interval").addEventListener("change", saveAutoConfig);
+        document.getElementById("auto-save").addEventListener("click", saveAutoConfig);
         document.getElementById("auto-run-now").addEventListener("click", async () => {
             try {
                 const res = await fetch("/api/auto-index/run", { method: "POST" });

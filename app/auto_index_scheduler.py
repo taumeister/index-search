@@ -62,6 +62,10 @@ def compute_next_run(cfg: AutoIndexConfig, now: Optional[datetime] = None) -> Op
 
 
 def load_config_from_db() -> AutoIndexConfig:
+    try:
+        config_db.ensure_db()
+    except Exception:
+        logger.exception("Konnte Config-DB nicht initialisieren")
     raw = config_db.get_auto_index_config()
     return AutoIndexConfig(
         enabled=str(raw.get("auto_index_enabled") or "0").lower() == "1",
@@ -154,33 +158,37 @@ class AutoIndexScheduler:
 
     def _run_loop(self):
         while not self._stop_event.is_set():
-            cfg = load_config_from_db()
-            if not cfg.enabled:
+            try:
+                cfg = load_config_from_db()
+                if not cfg.enabled:
+                    status = self.status()
+                    status.next_run_at = None
+                    persist_status(status)
+                    self._wait_for(30)
+                    continue
+                next_run = compute_next_run(cfg)
                 status = self.status()
-                status.next_run_at = None
+                status.next_run_at = next_run
                 persist_status(status)
-                self._wait_for(30)
-                continue
-            next_run = compute_next_run(cfg)
-            status = self.status()
-            status.next_run_at = next_run
-            persist_status(status)
-            if not next_run:
-                self._wait_for(60)
-                continue
-            now = datetime.now(timezone.utc)
-            wait_sec = max(1, (next_run - now).total_seconds())
-            if self._wait_for(wait_sec):
-                continue
-            # fällig
-            result = self._launch_run(reason="auto")
-            if result == "busy":
-                logger.info("Auto-Index übersprungen: Lauf läuft bereits")
-                # Rechne nächsten Termin ab jetzt
-                next_after_busy = compute_next_run(cfg, datetime.now(timezone.utc))
-                status = self.status()
-                status.next_run_at = next_after_busy
-                persist_status(status)
+                if not next_run:
+                    self._wait_for(60)
+                    continue
+                now = datetime.now(timezone.utc)
+                wait_sec = max(1, (next_run - now).total_seconds())
+                if self._wait_for(wait_sec):
+                    continue
+                # fällig
+                result = self._launch_run(reason="auto")
+                if result == "busy":
+                    logger.info("Auto-Index übersprungen: Lauf läuft bereits")
+                    # Rechne nächsten Termin ab jetzt
+                    next_after_busy = compute_next_run(cfg, datetime.now(timezone.utc))
+                    status = self.status()
+                    status.next_run_at = next_after_busy
+                    persist_status(status)
+            except Exception as exc:
+                logger.error("Auto-Index Scheduler-Loop Fehler: %s", exc)
+                self._wait_for(10)
 
     def _wait_for(self, seconds: float) -> bool:
         # returns True if woken by poke/stop

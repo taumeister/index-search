@@ -174,7 +174,7 @@ def create_app(config: Optional[CentralConfig] = None) -> FastAPI:
     metrics.init_metrics()
     ensure_metrics_background()
     global _auto_scheduler
-    if not os.getenv("AUTO_INDEX_DISABLE", "").lower() == "1":
+    if not os.getenv("AUTO_INDEX_DISABLE", "").lower() == "1" and not os.getenv("PYTEST_CURRENT_TEST"):
         _auto_scheduler = AutoIndexScheduler(
             lambda **kwargs: start_index_run(resolve_roots=resolve_active_roots, **kwargs)
         )
