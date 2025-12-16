@@ -203,6 +203,34 @@
         </div>
     </div>
 
+    <div id="move-dialog" class="dialog-overlay hidden">
+        <div class="dialog-card wide move-dialog-card">
+            <div class="dialog-title-row">
+                <div>
+                    <div class="dialog-eyebrow">Verschieben</div>
+                    <div class="dialog-title">Zielordner auswählen</div>
+                </div>
+                <button type="button" class="btn btn-ghost" id="move-close">Schließen</button>
+            </div>
+            <div class="dialog-body move-dialog-body">
+                <div class="move-current">
+                    <div class="dialog-label">Datei</div>
+                    <div class="dialog-strong" id="move-current-name"></div>
+                    <div class="dialog-muted" id="move-current-path"></div>
+                </div>
+                <div class="move-target">
+                    <div class="dialog-label">Zielordner</div>
+                    <div class="move-tree" id="move-tree" role="tree" aria-label="Zielordner"></div>
+                </div>
+                <div class="dialog-status hidden" id="move-error"></div>
+            </div>
+            <div class="dialog-actions">
+                <button type="button" class="btn btn-ghost" id="move-cancel">Abbrechen</button>
+                <button type="button" class="btn btn-primary" id="move-confirm" disabled>Verschieben</button>
+            </div>
+        </div>
+    </div>
+
     {% if feedback_enabled %}
     <div id="feedback-overlay" class="feedback-overlay hidden" aria-hidden="true">
         <div class="feedback-panel" role="dialog" aria-modal="false" aria-labelledby="feedback-title">

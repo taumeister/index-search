@@ -627,6 +627,34 @@ def create_app(config: Optional[CentralConfig] = None) -> FastAPI:
             raise HTTPException(status_code=500, detail="Umbenennen fehlgeschlagen")
         return {"status": "ok", **result}
 
+    @app.get("/api/files/tree")
+    def list_directories(
+        source: str = Query(..., description="Quellen-Label"),
+        path: Optional[str] = Query("", description="Relativer Pfad unter der Quelle"),
+        _admin: bool = Depends(require_admin),
+    ):
+        file_ops.refresh_quarantine_state()
+        try:
+            return file_ops.list_directories(source, path or "")
+        except file_ops.FileOpError as exc:
+            raise HTTPException(status_code=exc.status_code, detail=str(exc))
+        except Exception as exc:
+            logger.error("Verzeichnisliste fehlgeschlagen: %s", exc)
+            raise HTTPException(status_code=500, detail="Verzeichnisliste fehlgeschlagen")
+
+    @app.post("/api/files/{doc_id}/move")
+    def move_file(doc_id: int, payload: Dict[str, Any], _admin: bool = Depends(require_admin)):
+        file_ops.refresh_quarantine_state()
+        target_dir = (payload.get("target_dir") or "").strip()
+        try:
+            result = file_ops.move_file(doc_id, target_dir, actor="admin")
+        except file_ops.FileOpError as exc:
+            raise HTTPException(status_code=exc.status_code, detail=str(exc))
+        except Exception as exc:
+            logger.error("Move fehlgeschlagen: %s", exc)
+            raise HTTPException(status_code=500, detail="Verschieben fehlgeschlagen")
+        return {"status": "ok", **result}
+
     @app.post("/api/files/{doc_id}/quarantine-delete")
     def quarantine_delete(doc_id: int, request: Request, _admin: bool = Depends(require_admin)):
         file_ops.refresh_quarantine_state()

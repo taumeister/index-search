@@ -1097,6 +1097,7 @@ setupSourceFilter();
 setupAdminControls();
 setupDeleteConfirm();
 setupRenameDialog();
+setupMoveDialog();
 refreshAdminStatus();
 document.getElementById("search-input").addEventListener("input", debounceSearch);
 const loadMoreBtn = document.getElementById("load-more");
@@ -1457,6 +1458,310 @@ function handleRenameAction(id) {
     showRenameDialog(id);
 }
 
+// Move dialog
+let moveState = {
+    open: false,
+    docId: null,
+    source: "",
+    currentPath: "",
+    currentName: "",
+    selection: null,
+    nodes: new Map(),
+    loading: false,
+};
+
+function resetMoveState() {
+    moveState = {
+        open: false,
+        docId: null,
+    source: "",
+    currentPath: "",
+    currentName: "",
+    selection: null,
+    nodes: new Map(),
+    loading: false,
+};
+}
+
+function handleMoveAction(id) {
+    const row = document.querySelector(`#results-table tbody tr[data-id="${id}"]`);
+    const sourceLabel = row?.dataset.source || "";
+    if (!canUseFileOpsForSource(sourceLabel)) {
+        closeContextMenu();
+        return;
+    }
+    closeContextMenu();
+    showMoveDialog(id);
+}
+
+function normalizeRelPath(path) {
+    const text = String(path || "").replace(/\\/g, "/");
+    const trimmed = text.replace(/^\/+/, "").replace(/\/+$/, "");
+    return trimmed;
+}
+
+function getMoveNode(path) {
+    return moveState.nodes.get(path || "") || null;
+}
+
+function upsertMoveNode(node) {
+    moveState.nodes.set(node.path || "", node);
+}
+
+async function fetchMoveChildren(path) {
+    const params = new URLSearchParams();
+    params.set("source", moveState.source);
+    params.set("path", path || "");
+    const res = await fetch(`/api/files/tree?${params.toString()}`);
+    if (!res.ok) {
+        const detail = await res.json().catch(() => ({}));
+        throw new Error(detail.detail || "Verzeichnisse konnten nicht geladen werden.");
+    }
+    const data = await res.json();
+    const entries = Array.isArray(data.entries) ? data.entries : [];
+    return entries.map((entry) => ({
+        name: entry.name || "",
+        path: normalizeRelPath(entry.path || ""),
+        hasChildren: Boolean(entry.has_children),
+        expanded: false,
+        loaded: false,
+        loading: false,
+        children: [],
+    }));
+}
+
+async function loadMoveNode(path) {
+    const node = getMoveNode(path);
+    if (!node) return;
+    node.loading = true;
+    renderMoveTree();
+    try {
+        const children = await fetchMoveChildren(path);
+        node.children = children.map((child) => child.path);
+        upsertMoveNode({ ...node, loaded: true, loading: false });
+        children.forEach((child) => {
+            upsertMoveNode({ ...child, expanded: false });
+        });
+    } catch (err) {
+        node.loading = false;
+        const errorEl = document.getElementById("move-error");
+        if (errorEl) {
+            errorEl.textContent = err.message || "Verzeichnisse konnten nicht geladen werden.";
+            errorEl.classList.remove("hidden");
+        }
+    } finally {
+        const current = getMoveNode(path);
+        if (current) {
+            current.loading = false;
+            upsertMoveNode(current);
+        }
+        renderMoveTree();
+    }
+}
+
+function renderMoveTree() {
+    const tree = document.getElementById("move-tree");
+    const confirmBtn = document.getElementById("move-confirm");
+    if (!tree) return;
+    tree.innerHTML = "";
+
+    function renderNode(path, depth = 0) {
+        const node = getMoveNode(path);
+        if (!node) return null;
+        const row = document.createElement("div");
+        row.className = "move-node";
+        row.setAttribute("role", "treeitem");
+        row.setAttribute("aria-level", String(depth + 1));
+        row.style.paddingLeft = `${depth * 16 + 6}px`;
+        const toggle = document.createElement("button");
+        toggle.type = "button";
+        toggle.className = "move-node__toggle";
+        toggle.textContent = node.hasChildren ? (node.expanded ? "▾" : "▸") : "•";
+        toggle.disabled = !node.hasChildren || node.loading;
+        toggle.addEventListener("click", () => toggleMoveNode(path));
+
+        const radio = document.createElement("input");
+        radio.type = "radio";
+        radio.name = "move-target";
+        radio.value = node.path || "";
+        radio.checked = (node.path || "") === (moveState.selection || "");
+        radio.addEventListener("change", () => {
+            moveState.selection = node.path || "";
+            renderMoveTree();
+        });
+
+        const label = document.createElement("span");
+        label.className = "move-node__label";
+        label.textContent = node.path ? node.name : moveState.source || "/";
+        label.title = node.path || "/";
+        label.addEventListener("click", () => {
+            moveState.selection = node.path || "";
+            renderMoveTree();
+        });
+
+        const status = document.createElement("span");
+        status.className = "move-node__status";
+        if (node.loading) {
+            status.textContent = "Laden…";
+        } else if (node.children && node.children.length) {
+            status.textContent = "";
+        } else if (node.hasChildren) {
+            status.textContent = "";
+        } else {
+            status.textContent = "";
+        }
+
+        row.appendChild(toggle);
+        row.appendChild(radio);
+        row.appendChild(label);
+        if (status.textContent) row.appendChild(status);
+
+        tree.appendChild(row);
+
+        if (node.expanded && node.children && node.children.length) {
+            node.children.forEach((childPath) => {
+                const childRow = renderNode(childPath, depth + 1);
+                if (childRow) tree.appendChild(childRow);
+            });
+        }
+        return row;
+    }
+
+    renderNode("");
+    if (confirmBtn) {
+        confirmBtn.disabled = moveState.selection === null || moveState.selection === undefined;
+    }
+}
+
+function toggleMoveNode(path) {
+    const node = getMoveNode(path);
+    if (!node || node.loading || !node.hasChildren) return;
+    if (!node.loaded) {
+        node.expanded = true;
+        upsertMoveNode(node);
+        loadMoveNode(path);
+        return;
+    }
+    node.expanded = !node.expanded;
+    upsertMoveNode(node);
+    renderMoveTree();
+}
+
+async function showMoveDialog(docId) {
+    const modal = document.getElementById("move-dialog");
+    const nameEl = document.getElementById("move-current-name");
+    const pathEl = document.getElementById("move-current-path");
+    const errorEl = document.getElementById("move-error");
+    const confirmBtn = document.getElementById("move-confirm");
+    if (!modal || !nameEl || !pathEl || !errorEl || !confirmBtn) return;
+    const row = document.querySelector(`#results-table tbody tr[data-id="${docId}"]`);
+    const sourceLabel = row?.dataset.source || "";
+    const name = row?.querySelector(".filename")?.textContent?.trim() || "";
+    const path = row?.querySelector(".path-cell")?.textContent?.trim() || "";
+    moveState.open = true;
+    moveState.docId = docId;
+    moveState.source = sourceLabel;
+    moveState.currentName = name;
+    moveState.currentPath = path;
+    moveState.selection = null;
+    moveState.nodes = new Map();
+    errorEl.textContent = "";
+    errorEl.classList.add("hidden");
+    confirmBtn.disabled = true;
+    nameEl.textContent = name || "Datei";
+    pathEl.textContent = path || "";
+    upsertMoveNode({
+        name: sourceLabel || "Quelle",
+        path: "",
+        hasChildren: true,
+        expanded: true,
+        loaded: false,
+        loading: false,
+        children: [],
+    });
+    modal.classList.remove("hidden");
+    await loadMoveNode("");
+    renderMoveTree();
+}
+
+function closeMoveDialog() {
+    const modal = document.getElementById("move-dialog");
+    if (modal) modal.classList.add("hidden");
+    resetMoveState();
+}
+
+function applyMoveResult(data) {
+    const id = data?.doc_id;
+    if (!id) return;
+    const newPath = data?.display_path || data?.new_path || "";
+    const row = document.querySelector(`#results-table tbody tr[data-id="${id}"]`);
+    if (row) {
+        const pathEl = row.querySelector(".path-cell");
+        if (pathEl && newPath) {
+            pathEl.textContent = newPath;
+            pathEl.title = newPath;
+        }
+    }
+    if (currentDocId && String(currentDocId) === String(id)) {
+        const pathHeader = document.getElementById("preview-path");
+        if (pathHeader && newPath) pathHeader.textContent = newPath;
+    }
+}
+
+async function submitMove() {
+    if (!moveState.docId) return;
+    const errorEl = document.getElementById("move-error");
+    const confirmBtn = document.getElementById("move-confirm");
+    if (errorEl) {
+        errorEl.textContent = "";
+        errorEl.classList.add("hidden");
+    }
+    confirmBtn.disabled = true;
+    try {
+        const res = await fetch(`/api/files/${moveState.docId}/move`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ target_dir: moveState.selection || "" }),
+        });
+        if (!res.ok) {
+            let detail = "Verschieben fehlgeschlagen.";
+            try {
+                const data = await res.json();
+                detail = data.detail || detail;
+            } catch (_) {
+                /* ignore */
+            }
+            throw new Error(detail);
+        }
+        const data = await res.json();
+        applyMoveResult(data);
+        closeMoveDialog();
+    } catch (err) {
+        if (errorEl) {
+            errorEl.textContent = err.message || "Verschieben fehlgeschlagen.";
+            errorEl.classList.remove("hidden");
+        }
+    } finally {
+        if (confirmBtn) {
+            confirmBtn.disabled = moveState.selection === null || moveState.selection === undefined;
+        }
+    }
+}
+
+function setupMoveDialog() {
+    const modal = document.getElementById("move-dialog");
+    if (!modal) return;
+    const closeBtn = document.getElementById("move-close");
+    const cancelBtn = document.getElementById("move-cancel");
+    const confirmBtn = document.getElementById("move-confirm");
+    closeBtn?.addEventListener("click", closeMoveDialog);
+    cancelBtn?.addEventListener("click", closeMoveDialog);
+    confirmBtn?.addEventListener("click", submitMove);
+    modal.addEventListener("click", (e) => {
+        if (e.target === modal) closeMoveDialog();
+    });
+}
+
 // Context menu
 const FUTURE_CONTEXT_MENU_FLAGS = {
     adminEntry: false,
@@ -1485,6 +1790,16 @@ const CONTEXT_MENU_ITEMS = [
         enabledIf: (ctx) => ctx.canManageFile,
         caption: (ctx, enabled) => (!enabled ? "Admin & Quelle bereit" : ""),
         handler: (ctx) => handleRenameAction(ctx.id),
+    },
+    {
+        id: "move",
+        label: "Verschieben…",
+        group: "manage",
+        order: 1.5,
+        icon: "folder",
+        enabledIf: (ctx) => ctx.canManageFile,
+        caption: (ctx, enabled) => (!enabled ? "Admin & Quelle bereit" : ""),
+        handler: (ctx) => handleMoveAction(ctx.id),
     },
     {
         id: "delete",
@@ -1628,6 +1943,10 @@ function createContextMenuIcon(name) {
             addPath("M6 6h12a1 1 0 0 1 1 1v8.5a1 1 0 0 1-1 1H9.5L6 19.5V7a1 1 0 0 1 1-1z");
             addPath("M9 10h6", { strokeWidth: "1.4" });
             addPath("M9 13h4", { strokeWidth: "1.4" });
+            break;
+        case "folder":
+            addPath("M3.5 7a1.5 1.5 0 0 1 1.5-1.5h4l1.2 1.6H19a1.5 1.5 0 0 1 1.5 1.5v8a1.5 1.5 0 0 1-1.5 1.5H5A1.5 1.5 0 0 1 3.5 16V7z");
+            addPath("M3.5 9.5h16");
             break;
         case "shield":
             addPath("M12 3.5 19 7v5.5c0 4-2.9 7.7-7 8.5-4.1-.8-7-4.5-7-8.5V7z");
@@ -1944,6 +2263,7 @@ document.addEventListener("keydown", (e) => {
         closeContextMenu();
         closeFeedbackOverlay();
         closeDeleteConfirm();
+        closeMoveDialog();
         const adminModal = document.getElementById("admin-modal");
         if (adminModal && !adminModal.classList.contains("hidden")) {
             adminModal.classList.add("hidden");

@@ -65,6 +65,17 @@ def check_within_root(path: Path, root: Path) -> bool:
         return False
 
 
+def _normalize_rel_path(raw: str) -> Path:
+    text = (raw or "").replace("\\", "/").strip()
+    if text.startswith("/"):
+        text = text[1:]
+    parts = [p for p in text.split("/") if p not in ("", ".")]
+    for part in parts:
+        if part in ("", ".", "..") or "\x00" in part or "/" in part or "\\" in part:
+            raise FileOpError("Ungültiger Pfad", status_code=400)
+    return Path("/".join(parts)) if parts else Path()
+
+
 def _audit(entry: Dict[str, object]) -> None:
     payload = dict(entry) if isinstance(entry, dict) else {}
     payload.setdefault("timestamp", datetime.now(timezone.utc).isoformat())
@@ -193,6 +204,48 @@ def resolve_doc(doc_id: int) -> Optional[Dict[str, object]]:
     except Exception:
         data["abs_path"] = None
     return data
+
+
+def list_directories(source_label: str, rel_path: str = "", limit: int = 500) -> Dict[str, object]:
+    info = _resolve_source(source_label)
+    _assert_quarantine_ready(info)
+    safe_rel = _normalize_rel_path(rel_path)
+    base_dir = _canonical(info.root / safe_rel)
+    if not check_within_root(base_dir, info.root):
+        raise FileOpError("Pfad liegt außerhalb der Quelle", status_code=400)
+    if not base_dir.exists():
+        raise FileOpError("Pfad nicht gefunden", status_code=404)
+    if not base_dir.is_dir():
+        raise FileOpError("Pfad ist kein Verzeichnis", status_code=400)
+
+    entries: List[Dict[str, object]] = []
+    try:
+        with os.scandir(base_dir) as it:
+            for entry in it:
+                if len(entries) >= limit:
+                    break
+                try:
+                    if not entry.is_dir():
+                        continue
+                    if entry.name in (".", "..", ".quarantine"):
+                        continue
+                    rel_child = (safe_rel / entry.name).as_posix()
+                    has_children = False
+                    try:
+                        with os.scandir(entry.path) as sub_it:
+                            for sub in sub_it:
+                                if sub.is_dir():
+                                    has_children = True
+                                    break
+                    except Exception:
+                        has_children = False
+                    entries.append({"name": entry.name, "path": rel_child, "has_children": has_children})
+                except Exception:
+                    continue
+    except FileNotFoundError:
+        raise FileOpError("Pfad nicht gefunden", status_code=404)
+    entries.sort(key=lambda e: e["name"].lower())
+    return {"source": info.label, "path": safe_rel.as_posix(), "entries": entries}
 
 
 def _resolve_source(label: str, fallback_root: Optional[str] = None) -> SourceInfo:
@@ -370,6 +423,100 @@ def rename_file(doc_id: int, new_name: str, actor: str = "admin") -> Dict[str, o
         "new_path": str(target_path),
         "backup_path": str(backup_path),
         "updated_in_index": True,
+        "display_name": target_path.name,
+        "display_path": str(target_path),
+    }
+
+
+def move_file(doc_id: int, target_dir: str, actor: str = "admin") -> Dict[str, object]:
+    doc = resolve_doc(doc_id)
+    if not doc:
+        raise FileOpError("Dokument nicht gefunden", status_code=404)
+
+    source_label = doc.get("source") or ""
+    info = _resolve_source(source_label)
+    _assert_quarantine_ready(info)
+
+    abs_path = doc.get("abs_path")
+    if not isinstance(abs_path, Path):
+        raise FileOpError("Pfad ungültig", status_code=400)
+    if not check_within_root(abs_path, info.root):
+        raise FileOpError("Pfad liegt außerhalb der Quelle", status_code=400)
+    if not abs_path.exists():
+        raise FileOpError("Datei nicht gefunden", status_code=404)
+
+    safe_target_dir = _normalize_rel_path(target_dir)
+    target_base = _canonical(info.root / safe_target_dir)
+    if not check_within_root(target_base, info.root):
+        raise FileOpError("Ziel liegt außerhalb der Quelle", status_code=400)
+    if not target_base.exists() or not target_base.is_dir():
+        raise FileOpError("Zielordner nicht gefunden", status_code=404)
+    if str(target_base).startswith(str(info.quarantine_dir)):
+        raise FileOpError("Quarantäne kann nicht als Ziel genutzt werden", status_code=400)
+
+    target_path = _canonical(target_base / abs_path.name)
+    if not check_within_root(target_path, info.root):
+        raise FileOpError("Ziel liegt außerhalb der Quelle", status_code=400)
+    if target_path == abs_path:
+        raise FileOpError("Ziel entspricht dem aktuellen Ort", status_code=400)
+    if target_path.exists():
+        raise FileOpError("Ziel existiert bereits", status_code=409)
+
+    audit_base = {
+        "action": "move",
+        "actor": actor or "admin",
+        "doc_id": doc_id,
+        "source": source_label,
+        "source_root": str(info.root),
+        "old_path": str(abs_path),
+        "new_path": str(target_path),
+    }
+
+    moved = False
+    with _locked_paths([abs_path, target_path]):
+        try:
+            target_base.mkdir(parents=True, exist_ok=True)
+            _move_file(abs_path, target_path)
+            moved = True
+            stat_result = target_path.stat()
+            with db.get_conn() as conn:
+                updated = db.update_document_metadata(
+                    conn,
+                    doc_id,
+                    path=str(target_path),
+                    filename=target_path.name,
+                    extension=target_path.suffix.lower(),
+                    size_bytes=stat_result.st_size,
+                    ctime=stat_result.st_ctime,
+                    mtime=stat_result.st_mtime,
+                    atime=getattr(stat_result, "st_atime", None),
+                    title_or_subject=None,
+                )
+            if not updated:
+                raise FileOpError("Dokument nicht gefunden", status_code=404)
+        except FileOpError as exc:
+            if moved and not abs_path.exists() and target_path.exists():
+                try:
+                    _move_file(target_path, abs_path)
+                except Exception:
+                    pass
+            _audit({**audit_base, "status": "error", "error": str(exc)})
+            raise
+        except Exception as exc:
+            if moved and not abs_path.exists() and target_path.exists():
+                try:
+                    _move_file(target_path, abs_path)
+                except Exception:
+                    pass
+            _audit({**audit_base, "status": "error", "error": str(exc)})
+            raise
+
+    _audit({**audit_base, "status": "ok"})
+    return {
+        "doc_id": doc_id,
+        "source": source_label,
+        "old_path": str(abs_path),
+        "new_path": str(target_path),
         "display_name": target_path.name,
         "display_path": str(target_path),
     }
