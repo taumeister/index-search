@@ -481,10 +481,12 @@ function setupSearchFavorites() {
         if (removeBtn) {
             const idx = Number(removeBtn.dataset.idx);
             removeSearchFavorite(idx);
+            e.stopPropagation();
             return;
         }
         const item = e.target.closest(".fav-item");
         if (item && item.dataset.value) {
+            e.stopPropagation();
             input.value = item.dataset.value;
             closeFavDropdown();
             search({ append: false });
@@ -2010,6 +2012,7 @@ const CONTEXT_MENU_ITEMS = [
         group: "manage",
         order: 1,
         icon: "copy",
+        visibleIf: (ctx) => ctx.canManageFile,
         enabledIf: (ctx) => ctx.canManageFile,
         caption: (ctx, enabled) => (!enabled ? "Admin & Quelle bereit" : ""),
         handler: (ctx) => handleCopyAction(ctx.id),
@@ -2021,6 +2024,7 @@ const CONTEXT_MENU_ITEMS = [
         order: 1,
         icon: "edit",
         shortcut: "F2",
+        visibleIf: (ctx) => ctx.canManageFile,
         enabledIf: (ctx) => ctx.canManageFile,
         caption: (ctx, enabled) => (!enabled ? "Admin & Quelle bereit" : ""),
         handler: (ctx) => handleRenameAction(ctx.id),
@@ -2031,6 +2035,7 @@ const CONTEXT_MENU_ITEMS = [
         group: "manage",
         order: 1.5,
         icon: "folder",
+        visibleIf: (ctx) => ctx.canManageFile,
         enabledIf: (ctx) => ctx.canManageFile,
         caption: (ctx, enabled) => (!enabled ? "Admin & Quelle bereit" : ""),
         handler: (ctx) => handleMoveAction(ctx.id),
@@ -2042,6 +2047,7 @@ const CONTEXT_MENU_ITEMS = [
         order: 2,
         icon: "trash",
         danger: true,
+        visibleIf: (ctx) => ctx.canManageFile,
         enabledIf: (ctx) => ctx.canManageFile,
         caption: (ctx, enabled) => (!enabled ? "Admin & Quelle bereit" : ""),
         handler: (ctx) => handleDeleteAction(ctx.id),
