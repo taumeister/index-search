@@ -74,6 +74,14 @@
 - Feedback-Overlay: öffnet bei Klick auf den Header-Button, dimmt Hintergrund, Editor mit Toolbar und Zeichenzähler, Abbruch/Senden-Buttons plus zweistufige Bestätigung; ESC oder Klick außerhalb schließt.
 - Dashboard: Auto-Index-Zeitplaner (Toggle, Modus-Buttons täglich/wöchentlich/intervall, Uhrzeit, Wochentags-/Intervall-Buttons, Plan speichern, Jetzt ausführen, Plan-/Status-Anzeige), Index-Live-Status, Roots/Explorer, Live-Log, Fehlerliste, Quarantäne-Panel (Liste der Registry-Einträge mit Filter Quelle/Alter/Suche, Aktionen Restore/Hard-Delete mit Bestätigung, Anzeige Retention/Cleanup-Konfig, Auto-Refresh).
 
+### Kontextmenü erweitern
+- Zentrale Definition in `app/frontend/static/main.js`: Gruppen stehen in `CONTEXT_MENU_SECTIONS`, Einträge in `CONTEXT_MENU_ITEMS`.
+- Pro Eintrag: id/label, group (`view|export|manage|more`), order, icon (z. B. eye, window, download, print, edit, trash, feedback, shield, filter), optional shortcut oder Caption/Hinweis, `danger` für destruktive Optik.
+- Sichtbarkeit/Status: `visibleIf` und `enabledIf` bekommen den Kontext mit doc_id, Name, Pfad, Quelle, Extension und Flag `canManageFile`; Rückgabe false blendet aus bzw. deaktiviert.
+- Handler: bekommt denselben Kontext, führt die Aktion aus (Preview/Download/Popup etc.); Menü schließt nach Auswahl automatisch, falls `closeOnSelect` nicht auf false gesetzt wird.
+- Neue Gruppen: Überschrift in `CONTEXT_MENU_SECTIONS` ergänzen, Einträge mit passendem group hinzufügen; Reihenfolge über `order`.
+- Platzhalter/Future-Items können über `FUTURE_CONTEXT_MENU_FLAGS` oder `visibleIf`-/`enabledIf`-Bedingungen vorbereitet werden, ohne das UI zu stören.
+
 ## Tests
 - `pytest` deckt Config-Validierung, DB/FTS-Funktion, Indexlauf und API-Suche ab.
 - E2E (Playwright): `tests/test_feedback_ui.py` simuliert den Feedback-Flow (Overlay öffnen, Text/Toolbar, Confirm, Erfolg) mit gemocktem `/api/feedback`; `tests/test_source_filter_ui.py` prüft Quellen-Filter (Chips laden, Request-Parameter). Start mit laufendem Container auf `http://localhost:8010` und optional `APP_BASE_URL` zum Überschreiben. Playwright-Assets via `pip install -r requirements-dev.txt` und `playwright install chromium`.

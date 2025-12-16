@@ -47,6 +47,10 @@ const dateFormatter = new Intl.DateTimeFormat("de-DE", {
 });
 let closeFeedbackOverlay = () => {};
 
+function feedbackFeatureEnabled() {
+    return window.feedbackEnabled === true || String(window.feedbackEnabled || "").toLowerCase() === "true";
+}
+
 function escapeHtml(str) {
     return String(str || "")
         .replace(/&/g, "&amp;")
@@ -1036,17 +1040,23 @@ function printDocument(id) {
     iframe.style.width = "1px";
     iframe.style.height = "1px";
     iframe.src = url;
-    const cleanup = () => setTimeout(() => iframe.remove(), 800);
+    let cleaned = false;
+    const cleanup = () => {
+        if (cleaned) return;
+        cleaned = true;
+        setTimeout(() => iframe.remove(), 500);
+    };
     iframe.onload = () => {
         try {
             iframe.contentWindow.focus();
+            iframe.contentWindow.onafterprint = cleanup;
             iframe.contentWindow.print();
         } catch (err) {
             console.error("Print fehlgeschlagen", err);
-        } finally {
             cleanup();
         }
     };
+    setTimeout(cleanup, 20000);
     document.body.appendChild(iframe);
 }
 
@@ -1448,62 +1458,436 @@ function handleRenameAction(id) {
 }
 
 // Context menu
+const FUTURE_CONTEXT_MENU_FLAGS = {
+    adminEntry: false,
+    filterEntry: false,
+};
+
+const CONTEXT_MENU_SECTIONS = [
+    { id: "view", label: "Ansehen", order: 1 },
+    { id: "export", label: "Exportieren", order: 2 },
+    { id: "manage", label: "Verwalten", order: 3 },
+    { id: "more", label: "Mehr", order: 4 },
+];
+
+const CONTEXT_MENU_ITEMS = [
+    { id: "preview", label: "Preview", group: "view", order: 1, icon: "eye", shortcut: "Enter", handler: (ctx) => openPreview(ctx.id, true) },
+    { id: "popup", label: "Pop-up", group: "view", order: 2, icon: "window", handler: (ctx) => openPopupForRow(ctx.id) },
+    { id: "download", label: "Download", group: "export", order: 1, icon: "download", handler: (ctx) => window.open(`/api/document/${ctx.id}/file?download=1`, "_blank") },
+    { id: "print", label: "Drucken", group: "export", order: 2, icon: "print", handler: (ctx) => printDocument(ctx.id) },
+    {
+        id: "rename",
+        label: "Umbenennen…",
+        group: "manage",
+        order: 1,
+        icon: "edit",
+        shortcut: "F2",
+        enabledIf: (ctx) => ctx.canManageFile,
+        caption: (ctx, enabled) => (!enabled ? "Admin & Quelle bereit" : ""),
+        handler: (ctx) => handleRenameAction(ctx.id),
+    },
+    {
+        id: "delete",
+        label: "Löschen",
+        group: "manage",
+        order: 2,
+        icon: "trash",
+        danger: true,
+        enabledIf: (ctx) => ctx.canManageFile,
+        caption: (ctx, enabled) => (!enabled ? "Admin & Quelle bereit" : ""),
+        handler: (ctx) => handleDeleteAction(ctx.id),
+    },
+    {
+        id: "feedback",
+        label: "Feedback senden",
+        group: "more",
+        order: 1,
+        icon: "feedback",
+        visibleIf: () => feedbackFeatureEnabled(),
+        handler: () => openFeedbackFromMenu(),
+    },
+    {
+        id: "admin",
+        label: "Als Admin…",
+        group: "more",
+        order: 2,
+        icon: "shield",
+        visibleIf: () => FUTURE_CONTEXT_MENU_FLAGS.adminEntry,
+        enabledIf: () => false,
+        caption: "Geplant",
+    },
+    {
+        id: "filter",
+        label: "Filter anpassen",
+        group: "more",
+        order: 3,
+        icon: "filter",
+        visibleIf: () => FUTURE_CONTEXT_MENU_FLAGS.filterEntry,
+        enabledIf: () => false,
+        caption: "Geplant",
+    },
+];
+
 let contextMenuEl = null;
-function showContextMenu(e, id) {
-    e.preventDefault();
-    closeContextMenu();
+let contextMenuButtons = [];
+let contextMenuVisibleItems = [];
+let contextMenuActiveIndex = -1;
+
+function resolveSectionLabel(id) {
+    const found = CONTEXT_MENU_SECTIONS.find((section) => section.id === id);
+    return found ? found.label : id;
+}
+
+function getContextMenuContext(id) {
+    const row = document.querySelector(`#results-table tbody tr[data-id="${id}"]`);
+    if (!row) return null;
+    const name = row.querySelector(".filename")?.textContent?.trim() || "Dokument";
+    const pathLabel = row.querySelector(".path-cell")?.textContent?.trim() || "";
+    const sourceLabel = row.dataset.source || "";
+    const extensionLabel = (fileExtension(name) || "").replace(".", "").toUpperCase() || "DOC";
+    return {
+        id,
+        name,
+        path: pathLabel,
+        sourceLabel,
+        extensionLabel,
+        canManageFile: canUseFileOpsForSource(sourceLabel),
+        rowRect: row.getBoundingClientRect(),
+    };
+}
+
+function hydrateContextMenuItems(ctx) {
+    const sectionOrder = new Map(CONTEXT_MENU_SECTIONS.map((section, idx) => [section.id, section.order ?? idx]));
+    return CONTEXT_MENU_ITEMS.map((item, idx) => {
+        const visible = typeof item.visibleIf === "function" ? item.visibleIf(ctx) : true;
+        const enabled = typeof item.enabledIf === "function" ? item.enabledIf(ctx) : true;
+        const caption = typeof item.caption === "function" ? item.caption(ctx, enabled) : item.caption;
+        return {
+            ...item,
+            visible,
+            enabled,
+            caption: caption || "",
+            __order: idx,
+            sectionOrder: sectionOrder.get(item.group) ?? 99,
+        };
+    })
+        .filter((item) => item.visible !== false)
+        .sort((a, b) => {
+            if (a.sectionOrder !== b.sectionOrder) return a.sectionOrder - b.sectionOrder;
+            if ((a.order ?? 0) !== (b.order ?? 0)) return (a.order ?? 0) - (b.order ?? 0);
+            return (a.__order ?? 0) - (b.__order ?? 0);
+        });
+}
+
+function createContextMenuIcon(name) {
+    const ns = "http://www.w3.org/2000/svg";
+    const svg = document.createElementNS(ns, "svg");
+    svg.setAttribute("viewBox", "0 0 24 24");
+    svg.setAttribute("aria-hidden", "true");
+    svg.classList.add("context-menu__icon");
+    const addPath = (d, opts = {}) => {
+        const path = document.createElementNS(ns, "path");
+        path.setAttribute("d", d);
+        path.setAttribute("fill", opts.fill || "none");
+        path.setAttribute("stroke", opts.stroke || "currentColor");
+        path.setAttribute("stroke-width", opts.strokeWidth || "1.6");
+        path.setAttribute("stroke-linecap", opts.lineCap || "round");
+        path.setAttribute("stroke-linejoin", opts.lineJoin || "round");
+        svg.appendChild(path);
+    };
+    switch (name) {
+        case "eye":
+            addPath("M1.5 12s4-7.5 10.5-7.5S22.5 12 22.5 12s-4 7.5-10.5 7.5S1.5 12 1.5 12z");
+            addPath("M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6z");
+            break;
+        case "window":
+            addPath("M4.5 6.5A2 2 0 0 1 6.5 4.5h11a2 2 0 0 1 2 2v11a2 2 0 0 1-2 2h-11a2 2 0 0 1-2-2z");
+            addPath("M4.5 10.5h15");
+            addPath("M9.5 4.5v6");
+            break;
+        case "download":
+            addPath("M12 3v12");
+            addPath("M8.5 11.5 12 15l3.5-3.5");
+            addPath("M5 19h14", { strokeWidth: "1.4" });
+            break;
+        case "print":
+            addPath("M7 9.5v-4a1 1 0 0 1 1-1h8a1 1 0 0 1 1 1v4");
+            addPath("M7 15.5h10v5H7z");
+            addPath("M6 12h12a1 1 0 0 0 1-1V9a1 1 0 0 0-1-1H6a1 1 0 0 0-1 1v2a1 1 0 0 0 1 1z");
+            break;
+        case "edit":
+            addPath("M5 16.75V19h2.25l9.9-9.9a1.5 1.5 0 0 0 0-2.12l-1.13-1.13a1.5 1.5 0 0 0-2.12 0z");
+            addPath("M13.75 6.25 16.5 9");
+            break;
+        case "trash":
+            addPath("M6.5 8.5h11l-.7 10.1a1.5 1.5 0 0 1-1.5 1.4H8.7a1.5 1.5 0 0 1-1.5-1.4z");
+            addPath("M5 6.5h14");
+            addPath("M10 5.5h4l.7 1H9.3z");
+            break;
+        case "feedback":
+            addPath("M6 6h12a1 1 0 0 1 1 1v8.5a1 1 0 0 1-1 1H9.5L6 19.5V7a1 1 0 0 1 1-1z");
+            addPath("M9 10h6", { strokeWidth: "1.4" });
+            addPath("M9 13h4", { strokeWidth: "1.4" });
+            break;
+        case "shield":
+            addPath("M12 3.5 19 7v5.5c0 4-2.9 7.7-7 8.5-4.1-.8-7-4.5-7-8.5V7z");
+            break;
+        case "filter":
+            addPath("M4.5 6h15L14 12.5v5l-4-2.5v-2.5z");
+            break;
+        default:
+            svg.innerHTML = "";
+            addPath("M12 5.5a6.5 6.5 0 1 1 0 13 6.5 6.5 0 0 1 0-13z");
+    }
+    return svg;
+}
+
+function createContextMenuHeader(ctx) {
+    const header = document.createElement("div");
+    header.className = "context-menu__header";
+    const badge = document.createElement("div");
+    badge.className = "context-menu__pill";
+    badge.textContent = ctx.extensionLabel || "DOC";
+    const textWrap = document.createElement("div");
+    textWrap.className = "context-menu__title-wrap";
+    const title = document.createElement("div");
+    title.className = "context-menu__title";
+    title.textContent = ctx.name || "Dokument";
+    title.title = ctx.name || "";
+    const path = document.createElement("div");
+    path.className = "context-menu__path";
+    const subline = ctx.path || (ctx.sourceLabel ? `Quelle: ${ctx.sourceLabel}` : `ID ${ctx.id}`);
+    path.textContent = subline;
+    path.title = subline;
+    textWrap.appendChild(title);
+    textWrap.appendChild(path);
+    header.appendChild(badge);
+    header.appendChild(textWrap);
+    return header;
+}
+
+function createContextMenuButton(item) {
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "context-menu__item";
+    btn.dataset.action = item.id;
+    btn.setAttribute("role", "menuitem");
+    if (item.danger) {
+        btn.classList.add("danger");
+    }
+    if (!item.enabled) {
+        btn.disabled = true;
+        btn.setAttribute("aria-disabled", "true");
+    }
+    const icon = createContextMenuIcon(item.icon);
+    if (icon) {
+        btn.appendChild(icon);
+    }
+    const textWrap = document.createElement("span");
+    textWrap.className = "context-menu__text";
+    const label = document.createElement("span");
+    label.className = "context-menu__label";
+    label.textContent = item.label;
+    textWrap.appendChild(label);
+    if (item.caption) {
+        const hint = document.createElement("span");
+        hint.className = "context-menu__hint";
+        hint.textContent = item.caption;
+        textWrap.appendChild(hint);
+    }
+    btn.appendChild(textWrap);
+    if (item.shortcut) {
+        const shortcut = document.createElement("span");
+        shortcut.className = "context-menu__shortcut";
+        shortcut.textContent = item.shortcut;
+        btn.appendChild(shortcut);
+    }
+    return btn;
+}
+
+function renderContextMenu(ctx) {
+    const items = hydrateContextMenuItems(ctx);
+    if (!items.length) return null;
     const menu = document.createElement("div");
     menu.className = "context-menu";
-    const ul = document.createElement("ul");
-    const row = document.querySelector(`#results-table tbody tr[data-id="${id}"]`);
-    const sourceLabel = row?.dataset.source || "";
-    const items = [
-        { action: "preview", label: "Preview" },
-        { action: "popup", label: "Pop-up" },
-        { action: "download", label: "Download" },
-        { action: "print", label: "Drucken" },
-    ];
-    if (canUseFileOpsForSource(sourceLabel)) {
-        items.push({ action: "rename", label: "Umbenennen\u2026" });
-        items.push({ action: "delete", label: "Löschen", danger: true });
-    }
+    menu.setAttribute("role", "menu");
+    menu.tabIndex = -1;
+    menu.appendChild(createContextMenuHeader(ctx));
+    let currentGroup = null;
+    let listEl = null;
+    const buttons = [];
     items.forEach((item) => {
-        const li = document.createElement("li");
-        li.dataset.action = item.action;
-        li.textContent = item.label;
-        if (item.danger) {
-            li.classList.add("danger");
+        if (item.group !== currentGroup) {
+            currentGroup = item.group;
+            const section = document.createElement("div");
+            section.className = "context-menu__section";
+            const title = document.createElement("div");
+            title.className = "context-menu__section-title";
+            title.textContent = resolveSectionLabel(item.group);
+            listEl = document.createElement("div");
+            listEl.className = "context-menu__list";
+            section.appendChild(title);
+            section.appendChild(listEl);
+            menu.appendChild(section);
         }
-        ul.appendChild(li);
+        const btn = createContextMenuButton(item);
+        buttons.push(btn);
+        listEl.appendChild(btn);
     });
-    ul.addEventListener("click", (ev) => {
-        const action = ev.target.dataset.action;
-        if (action === "preview") openPreview(id, true);
-        if (action === "popup") openPopupForRow(id);
-        if (action === "download") window.open(`/api/document/${id}/file?download=1`, "_blank");
-        if (action === "print") printDocument(id);
-        if (action === "delete") {
-            handleDeleteAction(id);
+    menu.addEventListener("click", (ev) => handleContextMenuClick(ev, ctx));
+    return { menu, items, buttons };
+}
+
+function positionContextMenu(menu, triggerEvent, anchorRect) {
+    const margin = 8;
+    const vw = window.innerWidth;
+    const vh = window.innerHeight;
+    const fallbackX = anchorRect ? anchorRect.left + Math.min(anchorRect.width / 2, 160) : vw / 2;
+    const fallbackY = anchorRect ? anchorRect.top + Math.min(anchorRect.height / 2, 80) : vh / 2;
+    const clickX = Number.isFinite(triggerEvent?.clientX) ? triggerEvent.clientX : fallbackX;
+    const clickY = Number.isFinite(triggerEvent?.clientY) ? triggerEvent.clientY : fallbackY;
+    const rect = menu.getBoundingClientRect();
+    let left = clickX;
+    let top = clickY;
+    if (left + rect.width > vw - margin) {
+        left = Math.max(margin, vw - rect.width - margin);
+    }
+    if (top + rect.height > vh - margin) {
+        top = Math.max(margin, vh - rect.height - margin);
+    }
+    menu.style.left = `${left}px`;
+    menu.style.top = `${top}px`;
+}
+
+function focusContextMenuItem(targetIndex, { wrap = true } = {}) {
+    if (!contextMenuButtons.length) return;
+    const total = contextMenuButtons.length;
+    let idx = Math.min(Math.max(targetIndex, 0), total - 1);
+    for (let i = 0; i < total; i++) {
+        const candidate = wrap ? (idx + i) % total : Math.min(total - 1, idx + i);
+        const btn = contextMenuButtons[candidate];
+        if (btn && !btn.disabled) {
+            btn.focus({ preventScroll: true });
+            contextMenuActiveIndex = candidate;
             return;
         }
-        if (action === "rename") {
-            handleRenameAction(id);
+    }
+}
+
+function focusFirstContextMenuItem() {
+    focusContextMenuItem(0);
+}
+
+function moveContextMenuFocus(step) {
+    if (!contextMenuButtons.length) return;
+    let idx = contextMenuActiveIndex >= 0 ? contextMenuActiveIndex : 0;
+    for (let i = 0; i < contextMenuButtons.length; i++) {
+        idx = (idx + step + contextMenuButtons.length) % contextMenuButtons.length;
+        const btn = contextMenuButtons[idx];
+        if (btn && !btn.disabled) {
+            btn.focus({ preventScroll: true });
+            contextMenuActiveIndex = idx;
             return;
         }
+    }
+}
+
+function handleContextMenuClick(ev, ctx) {
+    const btn = ev.target.closest(".context-menu__item");
+    if (!btn || btn.disabled) return;
+    const action = btn.dataset.action;
+    const item = contextMenuVisibleItems.find((entry) => entry.id === action);
+    if (item && typeof item.handler === "function") {
+        item.handler(ctx);
+    }
+    if (!item || item.closeOnSelect !== false) {
         closeContextMenu();
-    });
-    menu.appendChild(ul);
-    document.body.appendChild(menu);
-    menu.style.left = `${e.clientX}px`;
-    menu.style.top = `${e.clientY}px`;
-    contextMenuEl = menu;
-    document.addEventListener("click", closeContextMenu, { once: true });
+    }
+}
+
+function handleContextMenuOutside(e) {
+    if (!contextMenuEl) return;
+    if (e.target.closest(".context-menu")) return;
+    closeContextMenu();
+}
+
+function handleContextMenuKeydown(e) {
+    if (!contextMenuEl) return;
+    if (e.key === "ArrowDown") {
+        e.preventDefault();
+        moveContextMenuFocus(1);
+    } else if (e.key === "ArrowUp") {
+        e.preventDefault();
+        moveContextMenuFocus(-1);
+    } else if (e.key === "Home") {
+        e.preventDefault();
+        focusContextMenuItem(0, { wrap: false });
+    } else if (e.key === "End") {
+        e.preventDefault();
+        focusContextMenuItem(contextMenuButtons.length - 1, { wrap: false });
+    } else if (e.key === "Escape") {
+        e.preventDefault();
+        closeContextMenu();
+    }
+}
+
+function handleContextMenuScroll() {
+    closeContextMenu();
+}
+
+function attachContextMenuGuards() {
+    document.addEventListener("mousedown", handleContextMenuOutside);
+    document.addEventListener("keydown", handleContextMenuKeydown, true);
+    window.addEventListener("resize", closeContextMenu);
+    window.addEventListener("scroll", handleContextMenuScroll, true);
+}
+
+function detachContextMenuGuards() {
+    document.removeEventListener("mousedown", handleContextMenuOutside);
+    document.removeEventListener("keydown", handleContextMenuKeydown, true);
+    window.removeEventListener("resize", closeContextMenu);
+    window.removeEventListener("scroll", handleContextMenuScroll, true);
+}
+
+function showContextMenu(e, id) {
+    e?.preventDefault?.();
+    const ctx = getContextMenuContext(id);
+    if (!ctx) return;
+    closeContextMenu();
+    const rendered = renderContextMenu(ctx);
+    if (!rendered) return;
+    contextMenuEl = rendered.menu;
+    contextMenuVisibleItems = rendered.items;
+    contextMenuButtons = rendered.buttons;
+    contextMenuActiveIndex = -1;
+    contextMenuEl.style.visibility = "hidden";
+    document.body.appendChild(contextMenuEl);
+    positionContextMenu(contextMenuEl, e, ctx.rowRect);
+    contextMenuEl.style.visibility = "visible";
+    attachContextMenuGuards();
+    focusFirstContextMenuItem();
 }
 
 function closeContextMenu() {
     if (contextMenuEl) {
+        detachContextMenuGuards();
         contextMenuEl.remove();
-        contextMenuEl = null;
+    }
+    contextMenuEl = null;
+    contextMenuVisibleItems = [];
+    contextMenuButtons = [];
+    contextMenuActiveIndex = -1;
+}
+
+function openFeedbackFromMenu() {
+    if (!feedbackFeatureEnabled()) return;
+    if (typeof window.openFeedbackOverlay === "function") {
+        window.openFeedbackOverlay();
+        return;
+    }
+    const trigger = document.getElementById("feedback-trigger");
+    if (trigger) {
+        trigger.click();
     }
 }
 
@@ -1564,6 +1948,22 @@ document.addEventListener("keydown", (e) => {
         if (adminModal && !adminModal.classList.contains("hidden")) {
             adminModal.classList.add("hidden");
         }
+        return;
+    }
+    if (!contextMenuEl && (e.key === "ContextMenu" || (e.shiftKey && e.key === "F10"))) {
+        const activeRow = document.querySelector("#results-table tbody tr.active") || document.querySelector("#results-table tbody tr");
+        const rowId = activeRow?.dataset.id;
+        if (!rowId) return;
+        e.preventDefault();
+        const rect = activeRow.getBoundingClientRect();
+        showContextMenu(
+            {
+                preventDefault() {},
+                clientX: rect.left + Math.min(rect.width / 2, 160),
+                clientY: rect.top + Math.min(rect.height / 2, 80),
+            },
+            rowId
+        );
     }
 });
 
@@ -1633,7 +2033,7 @@ function bootstrapZoom() {
 const MAX_FEEDBACK_LEN = 5000;
 
 function setupFeedback() {
-    const enabled = window.feedbackEnabled === true || String(window.feedbackEnabled || "").toLowerCase() === "true";
+    const enabled = feedbackFeatureEnabled();
     if (!enabled) return;
     const overlay = document.getElementById("feedback-overlay");
     const trigger = document.getElementById("feedback-trigger");
@@ -1714,6 +2114,8 @@ function setupFeedback() {
         sending = false;
         document.body.style.overflow = "";
     };
+
+    window.openFeedbackOverlay = openOverlay;
 
     function resetEditor() {
         editor.innerHTML = "";
