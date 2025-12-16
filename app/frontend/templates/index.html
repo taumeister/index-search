@@ -186,6 +186,23 @@
         </div>
     </div>
 
+    <div id="rename-dialog" class="dialog-overlay hidden">
+        <div class="dialog-card narrow">
+            <div class="dialog-title">Umbenennen</div>
+            <div class="dialog-body">
+                <div class="dialog-label">Aktueller Name</div>
+                <div class="dialog-strong" id="rename-current-name"></div>
+                <div class="dialog-label">Neuer Name</div>
+                <input type="text" class="dialog-input" id="rename-input" placeholder="Neuer Dateiname" autocomplete="off" />
+                <div class="dialog-status hidden" id="rename-error"></div>
+            </div>
+            <div class="dialog-actions">
+                <button type="button" class="btn btn-ghost" id="rename-cancel">Abbrechen</button>
+                <button type="button" class="btn btn-primary" id="rename-confirm" disabled>Umbenennen</button>
+            </div>
+        </div>
+    </div>
+
     {% if feedback_enabled %}
     <div id="feedback-overlay" class="feedback-overlay hidden" aria-hidden="true">
         <div class="feedback-panel" role="dialog" aria-modal="false" aria-labelledby="feedback-title">

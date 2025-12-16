@@ -325,6 +325,60 @@ def get_document_content(conn: sqlite3.Connection, doc_id: int) -> Optional[str]
     return row[0] if row else None
 
 
+def get_document_title(conn: sqlite3.Connection, doc_id: int) -> Optional[str]:
+    cursor = conn.execute("SELECT title_or_subject FROM documents_fts WHERE doc_id = ?", (doc_id,))
+    row = cursor.fetchone()
+    return row[0] if row else None
+
+
+def update_document_metadata(
+    conn: sqlite3.Connection,
+    doc_id: int,
+    *,
+    path: Optional[str] = None,
+    filename: Optional[str] = None,
+    extension: Optional[str] = None,
+    size_bytes: Optional[int] = None,
+    ctime: Optional[float] = None,
+    mtime: Optional[float] = None,
+    atime: Optional[float] = None,
+    title_or_subject: Optional[str] = None,
+) -> bool:
+    cols = []
+    params: List[Any] = []
+    if path is not None:
+        cols.append("path = ?")
+        params.append(path)
+    if filename is not None:
+        cols.append("filename = ?")
+        params.append(filename)
+    if extension is not None:
+        cols.append("extension = ?")
+        params.append(extension)
+    if size_bytes is not None:
+        cols.append("size_bytes = ?")
+        params.append(size_bytes)
+    if ctime is not None:
+        cols.append("ctime = ?")
+        params.append(ctime)
+    if mtime is not None:
+        cols.append("mtime = ?")
+        params.append(mtime)
+    if atime is not None:
+        cols.append("atime = ?")
+        params.append(atime)
+
+    if cols:
+        result = conn.execute(f"UPDATE documents SET {', '.join(cols)} WHERE id = ?", (*params, doc_id))
+        if result.rowcount == 0:
+            return False
+
+    if title_or_subject is not None:
+        conn.execute("UPDATE documents_fts SET title_or_subject = ? WHERE doc_id = ?", (title_or_subject, doc_id))
+
+    return bool(cols or title_or_subject is not None)
+
+
 def insert_quarantine_entry(conn: sqlite3.Connection, entry: QuarantineEntry) -> int:
     payload = asdict(entry)
     cur = conn.execute(

@@ -614,6 +614,19 @@ def create_app(config: Optional[CentralConfig] = None) -> FastAPI:
 
         return StreamingResponse(file_iter(), media_type=media_type, headers=headers)
 
+    @app.post("/api/files/{doc_id}/rename")
+    def rename_file(doc_id: int, payload: Dict[str, Any], _admin: bool = Depends(require_admin)):
+        file_ops.refresh_quarantine_state()
+        new_name = (payload.get("new_name") or "").strip()
+        try:
+            result = file_ops.rename_file(doc_id, new_name, actor="admin")
+        except file_ops.FileOpError as exc:
+            raise HTTPException(status_code=exc.status_code, detail=str(exc))
+        except Exception as exc:
+            logger.error("Rename fehlgeschlagen: %s", exc)
+            raise HTTPException(status_code=500, detail="Umbenennen fehlgeschlagen")
+        return {"status": "ok", **result}
+
     @app.post("/api/files/{doc_id}/quarantine-delete")
     def quarantine_delete(doc_id: int, request: Request, _admin: bool = Depends(require_admin)):
         file_ops.refresh_quarantine_state()

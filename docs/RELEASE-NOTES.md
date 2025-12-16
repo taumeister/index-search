@@ -1,5 +1,10 @@
 # Release-Notizen
 
+## v0.3.11
+- Explorer: Admin-Operation „Umbenennen…“ (POST `/api/files/{doc_id}/rename`) mit Write-Checks, Temp-Kopie+atomarem Move, Backup in `.quarantine/<Datum>/.rename_backup`, Rollback-Pfad und Audit-Log (`file_ops.jsonl`), Index-Update behält doc_id bei.
+- UI: Kontextmenü-Eintrag „Umbenennen…“ nur im Admin-Modus, Modal mit Validierung (kein Pfad/keine Endungsänderung), Treffer aktualisiert ohne Reload.
+- Tests ergänzt (Erfolg, 403 ohne Admin, ungültiger Name/Endung, Konflikt, Rollback bei Copy-Fehler); Version erhöht.
+
 ## v0.3.10
 - Neue Quarantäne-Doku (`docs/QUARANTAENE.md`) mit End-to-End-Flow (Registry, Restore, Hard-Delete, Cleanup, ENV/Locks/Safety).
 - Version angehoben.

@@ -37,6 +37,7 @@ let activeSourceLabels = new Set();
 let adminState = { admin: false, fileOpsEnabled: false, readySources: [] };
 let adminReadySources = new Set();
 let pendingDeleteId = null;
+let pendingRename = null;
 const dateFormatter = new Intl.DateTimeFormat("de-DE", {
     year: "numeric",
     month: "2-digit",
@@ -53,6 +54,13 @@ function escapeHtml(str) {
         .replace(/>/g, "&gt;")
         .replace(/"/g, "&quot;")
         .replace(/'/g, "&#39;");
+}
+
+function fileExtension(name) {
+    const trimmed = String(name || "").trim();
+    const idx = trimmed.lastIndexOf(".");
+    if (idx <= 0) return "";
+    return trimmed.slice(idx).toLowerCase();
 }
 
 function focusSearchInput() {
@@ -1078,6 +1086,7 @@ setupTimeFilterChips();
 setupSourceFilter();
 setupAdminControls();
 setupDeleteConfirm();
+setupRenameDialog();
 refreshAdminStatus();
 document.getElementById("search-input").addEventListener("input", debounceSearch);
 const loadMoreBtn = document.getElementById("load-more");
@@ -1245,6 +1254,176 @@ function setupDeleteConfirm() {
     });
 }
 
+function closeRenameDialog() {
+    const modal = document.getElementById("rename-dialog");
+    const errorEl = document.getElementById("rename-error");
+    const input = document.getElementById("rename-input");
+    const confirmBtn = document.getElementById("rename-confirm");
+    pendingRename = null;
+    if (modal) modal.classList.add("hidden");
+    if (errorEl) {
+        errorEl.textContent = "";
+        errorEl.classList.add("hidden");
+    }
+    if (input) {
+        input.value = "";
+    }
+    if (confirmBtn) confirmBtn.disabled = true;
+}
+
+function validateRenameInput(value, originalName) {
+    const cleaned = (value || "").trim();
+    if (!cleaned) return "Name erforderlich";
+    if (cleaned === originalName) return "Name unverändert";
+    if (cleaned === "." || cleaned === "..") return "Ungültiger Name";
+    if (/[\\\\/]/.test(cleaned) || cleaned.includes("\u0000")) return "Ungültiger Name";
+    if (fileExtension(cleaned) !== fileExtension(originalName)) return "Dateiendung unverändert lassen";
+    return "";
+}
+
+function updateRenameValidation() {
+    const input = document.getElementById("rename-input");
+    const errorEl = document.getElementById("rename-error");
+    const confirmBtn = document.getElementById("rename-confirm");
+    if (!pendingRename || !input || !errorEl || !confirmBtn) return;
+    const err = validateRenameInput(input.value, pendingRename.name);
+    if (err) {
+        errorEl.textContent = err;
+        errorEl.classList.remove("hidden");
+        confirmBtn.disabled = true;
+    } else {
+        errorEl.textContent = "";
+        errorEl.classList.add("hidden");
+        confirmBtn.disabled = false;
+    }
+}
+
+function showRenameDialog(docId) {
+    const modal = document.getElementById("rename-dialog");
+    const currentEl = document.getElementById("rename-current-name");
+    const input = document.getElementById("rename-input");
+    const errorEl = document.getElementById("rename-error");
+    const confirmBtn = document.getElementById("rename-confirm");
+    if (!modal || !currentEl || !input || !errorEl || !confirmBtn) return;
+    const row = document.querySelector(`#results-table tbody tr[data-id="${docId}"]`);
+    const sourceLabel = row?.dataset.source || "";
+    if (!canUseFileOpsForSource(sourceLabel)) {
+        closeContextMenu();
+        return;
+    }
+    const name = row?.querySelector(".filename")?.textContent?.trim() || "";
+    const pathLabel = row?.querySelector(".path-cell")?.textContent?.trim() || "";
+    pendingRename = { id: docId, source: sourceLabel, name, path: pathLabel };
+    currentEl.textContent = name || "Datei";
+    input.value = name || "";
+    errorEl.textContent = "";
+    errorEl.classList.add("hidden");
+    confirmBtn.disabled = true;
+    modal.classList.remove("hidden");
+    input.focus();
+    input.select();
+}
+
+function applyRenameResult(data) {
+    const id = data?.doc_id || (pendingRename && pendingRename.id);
+    if (!id) return;
+    const newPath = data?.display_path || data?.new_path || (pendingRename ? pendingRename.path : "");
+    const newName = data?.display_name || (newPath ? newPath.split("/").pop() : pendingRename?.name || "");
+    const row = document.querySelector(`#results-table tbody tr[data-id="${id}"]`);
+    if (row) {
+        const nameEl = row.querySelector(".filename");
+        const pathEl = row.querySelector(".path-cell");
+        if (nameEl && newName) {
+            nameEl.textContent = newName;
+            nameEl.title = newName;
+        }
+        if (pathEl && newPath) {
+            pathEl.textContent = newPath;
+            pathEl.title = newPath;
+        }
+    }
+    if (currentDocId && String(currentDocId) === String(id)) {
+        const nameHeader = document.getElementById("preview-name");
+        const pathHeader = document.getElementById("preview-path");
+        if (nameHeader && newName) nameHeader.textContent = newName;
+        if (pathHeader && newPath) pathHeader.textContent = newPath;
+    }
+}
+
+async function performRename() {
+    const modal = document.getElementById("rename-dialog");
+    const input = document.getElementById("rename-input");
+    const errorEl = document.getElementById("rename-error");
+    const confirmBtn = document.getElementById("rename-confirm");
+    if (!pendingRename || !modal || !input || !errorEl || !confirmBtn) return;
+    const validationError = validateRenameInput(input.value, pendingRename.name);
+    if (validationError) {
+        errorEl.textContent = validationError;
+        errorEl.classList.remove("hidden");
+        confirmBtn.disabled = true;
+        return;
+    }
+    if (!canUseFileOpsForSource(pendingRename.source)) {
+        errorEl.textContent = "Aktion nicht erlaubt.";
+        errorEl.classList.remove("hidden");
+        confirmBtn.disabled = true;
+        return;
+    }
+    confirmBtn.disabled = true;
+    try {
+        const res = await fetch(`/api/files/${pendingRename.id}/rename`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ new_name: (input.value || "").trim() }),
+        });
+        if (!res.ok) {
+            let detail = "Umbenennen fehlgeschlagen.";
+            try {
+                const data = await res.json();
+                detail = data.detail || detail;
+            } catch (_) {
+                /* ignore */
+            }
+            if (res.status === 401 || res.status === 403) {
+                updateAdminState({ admin: false, file_ops_enabled: adminState.fileOpsEnabled, quarantine_ready_sources: adminState.readySources });
+            }
+            errorEl.textContent = detail;
+            errorEl.classList.remove("hidden");
+            confirmBtn.disabled = false;
+            return;
+        }
+        const data = await res.json();
+        applyRenameResult(data);
+        closeRenameDialog();
+    } catch (_) {
+        errorEl.textContent = "Umbenennen fehlgeschlagen.";
+        errorEl.classList.remove("hidden");
+        confirmBtn.disabled = false;
+    }
+}
+
+function setupRenameDialog() {
+    const modal = document.getElementById("rename-dialog");
+    if (!modal) return;
+    const confirmBtn = document.getElementById("rename-confirm");
+    const cancelBtn = document.getElementById("rename-cancel");
+    const input = document.getElementById("rename-input");
+    confirmBtn?.addEventListener("click", performRename);
+    cancelBtn?.addEventListener("click", closeRenameDialog);
+    modal.addEventListener("click", (e) => {
+        if (e.target === modal) closeRenameDialog();
+    });
+    input?.addEventListener("input", updateRenameValidation);
+    input?.addEventListener("keydown", (e) => {
+        if (e.key === "Enter") {
+            e.preventDefault();
+            if (!document.getElementById("rename-confirm")?.disabled) {
+                performRename();
+            }
+        }
+    });
+}
+
 function handleDeleteAction(id) {
     const row = document.querySelector(`#results-table tbody tr[data-id="${id}"]`);
     const sourceLabel = row?.dataset.source || "";
@@ -1255,6 +1434,17 @@ function handleDeleteAction(id) {
     const name = row?.querySelector(".filename")?.textContent?.trim() || "Datei";
     closeContextMenu();
     showDeleteConfirm(id, name, sourceLabel);
+}
+
+function handleRenameAction(id) {
+    const row = document.querySelector(`#results-table tbody tr[data-id="${id}"]`);
+    const sourceLabel = row?.dataset.source || "";
+    if (!canUseFileOpsForSource(sourceLabel)) {
+        closeContextMenu();
+        return;
+    }
+    closeContextMenu();
+    showRenameDialog(id);
 }
 
 // Context menu
@@ -1274,6 +1464,7 @@ function showContextMenu(e, id) {
         { action: "print", label: "Drucken" },
     ];
     if (canUseFileOpsForSource(sourceLabel)) {
+        items.push({ action: "rename", label: "Umbenennen\u2026" });
         items.push({ action: "delete", label: "Löschen", danger: true });
     }
     items.forEach((item) => {
@@ -1293,6 +1484,10 @@ function showContextMenu(e, id) {
         if (action === "print") printDocument(id);
         if (action === "delete") {
             handleDeleteAction(id);
+            return;
+        }
+        if (action === "rename") {
+            handleRenameAction(id);
             return;
         }
         closeContextMenu();

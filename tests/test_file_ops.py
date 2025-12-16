@@ -10,6 +10,7 @@ from app.config_loader import load_config
 from app.db import datenbank as db
 from app.db.datenbank import DocumentMeta
 from app.main import create_app
+from app.services import file_ops
 
 
 def setup_env(monkeypatch, tmp_path: Path) -> Path:
@@ -42,6 +43,16 @@ def seed_document(path: Path, source: str) -> int:
             title_or_subject=path.stem,
         )
         return db.upsert_document(conn, meta)
+
+
+def create_admin_client(monkeypatch, tmp_path: Path) -> tuple[TestClient, dict, Path]:
+    root = setup_env(monkeypatch, tmp_path)
+    app = create_app(load_config(use_env=True))
+    client = TestClient(app)
+    headers = {"X-App-Secret": os.environ["APP_SECRET"]}
+    login = client.post("/api/admin/login", json={"password": "admin"}, headers=headers)
+    assert login.status_code == 200
+    return client, headers, root
 
 
 def test_admin_login_success(monkeypatch, tmp_path):
@@ -152,3 +163,91 @@ def test_quarantine_delete_success(monkeypatch, tmp_path):
     assert not file_path.exists()
     with db.get_conn() as conn:
         assert db.get_document(conn, doc_id) is None
+
+
+def test_rename_requires_admin(monkeypatch, tmp_path):
+    root = setup_env(monkeypatch, tmp_path)
+    file_path = root / "doc.txt"
+    file_path.write_text("hello", encoding="utf-8")
+    app = create_app(load_config(use_env=True))
+    client = TestClient(app)
+    headers = {"X-App-Secret": os.environ["APP_SECRET"]}
+    doc_id = seed_document(file_path, "Root")
+
+    resp = client.post(f"/api/files/{doc_id}/rename", json={"new_name": "renamed.txt"}, headers=headers)
+    assert resp.status_code == 403
+    assert file_path.exists()
+
+
+def test_rename_rejects_invalid_name(monkeypatch, tmp_path):
+    client, headers, root = create_admin_client(monkeypatch, tmp_path)
+    file_path = root / "doc.txt"
+    file_path.write_text("hello", encoding="utf-8")
+    doc_id = seed_document(file_path, "Root")
+
+    resp = client.post(f"/api/files/{doc_id}/rename", json={"new_name": "bad/name.txt"}, headers=headers)
+    assert resp.status_code == 400
+    assert file_path.exists()
+
+    resp_ext = client.post(f"/api/files/{doc_id}/rename", json={"new_name": "doc.pdf"}, headers=headers)
+    assert resp_ext.status_code == 400
+    assert file_path.exists()
+
+
+def test_rename_conflict_rejected(monkeypatch, tmp_path):
+    client, headers, root = create_admin_client(monkeypatch, tmp_path)
+    original = root / "one.txt"
+    other = root / "two.txt"
+    original.write_text("a", encoding="utf-8")
+    other.write_text("b", encoding="utf-8")
+    doc_id = seed_document(original, "Root")
+    seed_document(other, "Root")
+
+    resp = client.post(f"/api/files/{doc_id}/rename", json={"new_name": "two.txt"}, headers=headers)
+    assert resp.status_code == 409
+    assert original.exists()
+    assert other.exists()
+
+
+def test_rename_success_with_backup(monkeypatch, tmp_path):
+    client, headers, root = create_admin_client(monkeypatch, tmp_path)
+    file_path = root / "doc.txt"
+    file_path.write_text("hello", encoding="utf-8")
+    doc_id = seed_document(file_path, "Root")
+
+    resp = client.post(f"/api/files/{doc_id}/rename", json={"new_name": "renamed.txt"}, headers=headers)
+    assert resp.status_code == 200
+    data = resp.json()
+    new_path = Path(data.get("new_path"))
+    backup_path = Path(data.get("backup_path"))
+    assert not file_path.exists()
+    assert new_path.exists()
+    assert backup_path.exists()
+    assert backup_path.name.endswith(f"__{file_path.name}")
+    assert backup_path.parent.parent.name == date.today().isoformat()
+    with db.get_conn() as conn:
+        row = db.get_document(conn, doc_id)
+    assert row is not None
+    assert row["path"] == str(new_path)
+    assert row["filename"] == "renamed.txt"
+    assert row["extension"] == ".txt"
+
+
+def test_rename_rollback_keeps_original(monkeypatch, tmp_path):
+    client, headers, root = create_admin_client(monkeypatch, tmp_path)
+    file_path = root / "doc.txt"
+    file_path.write_text("hello", encoding="utf-8")
+    doc_id = seed_document(file_path, "Root")
+
+    def boom(*_args, **_kwargs):
+        raise RuntimeError("copy failed")
+
+    monkeypatch.setattr(file_ops, "_copy_file_with_fsync", boom)
+    resp = client.post(f"/api/files/{doc_id}/rename", json={"new_name": "renamed.txt"}, headers=headers)
+    assert resp.status_code == 500
+    assert file_path.exists()
+    assert not (root / "renamed.txt").exists()
+    quarantine_dir = root / ".quarantine"
+    if quarantine_dir.exists():
+        matches = list(quarantine_dir.rglob("doc.txt"))
+        assert not matches

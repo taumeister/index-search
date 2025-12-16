@@ -3,8 +3,10 @@ import json
 import logging
 import os
 import shutil
+import sqlite3
 import threading
 import time
+from uuid import uuid4
 from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -212,6 +214,165 @@ def _resolve_source(label: str, fallback_root: Optional[str] = None) -> SourceIn
 def _assert_quarantine_ready(info: SourceInfo) -> None:
     if not info.ready:
         raise FileOpError("Quarantäne nicht verfügbar", status_code=400)
+
+
+def _validate_new_filename(new_name: str, current_name: str, current_suffix: str) -> str:
+    candidate = (new_name or "").strip()
+    if not candidate:
+        raise FileOpError("Ungültiger Name", status_code=400)
+    if candidate in {".", ".."}:
+        raise FileOpError("Ungültiger Name", status_code=400)
+    if "/" in candidate or "\\" in candidate or "\x00" in candidate:
+        raise FileOpError("Ungültiger Name", status_code=400)
+    if Path(candidate).name != candidate:
+        raise FileOpError("Ungültiger Name", status_code=400)
+    current_ext = (current_suffix or "").lower()
+    new_ext = Path(candidate).suffix.lower()
+    if current_ext != new_ext:
+        raise FileOpError("Dateiendung darf nicht geändert werden", status_code=400)
+    if candidate == current_name:
+        raise FileOpError("Name unverändert", status_code=400)
+    return candidate
+
+
+def rename_file(doc_id: int, new_name: str, actor: str = "admin") -> Dict[str, object]:
+    doc = resolve_doc(doc_id)
+    if not doc:
+        raise FileOpError("Dokument nicht gefunden", status_code=404)
+
+    source_label = doc.get("source") or ""
+    info = _resolve_source(source_label)
+    _assert_quarantine_ready(info)
+
+    abs_path = doc.get("abs_path")
+    if not isinstance(abs_path, Path):
+        raise FileOpError("Pfad ungültig", status_code=400)
+    if not check_within_root(abs_path, info.root):
+        raise FileOpError("Pfad liegt außerhalb der Quelle", status_code=400)
+    if not abs_path.exists():
+        raise FileOpError("Datei nicht gefunden", status_code=404)
+
+    validated_name = _validate_new_filename(new_name, abs_path.name, abs_path.suffix)
+    target_path = _canonical(abs_path.parent / validated_name)
+    if abs_path.parent != target_path.parent:
+        raise FileOpError("Pfad liegt außerhalb der Quelle", status_code=400)
+    if not check_within_root(target_path, info.root):
+        raise FileOpError("Pfad liegt außerhalb der Quelle", status_code=400)
+    if target_path.exists():
+        raise FileOpError("Name schon vorhanden", status_code=409)
+
+    tmp_path = target_path.with_name(f"{target_path.name}.tmp_rename_{uuid4().hex}")
+    date_folder = datetime.now().strftime("%Y-%m-%d")
+    backup_dir = info.quarantine_dir / date_folder / ".rename_backup"
+    backup_path = backup_dir / f"{doc_id}__{abs_path.name}"
+
+    audit_base = {
+        "action": "rename",
+        "actor": actor or "admin",
+        "doc_id": doc_id,
+        "source": source_label,
+        "source_root": str(info.root),
+        "old_path": str(abs_path),
+        "new_path": str(target_path),
+        "backup_path": str(backup_path),
+    }
+
+    title_update: Optional[str] = None
+    try:
+        with db.get_conn() as conn:
+            title = db.get_document_title(conn, doc_id)
+        if title is None and abs_path.suffix.lower() != ".msg":
+            title_update = validated_name
+        elif title == abs_path.name and abs_path.suffix.lower() != ".msg":
+            title_update = validated_name
+    except Exception:
+        title_update = None
+
+    tmp_created = False
+    target_created = False
+    backup_moved = False
+
+    def _rollback() -> None:
+        if tmp_created:
+            try:
+                tmp_path.unlink(missing_ok=True)
+            except Exception:
+                pass
+        if not backup_moved and target_created:
+            try:
+                target_path.unlink(missing_ok=True)
+            except Exception:
+                pass
+        if backup_moved:
+            try:
+                if target_path.exists():
+                    target_path.unlink(missing_ok=True)
+            except Exception:
+                pass
+            try:
+                _move_file(backup_path, abs_path)
+            except Exception:
+                pass
+
+    with _locked_paths([abs_path, target_path, backup_path]):
+        try:
+            _copy_file_with_fsync(abs_path, tmp_path)
+            tmp_created = True
+            try:
+                shutil.copystat(abs_path, tmp_path, follow_symlinks=True)
+            except Exception:
+                pass
+            os.replace(tmp_path, target_path)
+            target_created = True
+
+            backup_dir.mkdir(parents=True, exist_ok=True)
+            _move_file(abs_path, backup_path)
+            backup_moved = True
+
+            stat_result = target_path.stat()
+            try:
+                with db.get_conn() as conn:
+                    updated = db.update_document_metadata(
+                        conn,
+                        doc_id,
+                        path=str(target_path),
+                        filename=target_path.name,
+                        extension=target_path.suffix.lower(),
+                        size_bytes=stat_result.st_size,
+                        ctime=stat_result.st_ctime,
+                        mtime=stat_result.st_mtime,
+                        atime=getattr(stat_result, "st_atime", None),
+                        title_or_subject=title_update,
+                    )
+            except sqlite3.IntegrityError:
+                raise FileOpError("Name schon vorhanden", status_code=409)
+            if not updated:
+                raise FileOpError("Dokument nicht gefunden", status_code=404)
+        except FileOpError as exc:
+            _rollback()
+            _audit({**audit_base, "status": "error", "error": str(exc)})
+            raise
+        except Exception as exc:
+            _rollback()
+            _audit({**audit_base, "status": "error", "error": str(exc)})
+            raise
+        finally:
+            try:
+                tmp_path.unlink(missing_ok=True)
+            except Exception:
+                pass
+
+    _audit({**audit_base, "status": "ok"})
+    return {
+        "doc_id": doc_id,
+        "source": source_label,
+        "old_path": str(abs_path),
+        "new_path": str(target_path),
+        "backup_path": str(backup_path),
+        "updated_in_index": True,
+        "display_name": target_path.name,
+        "display_path": str(target_path),
+    }
 
 
 def quarantine_delete(doc_id: int, actor: str = "admin") -> Dict[str, object]:
