@@ -336,6 +336,7 @@ def update_document_metadata(
     doc_id: int,
     *,
     path: Optional[str] = None,
+    source: Optional[str] = None,
     filename: Optional[str] = None,
     extension: Optional[str] = None,
     size_bytes: Optional[int] = None,
@@ -349,6 +350,9 @@ def update_document_metadata(
     if path is not None:
         cols.append("path = ?")
         params.append(path)
+    if source is not None:
+        cols.append("source = ?")
+        params.append(source)
     if filename is not None:
         cols.append("filename = ?")
         params.append(filename)

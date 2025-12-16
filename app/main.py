@@ -629,11 +629,23 @@ def create_app(config: Optional[CentralConfig] = None) -> FastAPI:
 
     @app.get("/api/files/tree")
     def list_directories(
-        source: str = Query(..., description="Quellen-Label"),
+        source: Optional[str] = Query(None, description="Quellen-Label oder leer für alle"),
         path: Optional[str] = Query("", description="Relativer Pfad unter der Quelle"),
         _admin: bool = Depends(require_admin),
     ):
         file_ops.refresh_quarantine_state()
+        if not source:
+            try:
+                ready = file_ops.get_status().get("quarantine_ready_sources", [])
+                return {
+                    "entries": [
+                        {"name": item.get("label"), "path": "", "has_children": True, "source": item.get("label")}
+                        for item in ready
+                    ]
+                }
+            except Exception as exc:
+                logger.error("Verzeichnisliste (Roots) fehlgeschlagen: %s", exc)
+                raise HTTPException(status_code=500, detail="Verzeichnisliste fehlgeschlagen")
         try:
             return file_ops.list_directories(source, path or "")
         except file_ops.FileOpError as exc:
@@ -646,13 +658,28 @@ def create_app(config: Optional[CentralConfig] = None) -> FastAPI:
     def move_file(doc_id: int, payload: Dict[str, Any], _admin: bool = Depends(require_admin)):
         file_ops.refresh_quarantine_state()
         target_dir = (payload.get("target_dir") or "").strip()
+        target_source = (payload.get("target_source") or "").strip() or None
         try:
-            result = file_ops.move_file(doc_id, target_dir, actor="admin")
+            result = file_ops.move_file(doc_id, target_dir, target_source=target_source, actor="admin")
         except file_ops.FileOpError as exc:
             raise HTTPException(status_code=exc.status_code, detail=str(exc))
         except Exception as exc:
             logger.error("Move fehlgeschlagen: %s", exc)
             raise HTTPException(status_code=500, detail="Verschieben fehlgeschlagen")
+        return {"status": "ok", **result}
+
+    @app.post("/api/files/{doc_id}/copy")
+    def copy_file(doc_id: int, payload: Dict[str, Any], _admin: bool = Depends(require_admin)):
+        file_ops.refresh_quarantine_state()
+        target_dir = (payload.get("target_dir") or "").strip()
+        target_source = (payload.get("target_source") or "").strip() or None
+        try:
+            result = file_ops.copy_file(doc_id, target_dir, target_source=target_source, actor="admin")
+        except file_ops.FileOpError as exc:
+            raise HTTPException(status_code=exc.status_code, detail=str(exc))
+        except Exception as exc:
+            logger.error("Copy fehlgeschlagen: %s", exc)
+            raise HTTPException(status_code=500, detail="Kopieren fehlgeschlagen")
         return {"status": "ok", **result}
 
     @app.post("/api/files/{doc_id}/quarantine-delete")

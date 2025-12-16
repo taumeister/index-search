@@ -14,7 +14,7 @@ from pathlib import Path
 from typing import Dict, Iterable, List, Optional, Tuple
 
 from app.db import datenbank as db
-from app.db.datenbank import QuarantineEntry
+from app.db.datenbank import DocumentMeta, QuarantineEntry
 
 logger = logging.getLogger(__name__)
 
@@ -239,7 +239,7 @@ def list_directories(source_label: str, rel_path: str = "", limit: int = 500) ->
                                     break
                     except Exception:
                         has_children = False
-                    entries.append({"name": entry.name, "path": rel_child, "has_children": has_children})
+                    entries.append({"name": entry.name, "path": rel_child, "has_children": has_children, "source": info.label})
                 except Exception:
                     continue
     except FileNotFoundError:
@@ -428,36 +428,39 @@ def rename_file(doc_id: int, new_name: str, actor: str = "admin") -> Dict[str, o
     }
 
 
-def move_file(doc_id: int, target_dir: str, actor: str = "admin") -> Dict[str, object]:
+def move_file(doc_id: int, target_dir: str, target_source: Optional[str] = None, actor: str = "admin") -> Dict[str, object]:
     doc = resolve_doc(doc_id)
     if not doc:
         raise FileOpError("Dokument nicht gefunden", status_code=404)
 
     source_label = doc.get("source") or ""
-    info = _resolve_source(source_label)
-    _assert_quarantine_ready(info)
+    src_info = _resolve_source(source_label)
+    _assert_quarantine_ready(src_info)
+    dest_source_label = (target_source or source_label) or ""
+    dest_info = _resolve_source(dest_source_label)
+    _assert_quarantine_ready(dest_info)
 
     abs_path = doc.get("abs_path")
     if not isinstance(abs_path, Path):
         raise FileOpError("Pfad ungültig", status_code=400)
-    if not check_within_root(abs_path, info.root):
+    if not check_within_root(abs_path, src_info.root):
         raise FileOpError("Pfad liegt außerhalb der Quelle", status_code=400)
     if not abs_path.exists():
         raise FileOpError("Datei nicht gefunden", status_code=404)
 
     safe_target_dir = _normalize_rel_path(target_dir)
-    target_base = _canonical(info.root / safe_target_dir)
-    if not check_within_root(target_base, info.root):
+    target_base = _canonical(dest_info.root / safe_target_dir)
+    if not check_within_root(target_base, dest_info.root):
         raise FileOpError("Ziel liegt außerhalb der Quelle", status_code=400)
     if not target_base.exists() or not target_base.is_dir():
         raise FileOpError("Zielordner nicht gefunden", status_code=404)
-    if str(target_base).startswith(str(info.quarantine_dir)):
+    if str(target_base).startswith(str(dest_info.quarantine_dir)):
         raise FileOpError("Quarantäne kann nicht als Ziel genutzt werden", status_code=400)
 
     target_path = _canonical(target_base / abs_path.name)
-    if not check_within_root(target_path, info.root):
+    if not check_within_root(target_path, dest_info.root):
         raise FileOpError("Ziel liegt außerhalb der Quelle", status_code=400)
-    if target_path == abs_path:
+    if target_path == abs_path and dest_source_label == source_label:
         raise FileOpError("Ziel entspricht dem aktuellen Ort", status_code=400)
     if target_path.exists():
         raise FileOpError("Ziel existiert bereits", status_code=409)
@@ -467,7 +470,9 @@ def move_file(doc_id: int, target_dir: str, actor: str = "admin") -> Dict[str, o
         "actor": actor or "admin",
         "doc_id": doc_id,
         "source": source_label,
-        "source_root": str(info.root),
+        "dest_source": dest_source_label,
+        "source_root": str(src_info.root),
+        "dest_root": str(dest_info.root),
         "old_path": str(abs_path),
         "new_path": str(target_path),
     }
@@ -491,6 +496,7 @@ def move_file(doc_id: int, target_dir: str, actor: str = "admin") -> Dict[str, o
                     mtime=stat_result.st_mtime,
                     atime=getattr(stat_result, "st_atime", None),
                     title_or_subject=None,
+                    source=dest_source_label,
                 )
             if not updated:
                 raise FileOpError("Dokument nicht gefunden", status_code=404)
@@ -515,6 +521,126 @@ def move_file(doc_id: int, target_dir: str, actor: str = "admin") -> Dict[str, o
     return {
         "doc_id": doc_id,
         "source": source_label,
+        "old_path": str(abs_path),
+        "new_path": str(target_path),
+        "display_name": target_path.name,
+        "display_path": str(target_path),
+    }
+
+
+def copy_file(doc_id: int, target_dir: str, target_source: Optional[str] = None, actor: str = "admin") -> Dict[str, object]:
+    doc = resolve_doc(doc_id)
+    if not doc:
+        raise FileOpError("Dokument nicht gefunden", status_code=404)
+
+    source_label = doc.get("source") or ""
+    src_info = _resolve_source(source_label)
+    _assert_quarantine_ready(src_info)
+    dest_source_label = (target_source or source_label) or ""
+    dest_info = _resolve_source(dest_source_label)
+    _assert_quarantine_ready(dest_info)
+
+    abs_path = doc.get("abs_path")
+    if not isinstance(abs_path, Path):
+        raise FileOpError("Pfad ungültig", status_code=400)
+    if not check_within_root(abs_path, src_info.root):
+        raise FileOpError("Pfad liegt außerhalb der Quelle", status_code=400)
+    if not abs_path.exists():
+        raise FileOpError("Datei nicht gefunden", status_code=404)
+
+    safe_target_dir = _normalize_rel_path(target_dir)
+    target_base = _canonical(dest_info.root / safe_target_dir)
+    if not check_within_root(target_base, dest_info.root):
+        raise FileOpError("Ziel liegt außerhalb der Quelle", status_code=400)
+    if not target_base.exists() or not target_base.is_dir():
+        raise FileOpError("Zielordner nicht gefunden", status_code=404)
+    if str(target_base).startswith(str(dest_info.quarantine_dir)):
+        raise FileOpError("Quarantäne kann nicht als Ziel genutzt werden", status_code=400)
+
+    target_path = _canonical(target_base / abs_path.name)
+    if not check_within_root(target_path, dest_info.root):
+        raise FileOpError("Ziel liegt außerhalb der Quelle", status_code=400)
+    if target_path.exists():
+        raise FileOpError("Ziel existiert bereits", status_code=409)
+
+    audit_base = {
+        "action": "copy",
+        "actor": actor or "admin",
+        "doc_id": doc_id,
+        "source": source_label,
+        "dest_source": dest_source_label,
+        "source_root": str(src_info.root),
+        "dest_root": str(dest_info.root),
+        "old_path": str(abs_path),
+        "new_path": str(target_path),
+    }
+
+    content: Optional[str] = None
+    title: Optional[str] = None
+    try:
+        with db.get_conn() as conn:
+            content = db.get_document_content(conn, doc_id)
+            title = db.get_document_title(conn, doc_id)
+    except Exception:
+        content = None
+        title = None
+
+    copied = False
+    new_doc_id: Optional[int] = None
+    with _locked_paths([target_path]):
+        try:
+            _copy_file_with_fsync(abs_path, target_path)
+            try:
+                shutil.copystat(abs_path, target_path, follow_symlinks=True)
+            except Exception:
+                pass
+            copied = True
+            stat_result = target_path.stat()
+            meta = DocumentMeta(
+                source=dest_source_label,
+                path=str(target_path),
+                filename=target_path.name,
+                extension=target_path.suffix.lower(),
+                size_bytes=stat_result.st_size,
+                ctime=stat_result.st_ctime,
+                mtime=stat_result.st_mtime,
+                atime=getattr(stat_result, "st_atime", None),
+                owner=doc.get("owner"),
+                last_editor=doc.get("last_editor"),
+                msg_from=doc.get("msg_from"),
+                msg_to=doc.get("msg_to"),
+                msg_cc=doc.get("msg_cc"),
+                msg_subject=doc.get("msg_subject"),
+                msg_date=doc.get("msg_date"),
+                tags=doc.get("tags"),
+                content=content or "",
+                title_or_subject=title or target_path.name,
+            )
+            with db.get_conn() as conn:
+                new_doc_id = db.upsert_document(conn, meta)
+        except FileOpError as exc:
+            if copied and target_path.exists():
+                try:
+                    target_path.unlink()
+                except Exception:
+                    pass
+            _audit({**audit_base, "status": "error", "error": str(exc)})
+            raise
+        except Exception as exc:
+            if copied and target_path.exists():
+                try:
+                    target_path.unlink()
+                except Exception:
+                    pass
+            _audit({**audit_base, "status": "error", "error": str(exc)})
+            raise
+
+    _audit({**audit_base, "status": "ok", "new_doc_id": new_doc_id})
+    return {
+        "doc_id": doc_id,
+        "new_doc_id": new_doc_id,
+        "source": source_label,
+        "dest_source": dest_source_label,
         "old_path": str(abs_path),
         "new_path": str(target_path),
         "display_name": target_path.name,

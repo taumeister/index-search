@@ -76,11 +76,12 @@
 
 ### Kontextmenü erweitern
 - Zentrale Definition in `app/frontend/static/main.js`: Gruppen stehen in `CONTEXT_MENU_SECTIONS`, Einträge in `CONTEXT_MENU_ITEMS`.
-- Pro Eintrag: id/label, group (`view|export|manage|more`), order, icon (z. B. eye, window, download, print, edit, trash, feedback, shield, filter), optional shortcut oder Caption/Hinweis, `danger` für destruktive Optik.
+- Pro Eintrag: id/label, group (`view|export|manage|more`), order, icon (z. B. eye, window, download, print, copy, edit, trash, feedback, shield, filter), optional shortcut oder Caption/Hinweis, `danger` für destruktive Optik.
 - Sichtbarkeit/Status: `visibleIf` und `enabledIf` bekommen den Kontext mit doc_id, Name, Pfad, Quelle, Extension und Flag `canManageFile`; Rückgabe false blendet aus bzw. deaktiviert.
 - Handler: bekommt denselben Kontext, führt die Aktion aus (Preview/Download/Popup etc.); Menü schließt nach Auswahl automatisch, falls `closeOnSelect` nicht auf false gesetzt wird.
 - Neue Gruppen: Überschrift in `CONTEXT_MENU_SECTIONS` ergänzen, Einträge mit passendem group hinzufügen; Reihenfolge über `order`.
 - Platzhalter/Future-Items können über `FUTURE_CONTEXT_MENU_FLAGS` oder `visibleIf`-/`enabledIf`-Bedingungen vorbereitet werden, ohne das UI zu stören.
+- Verschieben/Kopieren: Kontextmenü-Einträge „Verschieben…“/„Kopieren…“ öffnen ein Overlay mit lazy geladenem Tree aller bereitgestellten Quellen (Multi-Source). Endpunkte: `GET /api/files/tree` (ohne `source` → Quellen-Roots, mit `source`/`path` → Child-Verzeichnisse), `POST /api/files/{doc_id}/move` und `POST /api/files/{doc_id}/copy` (Payload `target_source`, `target_dir`). Beide prüfen Pfad-Guards/Locks, aktualisieren Index (Move: Quelle/Path anpassen; Copy: neues Dokument mit Inhalt/Metadaten).
 
 ## Tests
 - `pytest` deckt Config-Validierung, DB/FTS-Funktion, Indexlauf und API-Suche ab.

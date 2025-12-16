@@ -46,6 +46,7 @@ const dateFormatter = new Intl.DateTimeFormat("de-DE", {
     minute: "2-digit",
 });
 let closeFeedbackOverlay = () => {};
+let showToast = () => {};
 
 function feedbackFeatureEnabled() {
     return window.feedbackEnabled === true || String(window.feedbackEnabled || "").toLowerCase() === "true";
@@ -1236,16 +1237,19 @@ async function performDelete() {
                 errorEl.classList.remove("hidden");
             }
             if (confirmBtn) confirmBtn.disabled = false;
+            showToast({ type: "error", title: "Löschen fehlgeschlagen", message: detail });
             return;
         }
         removeResultRow(pendingDeleteId);
         closeDeleteConfirm();
+        showToast({ type: "success", title: "Gelöscht", message: "Datei in Quarantäne verschoben." });
     } catch (_) {
         if (errorEl) {
             errorEl.textContent = "Verschieben fehlgeschlagen.";
             errorEl.classList.remove("hidden");
         }
         if (confirmBtn) confirmBtn.disabled = false;
+        showToast({ type: "error", title: "Löschen fehlgeschlagen", message: "Aktion konnte nicht ausgeführt werden." });
     }
 }
 
@@ -1401,15 +1405,18 @@ async function performRename() {
             errorEl.textContent = detail;
             errorEl.classList.remove("hidden");
             confirmBtn.disabled = false;
+            showToast({ type: "error", title: "Umbenennen fehlgeschlagen", message: detail });
             return;
         }
         const data = await res.json();
         applyRenameResult(data);
         closeRenameDialog();
+        showToast({ type: "success", title: "Umbenannt", message: data?.display_name || input.value || "Erfolg" });
     } catch (_) {
         errorEl.textContent = "Umbenennen fehlgeschlagen.";
         errorEl.classList.remove("hidden");
         confirmBtn.disabled = false;
+        showToast({ type: "error", title: "Umbenennen fehlgeschlagen", message: "Aktion konnte nicht ausgeführt werden." });
     }
 }
 
@@ -1466,6 +1473,7 @@ let moveState = {
     currentPath: "",
     currentName: "",
     selection: null,
+    mode: "move",
     nodes: new Map(),
     loading: false,
 };
@@ -1478,6 +1486,7 @@ function resetMoveState() {
     currentPath: "",
     currentName: "",
     selection: null,
+    mode: "move",
     nodes: new Map(),
     loading: false,
 };
@@ -1491,7 +1500,18 @@ function handleMoveAction(id) {
         return;
     }
     closeContextMenu();
-    showMoveDialog(id);
+    showMoveDialog(id, "move");
+}
+
+function handleCopyAction(id) {
+    const row = document.querySelector(`#results-table tbody tr[data-id="${id}"]`);
+    const sourceLabel = row?.dataset.source || "";
+    if (!canUseFileOpsForSource(sourceLabel)) {
+        closeContextMenu();
+        return;
+    }
+    closeContextMenu();
+    showMoveDialog(id, "copy");
 }
 
 function normalizeRelPath(path) {
@@ -1505,13 +1525,21 @@ function getMoveNode(path) {
 }
 
 function upsertMoveNode(node) {
-    moveState.nodes.set(node.path || "", node);
+    const key = `${node.source || ""}::${node.path || ""}`;
+    moveState.nodes.set(key, { ...node, pathKey: key });
 }
 
-async function fetchMoveChildren(path) {
+function splitMoveKey(key) {
+    const [sourcePart, ...rest] = String(key || "").split("::");
+    const source = sourcePart || "";
+    const path = rest.join("::") || "";
+    return { source, path };
+}
+
+async function fetchMoveChildren(source, path) {
     const params = new URLSearchParams();
-    params.set("source", moveState.source);
-    params.set("path", path || "");
+    if (source) params.set("source", source);
+    if (path) params.set("path", path);
     const res = await fetch(`/api/files/tree?${params.toString()}`);
     if (!res.ok) {
         const detail = await res.json().catch(() => ({}));
@@ -1523,6 +1551,7 @@ async function fetchMoveChildren(path) {
         name: entry.name || "",
         path: normalizeRelPath(entry.path || ""),
         hasChildren: Boolean(entry.has_children),
+        source: entry.source || source || moveState.source,
         expanded: false,
         loaded: false,
         loading: false,
@@ -1536,8 +1565,9 @@ async function loadMoveNode(path) {
     node.loading = true;
     renderMoveTree();
     try {
-        const children = await fetchMoveChildren(path);
-        node.children = children.map((child) => child.path);
+        const { source, path: relPath } = splitMoveKey(path);
+        const children = await fetchMoveChildren(node.source || source || moveState.source, relPath);
+        node.children = children.map((child) => `${child.source || node.source || source || ""}::${child.path || ""}`);
         upsertMoveNode({ ...node, loaded: true, loading: false });
         children.forEach((child) => {
             upsertMoveNode({ ...child, expanded: false });
@@ -1565,8 +1595,8 @@ function renderMoveTree() {
     if (!tree) return;
     tree.innerHTML = "";
 
-    function renderNode(path, depth = 0) {
-        const node = getMoveNode(path);
+    function renderNode(pathKey, depth = 0) {
+        const node = getMoveNode(pathKey);
         if (!node) return null;
         const row = document.createElement("div");
         row.className = "move-node";
@@ -1578,24 +1608,24 @@ function renderMoveTree() {
         toggle.className = "move-node__toggle";
         toggle.textContent = node.hasChildren ? (node.expanded ? "▾" : "▸") : "•";
         toggle.disabled = !node.hasChildren || node.loading;
-        toggle.addEventListener("click", () => toggleMoveNode(path));
+        toggle.addEventListener("click", () => toggleMoveNode(pathKey));
 
         const radio = document.createElement("input");
         radio.type = "radio";
         radio.name = "move-target";
-        radio.value = node.path || "";
-        radio.checked = (node.path || "") === (moveState.selection || "");
+        radio.value = pathKey || "";
+        radio.checked = pathKey === (moveState.selection || "");
         radio.addEventListener("change", () => {
-            moveState.selection = node.path || "";
+            moveState.selection = pathKey || "";
             renderMoveTree();
         });
 
         const label = document.createElement("span");
         label.className = "move-node__label";
-        label.textContent = node.path ? node.name : moveState.source || "/";
-        label.title = node.path || "/";
+        label.textContent = node.path ? node.name : node.source || "/";
+        label.title = node.path ? `${node.source || ""}/${node.path}` : node.source || "/";
         label.addEventListener("click", () => {
-            moveState.selection = node.path || "";
+            moveState.selection = pathKey || "";
             renderMoveTree();
         });
 
@@ -1619,15 +1649,19 @@ function renderMoveTree() {
         tree.appendChild(row);
 
         if (node.expanded && node.children && node.children.length) {
-            node.children.forEach((childPath) => {
-                const childRow = renderNode(childPath, depth + 1);
+            node.children.forEach((childKey) => {
+                const childRow = renderNode(childKey, depth + 1);
                 if (childRow) tree.appendChild(childRow);
             });
         }
         return row;
     }
 
-    renderNode("");
+    moveState.nodes.forEach((node, key) => {
+        if (key.endsWith("::")) {
+            renderNode(key);
+        }
+    });
     if (confirmBtn) {
         confirmBtn.disabled = moveState.selection === null || moveState.selection === undefined;
     }
@@ -1647,7 +1681,7 @@ function toggleMoveNode(path) {
     renderMoveTree();
 }
 
-async function showMoveDialog(docId) {
+async function showMoveDialog(docId, mode = "move") {
     const modal = document.getElementById("move-dialog");
     const nameEl = document.getElementById("move-current-name");
     const pathEl = document.getElementById("move-current-path");
@@ -1664,23 +1698,34 @@ async function showMoveDialog(docId) {
     moveState.currentName = name;
     moveState.currentPath = path;
     moveState.selection = null;
+    moveState.mode = mode === "copy" ? "copy" : "move";
     moveState.nodes = new Map();
     errorEl.textContent = "";
     errorEl.classList.add("hidden");
     confirmBtn.disabled = true;
+    confirmBtn.textContent = mode === "copy" ? "Kopieren" : "Verschieben";
     nameEl.textContent = name || "Datei";
     pathEl.textContent = path || "";
-    upsertMoveNode({
-        name: sourceLabel || "Quelle",
-        path: "",
-        hasChildren: true,
-        expanded: true,
-        loaded: false,
-        loading: false,
-        children: [],
+    // Roots: alle bereitgestellten Quellen laden
+    const rootEntries = await fetchMoveChildren(null, "");
+    rootEntries.forEach((entry) => {
+        const key = `${entry.source || entry.name || ""}::`;
+        upsertMoveNode({
+            name: entry.name || entry.source || "Quelle",
+            path: "",
+            source: entry.source || entry.name || "",
+            hasChildren: true,
+            expanded: entry.source === sourceLabel,
+            loaded: false,
+            loading: false,
+            children: [],
+        });
     });
     modal.classList.remove("hidden");
-    await loadMoveNode("");
+    // Auto-expand aktuelle Quelle
+    if (sourceLabel) {
+        await loadMoveNode(`${sourceLabel}::`);
+    }
     renderMoveTree();
 }
 
@@ -1694,8 +1739,12 @@ function applyMoveResult(data) {
     const id = data?.doc_id;
     if (!id) return;
     const newPath = data?.display_path || data?.new_path || "";
+    const newSource = data?.source || "";
     const row = document.querySelector(`#results-table tbody tr[data-id="${id}"]`);
     if (row) {
+        if (newSource) {
+            row.dataset.source = newSource;
+        }
         const pathEl = row.querySelector(".path-cell");
         if (pathEl && newPath) {
             pathEl.textContent = newPath;
@@ -1710,6 +1759,7 @@ function applyMoveResult(data) {
 
 async function submitMove() {
     if (!moveState.docId) return;
+    if (!moveState.selection) return;
     const errorEl = document.getElementById("move-error");
     const confirmBtn = document.getElementById("move-confirm");
     if (errorEl) {
@@ -1717,14 +1767,16 @@ async function submitMove() {
         errorEl.classList.add("hidden");
     }
     confirmBtn.disabled = true;
+    const { source: targetSource, path: targetDir } = splitMoveKey(moveState.selection || "");
     try {
-        const res = await fetch(`/api/files/${moveState.docId}/move`, {
+        const endpoint = moveState.mode === "copy" ? "copy" : "move";
+        const res = await fetch(`/api/files/${moveState.docId}/${endpoint}`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ target_dir: moveState.selection || "" }),
+            body: JSON.stringify({ target_dir: targetDir, target_source: targetSource }),
         });
         if (!res.ok) {
-            let detail = "Verschieben fehlgeschlagen.";
+            let detail = moveState.mode === "copy" ? "Kopieren fehlgeschlagen." : "Verschieben fehlgeschlagen.";
             try {
                 const data = await res.json();
                 detail = data.detail || detail;
@@ -1734,13 +1786,34 @@ async function submitMove() {
             throw new Error(detail);
         }
         const data = await res.json();
-        applyMoveResult(data);
-        closeMoveDialog();
+        if (moveState.mode === "copy") {
+            closeMoveDialog();
+            search({ append: false });
+            showToast({
+                type: "success",
+                title: "Kopiert",
+                message: `${moveState.currentName || "Datei"} nach ${targetSource ? targetSource + "/" : ""}${targetDir || "/"} kopiert.`,
+            });
+        } else {
+            applyMoveResult(data);
+            closeMoveDialog();
+            showToast({
+                type: "success",
+                title: "Verschoben",
+                message: `${moveState.currentName || "Datei"} nach ${targetSource ? targetSource + "/" : ""}${targetDir || "/"} verschoben.`,
+            });
+        }
     } catch (err) {
         if (errorEl) {
-            errorEl.textContent = err.message || "Verschieben fehlgeschlagen.";
+            errorEl.textContent =
+                err.message || (moveState.mode === "copy" ? "Kopieren fehlgeschlagen." : "Verschieben fehlgeschlagen.");
             errorEl.classList.remove("hidden");
         }
+        showToast({
+            type: "error",
+            title: moveState.mode === "copy" ? "Kopieren fehlgeschlagen" : "Verschieben fehlgeschlagen",
+            message: err?.message || "Aktion konnte nicht ausgeführt werden.",
+        });
     } finally {
         if (confirmBtn) {
             confirmBtn.disabled = moveState.selection === null || moveState.selection === undefined;
@@ -1780,6 +1853,16 @@ const CONTEXT_MENU_ITEMS = [
     { id: "popup", label: "Pop-up", group: "view", order: 2, icon: "window", handler: (ctx) => openPopupForRow(ctx.id) },
     { id: "download", label: "Download", group: "export", order: 1, icon: "download", handler: (ctx) => window.open(`/api/document/${ctx.id}/file?download=1`, "_blank") },
     { id: "print", label: "Drucken", group: "export", order: 2, icon: "print", handler: (ctx) => printDocument(ctx.id) },
+    {
+        id: "copy",
+        label: "Kopieren…",
+        group: "manage",
+        order: 1,
+        icon: "copy",
+        enabledIf: (ctx) => ctx.canManageFile,
+        caption: (ctx, enabled) => (!enabled ? "Admin & Quelle bereit" : ""),
+        handler: (ctx) => handleCopyAction(ctx.id),
+    },
     {
         id: "rename",
         label: "Umbenennen…",
@@ -1925,6 +2008,10 @@ function createContextMenuIcon(name) {
             addPath("M8.5 11.5 12 15l3.5-3.5");
             addPath("M5 19h14", { strokeWidth: "1.4" });
             break;
+        case "copy":
+            addPath("M9 5.5h8a1.5 1.5 0 0 1 1.5 1.5v10a1.5 1.5 0 0 1-1.5 1.5h-8a1.5 1.5 0 0 1-1.5-1.5v-10A1.5 1.5 0 0 1 9 5.5z");
+            addPath("M6 8.5h-1a1.5 1.5 0 0 0-1.5 1.5v9a1.5 1.5 0 0 0 1.5 1.5h9a1.5 1.5 0 0 0 1.5-1.5v-1", { strokeWidth: "1.4" });
+            break;
         case "print":
             addPath("M7 9.5v-4a1 1 0 0 1 1-1h8a1 1 0 0 1 1 1v4");
             addPath("M7 15.5h10v5H7z");
@@ -1944,6 +2031,19 @@ function createContextMenuIcon(name) {
             addPath("M9 10h6", { strokeWidth: "1.4" });
             addPath("M9 13h4", { strokeWidth: "1.4" });
             break;
+        case "check":
+            addPath("M5 12.5 10 17l9-10");
+            break;
+        case "alert":
+            addPath("M12 4.5 4.5 19h15z");
+            addPath("M12 10v4");
+            addPath("M12 16.5h.01", { strokeWidth: "2" });
+            break;
+        case "info":
+            addPath("M12 4.5a7.5 7.5 0 1 1 0 15 7.5 7.5 0 0 1 0-15z");
+            addPath("M12 9h.01", { strokeWidth: "2" });
+            addPath("M11.2 12h1.6V16h-1.6z");
+            break;
         case "folder":
             addPath("M3.5 7a1.5 1.5 0 0 1 1.5-1.5h4l1.2 1.6H19a1.5 1.5 0 0 1 1.5 1.5v8a1.5 1.5 0 0 1-1.5 1.5H5A1.5 1.5 0 0 1 3.5 16V7z");
             addPath("M3.5 9.5h16");
@@ -1959,6 +2059,11 @@ function createContextMenuIcon(name) {
             addPath("M12 5.5a6.5 6.5 0 1 1 0 13 6.5 6.5 0 0 1 0-13z");
     }
     return svg;
+}
+
+function createToastIcon(type) {
+    const map = { success: "check", error: "alert", info: "info" };
+    return createContextMenuIcon(map[type] || "info");
 }
 
 function createContextMenuHeader(ctx) {
@@ -2349,6 +2454,55 @@ function bootstrapZoom() {
     applyZoom(readSavedZoom(), { persist: false });
 }
 
+function setupToasts() {
+    const stack = document.getElementById("toast-stack");
+    if (!stack) return;
+    const MAX_TOASTS = 4;
+
+    function removeToast(el) {
+        if (!el) return;
+        el.remove();
+    }
+
+    showToast = function showToast({ type = "info", title = "", message = "", timeout = 5000 } = {}) {
+        const toast = document.createElement("div");
+        toast.className = `toast toast--${type}`;
+        toast.setAttribute("role", "status");
+        const icon = createToastIcon(type);
+        icon.classList.add("toast__icon");
+        const body = document.createElement("div");
+        body.className = "toast__body";
+        const ttl = document.createElement("div");
+        ttl.className = "toast__title";
+        ttl.textContent = title || (type === "success" ? "Erfolg" : type === "error" ? "Fehler" : "Hinweis");
+        const msg = document.createElement("div");
+        msg.className = "toast__message";
+        msg.textContent = message || "";
+        body.appendChild(ttl);
+        if (message) body.appendChild(msg);
+        const closeBtn = document.createElement("button");
+        closeBtn.className = "toast__close";
+        closeBtn.type = "button";
+        closeBtn.setAttribute("aria-label", "Schließen");
+        closeBtn.textContent = "×";
+        closeBtn.addEventListener("click", () => removeToast(toast));
+
+        toast.appendChild(icon);
+        toast.appendChild(body);
+        toast.appendChild(closeBtn);
+
+        stack.prepend(toast);
+        while (stack.children.length > MAX_TOASTS) {
+            stack.lastChild?.remove();
+        }
+        const t = window.setTimeout(() => removeToast(toast), timeout);
+        toast.addEventListener("click", () => {
+            window.clearTimeout(t);
+            removeToast(toast);
+        });
+    };
+}
+
 // Feedback overlay
 const MAX_FEEDBACK_LEN = 5000;
 
@@ -2500,8 +2654,10 @@ function setupFeedback() {
             }
             setStatus("success", "Feedback wurde gesendet. Vielen Dank!");
             resetEditor();
+            showToast({ type: "success", title: "Feedback gesendet", message: "Vielen Dank für Ihr Feedback." });
         } catch (err) {
             setStatus("error", "Verbindung fehlgeschlagen. Bitte erneut versuchen.");
+            showToast({ type: "error", title: "Feedback fehlgeschlagen", message: "Senden nicht möglich." });
         } finally {
             setSending(false);
         }
@@ -2567,3 +2723,4 @@ function setupFeedback() {
 }
 
 setupFeedback();
+setupToasts();
