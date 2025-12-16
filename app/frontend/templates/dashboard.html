@@ -63,8 +63,6 @@
         .chip-row { display: flex; flex-wrap: wrap; gap: 8px; }
         .chip { background: #e5e7eb; border-radius: 12px; padding: 4px 10px; font-size: 12px; color: #374151; border: 1px solid #d1d5db; }
         .chip.highlight { background: #dbeafe; border-color: #bfdbfe; color: #1d4ed8; }
-        .action-row button { padding: 8px 10px; border-radius: 8px; border: 1px solid #cbd5e1; background: #f8fafc; cursor: pointer; }
-        .action-row button.destructive { background: #fef2f2; color: #991b1b; border-color: #fecdd3; }
         .live-meta { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 8px; margin: 6px 0; }
         .meta-item { font-size: 13px; color: #1f2937; }
         .meta-item strong { color: #4b5563; }
@@ -92,8 +90,16 @@
         .status-line { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 6px; font-size: 13px; color: #1f2937; }
         .muted { color: var(--muted); font-size: 12px; }
         .quarantine-controls { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 8px; }
-        .quarantine-controls input, .quarantine-controls select { padding: 7px 8px; border-radius: 8px; border: 1px solid var(--border); font-size: 13px; }
-        .quarantine-controls button { padding: 8px 10px; border-radius: 8px; border: 1px solid var(--border); background: #fff; cursor: pointer; font-size: 13px; }
+        .quarantine-controls input, .quarantine-controls select {
+            padding: 8px 10px;
+            border-radius: 10px;
+            border: 1px solid #cdd9eb;
+            font-size: 13px;
+            height: 38px;
+            box-sizing: border-box;
+            background: #f9fbff;
+        }
+        .quarantine-controls button { padding: 8px 12px; border-radius: 10px; border: 1px solid #cbd5e1; background: linear-gradient(180deg, #ffffff, #f4f6fb); cursor: pointer; font-size: 13px; box-shadow: 0 8px 16px rgba(15, 23, 42, 0.08); }
         .quarantine-table-wrap { max-height: 420px; overflow: auto; border: 1px solid var(--border); border-radius: 10px; }
         .quarantine-table { width: 100%; border-collapse: collapse; }
         .quarantine-table th, .quarantine-table td { border-bottom: 1px solid var(--border); padding: 6px 8px; text-align: left; font-size: 13px; }
@@ -101,9 +107,6 @@
         .quarantine-table td.quarantine-col { max-width: 200px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
         .quarantine-table td.actions { white-space: nowrap; }
         .quarantine-actions { display: flex; gap: 6px; flex-wrap: wrap; }
-        .quarantine-actions button { padding: 6px 8px; border-radius: 6px; border: 1px solid #cbd5e1; background: #f8fafc; cursor: pointer; font-size: 12px; }
-        .quarantine-actions button.restore { background: #ecfeff; border-color: #bae6fd; color: #0ea5e9; }
-        .quarantine-actions button.delete { background: #fef2f2; border-color: #fecdd3; color: #b91c1c; }
     </style>
 </head>
 <body>
@@ -129,13 +132,13 @@
                     </div>
                     <div class="status-pill" id="status-pill" data-state="idle">Wartet</div>
                 </div>
-                <div class="chip-row action-row" style="margin-bottom:10px;">
+                <div class="action-row chips">
                     <button id="start-run" class="btn btn-primary">Index starten</button>
                     <button id="stop-run" class="btn btn-secondary">Index stoppen</button>
                     <button id="preflight" class="btn btn-secondary">Preflight (zählen)</button>
                     <button id="reset-run" class="btn btn-danger">Index leeren</button>
                     <button id="reset-run-start" class="btn btn-danger">Leeren &amp; neu starten</button>
-                    <label style="display:flex;align-items:center;gap:6px;">
+                    <label class="chip chip-muted">
                         <input type="checkbox" id="toggle-report"> Mail senden
                     </label>
                 </div>
@@ -232,7 +235,7 @@
                 <div class="add-root-row">
                     <input type="text" id="new-path" placeholder="Pfad aus Explorer wählen oder tippen" style="flex:2;">
                     <input type="text" id="new-label" placeholder="Label" style="flex:1;">
-                    <button id="add-root">Hinzufügen</button>
+                    <button id="add-root" class="btn btn-primary">Hinzufügen</button>
                 </div>
             </section>
         </div>
@@ -329,7 +332,7 @@
                         <option value="90">≤ 90 Tage</option>
                     </select>
                     <input type="search" id="quarantine-search" placeholder="Suche nach Name/Pfad" aria-label="Quarantäne-Suche">
-                    <button id="quarantine-refresh">Aktualisieren</button>
+                    <button id="quarantine-refresh" class="btn btn-secondary">Aktualisieren</button>
                 </div>
                 <div class="quarantine-table-wrap">
                     <table class="quarantine-table">
@@ -360,10 +363,10 @@
                         <div class="subtext">Letzte Zeilen + Streaming</div>
                     </div>
                     <div class="chip-row action-row">
-                        <button id="live-log">Live</button>
-                        <button id="older-log">Ältere</button>
-                        <button id="refresh-log">Neu laden</button>
-                        <button id="toggle-autoscroll">Autoscroll an</button>
+                        <button id="live-log" class="btn btn-ghost">Live</button>
+                        <button id="older-log" class="btn btn-ghost">Ältere</button>
+                        <button id="refresh-log" class="btn btn-ghost">Neu laden</button>
+                        <button id="toggle-autoscroll" class="btn btn-ghost">Autoscroll an</button>
                     </div>
                 </div>
                 <div class="log-box" id="indexer-log"></div>
@@ -492,8 +495,8 @@
                     <td class="small">${movedAt}</td>
                     <td class="actions">
                         <div class="quarantine-actions" data-id="${e.id}">
-                            <button class="restore" data-action="restore">Restore</button>
-                            <button class="delete" data-action="hard-delete">Löschen</button>
+                            <button class="btn btn-secondary" data-action="restore">Restore</button>
+                            <button class="btn btn-danger" data-action="hard-delete">Löschen</button>
                         </div>
                     </td>`;
                 body.appendChild(tr);
@@ -935,6 +938,7 @@
             const container = document.getElementById("tree");
             container.innerHTML = "";
             const rootBtn = document.createElement("button");
+            rootBtn.className = "btn btn-secondary";
             rootBtn.textContent = data.base;
             rootBtn.addEventListener("click", () => {
                 document.getElementById("new-path").value = data.base;
@@ -953,9 +957,9 @@
                 const div = document.createElement("div");
                 div.className = "root-item";
                 div.innerHTML = `<span>${r.label || ""} — ${r.path}</span>
-                <span>
-                    <button data-act="${r.id}" data-active="${!r.active}">${r.active ? "Deaktivieren" : "Aktivieren"}</button>
-                    <button data-del="${r.id}">Löschen</button>
+                <span class="root-actions chips">
+                    <button class="btn btn-secondary" data-act="${r.id}" data-active="${!r.active}">${r.active ? "Deaktivieren" : "Aktivieren"}</button>
+                    <button class="btn btn-ghost" data-del="${r.id}">Löschen</button>
                 </span>`;
                 list.appendChild(div);
             });

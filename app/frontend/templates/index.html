@@ -45,7 +45,11 @@
     <header class="app-header">
         {% include "partials/header_top.html" with context %}
         <div class="search-bar">
-            <input id="search-input" type="text" placeholder="Suche wie im Explorer..." />
+            <div class="search-input-wrap">
+                <input id="search-input" type="text" placeholder="Suche wie im Explorer..." />
+                <button type="button" class="search-fav" id="search-fav" aria-label="Suche speichern oder Favoriten öffnen">★</button>
+                <div class="fav-dropdown" id="fav-dropdown"></div>
+            </div>
             <div class="source-filter" id="source-filter" aria-label="Quellen" role="group"></div>
             <div class="search-mode" id="search-mode" role="radiogroup" aria-label="Search Mode">
                 <button type="button" data-mode="strict" title="Exakte Worttreffer, alle Wörter müssen vorkommen. Keine Teilwort- oder Fuzzy-Treffer.">
