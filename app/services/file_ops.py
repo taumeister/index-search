@@ -879,7 +879,10 @@ def run_cleanup_now(now: Optional[datetime] = None) -> Dict[str, int]:
             continue
         base = info.quarantine_dir
         if not base.exists():
-            continue
+            try:
+                base.mkdir(parents=True, exist_ok=True)
+            except Exception:
+                continue
         for path in base.rglob("*"):
             if not path.is_file():
                 continue
@@ -901,7 +904,8 @@ def run_cleanup_now(now: Optional[datetime] = None) -> Dict[str, int]:
             try:
                 stat = path.stat()
             except FileNotFoundError:
-                summary["errors"] += 1
+                # Kann auftreten, wenn temporäre Backups (z. B. .rename_backup) bereits entfernt wurden.
+                continue
                 continue
             except Exception:
                 summary["errors"] += 1
@@ -972,7 +976,7 @@ def start_cleanup_scheduler() -> None:
             try:
                 run_cleanup_now()
             except Exception as exc:
-                logger.error("Quarantäne-Cleanup fehlgeschlagen: %s", exc)
+                logger.warning("Quarantäne-Cleanup Warnung: %s", exc)
             _cleanup_stop.wait(interval)
 
     _cleanup_thread = threading.Thread(target=worker, daemon=True)
