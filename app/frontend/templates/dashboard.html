@@ -15,6 +15,22 @@
             document.documentElement.style.setProperty("--app-zoom", DEFAULT_ZOOM);
         })();
     </script>
+    <script>
+        (function applyStoredTheme() {
+            const KEY = "theme";
+            const DEFAULT_THEME = "lumen-atelier";
+            let theme = DEFAULT_THEME;
+            try {
+                const stored = localStorage.getItem(KEY);
+                if (stored && typeof stored === "string") {
+                    theme = stored;
+                }
+            } catch (_) {
+                /* ignore */
+            }
+            document.documentElement.setAttribute("data-theme", theme);
+        })();
+    </script>
     <link rel="stylesheet" href="/static/css/app.css">
 </head>
 <body class="dashboard-body">

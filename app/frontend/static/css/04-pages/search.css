@@ -19,8 +19,8 @@
     width: 16px;
     height: 16px;
     border-radius: 5px;
-    border: 1px solid transparent;
-    background: rgba(255,255,255,0.5);
+    border: 1px solid var(--color-border);
+    background: color-mix(in srgb, var(--color-surface) 85%, transparent);
     color: var(--color-accent-strong);
     cursor: pointer;
     transition: background 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease, color 0.15s ease;
@@ -30,19 +30,19 @@
 }
 
 .search-fav:hover {
-    background: rgba(255,255,255,0.8);
-    border-color: var(--border);
+    background: color-mix(in srgb, var(--color-accent) 10%, var(--color-surface-muted));
+    border-color: color-mix(in srgb, var(--color-accent) 30%, var(--color-border));
 }
 
 .search-fav:focus-visible {
-    outline: 2px solid #b1c5f6;
-    outline-offset: 2px;
+    outline: var(--focus-ring);
+    outline-offset: var(--focus-offset);
 }
 
 .search-fav.active {
     background: linear-gradient(135deg, var(--color-accent-strong), var(--color-accent-contrast));
-    color: #f8fafc;
-    border-color: #355d9b;
+    color: var(--color-inverse);
+    border-color: color-mix(in srgb, var(--color-accent-contrast) 70%, var(--color-accent));
 }
 
 .fav-dropdown {
@@ -52,10 +52,10 @@
     transform: translateX(-50%);
     min-width: 220px;
     max-width: 260px;
-    background: rgba(255,255,255,0.92);
-    border: 1px solid rgba(199, 210, 227, 0.8);
+    background: color-mix(in srgb, var(--color-surface) 96%, transparent);
+    border: 1px solid var(--color-border);
     border-radius: 12px;
-    box-shadow: 0 12px 24px rgba(15, 23, 42, 0.14);
+    box-shadow: var(--shadow-card);
     padding: 6px;
     z-index: 9000;
     display: none;
@@ -68,7 +68,7 @@
 .fav-dropdown h4 {
     margin: 4px 0 8px;
     font-size: 12px;
-    color: #475569;
+    color: var(--color-muted);
     text-transform: uppercase;
     letter-spacing: 0.06em;
 }
@@ -88,16 +88,16 @@
     align-items: center;
     padding: 8px 10px;
     border-radius: 10px;
-    border: 1px solid #e2e8f0;
-    background: #fff;
+    border: 1px solid var(--color-border);
+    background: var(--color-surface);
     cursor: pointer;
     transition: border-color 0.12s ease, box-shadow 0.12s ease, background 0.12s ease;
 }
 
 .fav-item:hover {
-    background: #eef3ff;
-    border-color: #cdd9eb;
-    box-shadow: 0 8px 16px rgba(47, 73, 140, 0.14);
+    background: color-mix(in srgb, var(--color-accent) 12%, var(--color-surface-muted));
+    border-color: color-mix(in srgb, var(--color-accent) 30%, var(--color-border));
+    box-shadow: var(--shadow-card);
 }
 
 .fav-item .label {
@@ -111,7 +111,7 @@
 .fav-remove {
     border: none;
     background: transparent;
-    color: #9ca3af;
+    color: var(--color-muted);
     cursor: pointer;
     font-size: 14px;
     width: 24px;
@@ -123,6 +123,6 @@
 }
 
 .fav-remove:hover {
-    background: rgba(0,0,0,0.04);
-    color: #ef4444;
+    background: color-mix(in srgb, var(--color-danger) 10%, var(--color-surface-muted));
+    color: var(--color-danger);
 }

@@ -21,27 +21,33 @@
 
 .search-bar input {
     padding: 8px 10px;
-    border: 1px solid var(--border);
+    border: 1px solid var(--color-border);
     border-radius: 9px;
     min-width: 220px;
-    background: #fff;
-    box-shadow: 0 1px 2px rgba(0,0,0,0.04);
+    background: var(--color-surface);
+    box-shadow: var(--shadow-soft);
     font-size: 13px;
+    color: var(--color-text-strong);
 }
 
 .search-bar input:focus {
-    outline: 2px solid #c8daf5;
-    border-color: #92b3ec;
+    outline: var(--focus-ring);
+    border-color: color-mix(in srgb, var(--color-accent-soft) 70%, var(--color-border));
+}
+
+.search-bar input::placeholder {
+    color: var(--color-muted);
+    opacity: 0.9;
 }
 
 .search-bar select {
     padding: 7px 10px;
-    border: 1px solid var(--border);
+    border: 1px solid var(--color-border);
     border-radius: 9px;
-    background: linear-gradient(180deg, #ffffff, #f6f8fb);
+    background: linear-gradient(180deg, var(--color-surface), var(--color-surface-muted));
     color: var(--color-text-strong);
     min-width: 150px;
-    box-shadow: inset 0 0 0 1px rgba(255,255,255,0.7), 0 1px 2px rgba(0,0,0,0.04);
+    box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--color-inverse) 70%, transparent), var(--shadow-soft);
     font-size: 13px;
 }
 
@@ -54,11 +60,11 @@
 .search-mode {
     display: inline-flex;
     align-items: center;
-    border: 1px solid var(--border);
+    border: 1px solid var(--color-border);
     border-radius: var(--filter-radius);
     overflow: hidden;
-    background: #fff;
-    box-shadow: 0 1px 2px rgba(0,0,0,0.05);
+    background: var(--color-surface);
+    box-shadow: var(--shadow-soft);
     padding: 2px;
     min-height: var(--filter-group-height);
 }
@@ -80,13 +86,13 @@
 }
 
 .search-mode button + button {
-    border-left: 1px solid var(--border);
+    border-left: 1px solid var(--color-border);
 }
 
 .search-mode button.active {
-    background: linear-gradient(180deg, #5c7edc, #3b64c7);
-    color: #ffffff;
-    box-shadow: inset 0 1px 0 rgba(255,255,255,0.8), 0 0 0 1px #b1c5f6;
+    background: linear-gradient(180deg, var(--color-accent-soft), var(--color-accent));
+    color: var(--color-inverse);
+    box-shadow: inset 0 1px 0 color-mix(in srgb, var(--color-inverse) 70%, transparent), 0 0 0 1px color-mix(in srgb, var(--color-accent) 60%, var(--color-border));
 }
 
 .search-mode .mode-info {
@@ -96,26 +102,26 @@
     width: 16px;
     height: 16px;
     border-radius: 50%;
-    background: #e5e7eb;
+    background: var(--color-surface-muted);
     color: var(--color-text-strong);
     font-size: 11px;
-    border: 1px solid var(--border);
+    border: 1px solid var(--color-border);
 }
 
 .search-mode button.active .mode-info {
-    background: linear-gradient(180deg, #5c7edc, #3b64c7);
-    color: #ffffff;
-    border-color: #b1c5f6;
+    background: linear-gradient(180deg, var(--color-accent-soft), var(--color-accent));
+    color: var(--color-inverse);
+    border-color: color-mix(in srgb, var(--color-accent) 60%, var(--color-border));
 }
 
 .type-filter {
     display: inline-flex;
     align-items: center;
-    border: 1px solid var(--border);
+    border: 1px solid var(--color-border);
     border-radius: var(--filter-radius);
     overflow: hidden;
-    background: #fff;
-    box-shadow: 0 1px 2px rgba(0,0,0,0.05);
+    background: var(--color-surface);
+    box-shadow: var(--shadow-soft);
     padding: 2px;
     min-height: var(--filter-group-height);
 }
@@ -134,23 +140,23 @@
 }
 
 .type-filter button + button {
-    border-left: 1px solid var(--border);
+    border-left: 1px solid var(--color-border);
 }
 
 .type-filter button.active {
-    background: linear-gradient(180deg, #5c7edc, #3b64c7);
-    color: #ffffff;
-    box-shadow: inset 0 1px 0 rgba(255,255,255,0.8), 0 0 0 1px #b1c5f6;
+    background: linear-gradient(180deg, var(--color-accent-soft), var(--color-accent));
+    color: var(--color-inverse);
+    box-shadow: inset 0 1px 0 color-mix(in srgb, var(--color-inverse) 70%, transparent), 0 0 0 1px color-mix(in srgb, var(--color-accent) 60%, var(--color-border));
 }
 
 .time-filter-chips {
     display: inline-flex;
     align-items: center;
     gap: 4px;
-    border: 1px solid var(--border);
+    border: 1px solid var(--color-border);
     border-radius: var(--filter-radius);
-    background: #fff;
-    box-shadow: 0 1px 2px rgba(0,0,0,0.05);
+    background: var(--color-surface);
+    box-shadow: var(--shadow-soft);
     padding: 2px;
     position: relative;
     min-height: var(--filter-group-height);
@@ -170,13 +176,13 @@
 }
 
 .time-chip:hover {
-    background: #eef3fb;
+    background: color-mix(in srgb, var(--color-accent) 10%, var(--color-surface-muted));
 }
 
 .time-chip.active {
-    background: linear-gradient(180deg, #5c7edc, #3b64c7);
-    color: #ffffff;
-    box-shadow: inset 0 1px 0 rgba(255,255,255,0.8), 0 0 0 1px #b1c5f6;
+    background: linear-gradient(180deg, var(--color-accent-soft), var(--color-accent));
+    color: var(--color-inverse);
+    box-shadow: inset 0 1px 0 color-mix(in srgb, var(--color-inverse) 70%, transparent), 0 0 0 1px color-mix(in srgb, var(--color-accent) 60%, var(--color-border));
 }
 
 .time-more {
@@ -188,10 +194,10 @@
     top: calc(100% + 6px);
     left: 50%;
     transform: translateX(-50%);
-    background: #fff;
-    border: 1px solid var(--border);
+    background: var(--color-surface);
+    border: 1px solid var(--color-border);
     border-radius: 10px;
-    box-shadow: 0 8px 24px rgba(0,0,0,0.1);
+    box-shadow: var(--shadow-card);
     padding: 4px;
     display: grid;
     grid-template-columns: repeat(4, minmax(64px, 1fr));
@@ -203,8 +209,8 @@
 }
 
 .time-more-menu button {
-    border: 1px solid var(--border);
-    background: #f8f9fb;
+    border: 1px solid var(--color-border);
+    background: var(--color-surface-muted);
     border-radius: 8px;
     padding: 6px 8px;
     font-size: 11px;
@@ -213,10 +219,10 @@
 }
 
 .time-more-menu button.active {
-    background: linear-gradient(180deg, #5c7edc, #3b64c7);
-    color: #ffffff;
+    background: linear-gradient(180deg, var(--color-accent-soft), var(--color-accent));
+    color: var(--color-inverse);
     font-weight: 600;
-    border-color: #b1c5f6;
+    border-color: color-mix(in srgb, var(--color-accent) 60%, var(--color-border));
 }
 
 .time-more-menu.hidden {
@@ -242,34 +248,34 @@
     gap: 4px;
     flex-wrap: wrap;
     padding: 2px;
-    border: 1px solid var(--border);
+    border: 1px solid var(--color-border);
     border-radius: 10px;
-    background: #fff;
-    box-shadow: 0 1px 2px rgba(0,0,0,0.05);
+    background: var(--color-surface);
+    box-shadow: var(--shadow-soft);
 }
 
 .source-chip {
-    border: 1px solid var(--border);
-    background: #fff;
+    border: 1px solid var(--color-border);
+    background: var(--color-surface);
     padding: 6px 10px;
     font-size: 12px;
     color: var(--color-text-strong);
     letter-spacing: 0.01em;
     cursor: pointer;
     border-radius: 8px;
-    box-shadow: inset 0 1px 0 rgba(255,255,255,0.8);
+    box-shadow: inset 0 1px 0 color-mix(in srgb, var(--color-inverse) 65%, transparent);
 }
 
 .source-chip:hover {
-    background: #eef3fb;
+    background: color-mix(in srgb, var(--color-accent) 10%, var(--color-surface-muted));
 }
 
 .source-chip.active {
-    background: linear-gradient(180deg, #5c7edc, #3b64c7);
-    color: #ffffff;
+    background: linear-gradient(180deg, var(--color-accent-soft), var(--color-accent));
+    color: var(--color-inverse);
     font-weight: 600;
-    box-shadow: inset 0 1px 0 rgba(255,255,255,0.8), 0 0 0 1px #b1c5f6;
-    border-color: #b1c5f6;
+    box-shadow: inset 0 1px 0 color-mix(in srgb, var(--color-inverse) 70%, transparent), 0 0 0 1px color-mix(in srgb, var(--color-accent) 60%, var(--color-border));
+    border-color: color-mix(in srgb, var(--color-accent) 60%, var(--color-border));
 }
 
 .zoom-controls {
@@ -281,11 +287,11 @@
 .zoom-controls button {
     padding: 7px 10px;
     border-radius: 8px;
-    border: 1px solid var(--border);
-    background: #e0e7f5;
+    border: 1px solid var(--color-border);
+    background: var(--color-surface-muted);
     color: var(--color-text-strong);
     cursor: pointer;
-    box-shadow: 0 1px 2px rgba(0,0,0,0.05);
+    box-shadow: var(--shadow-soft);
     min-width: 44px;
     font-size: 13px;
     line-height: 1.2;
@@ -294,7 +300,7 @@
 }
 
 .zoom-controls button:hover {
-    background: #d5dff3;
+    background: color-mix(in srgb, var(--color-accent) 10%, var(--color-surface-muted));
 }
 
 .zoom-display {

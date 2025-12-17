@@ -34,3 +34,26 @@ h1 {
         overflow-x: hidden;
     }
 }
+
+::selection {
+    background: var(--color-selection);
+    color: var(--color-text-strong);
+}
+
+::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+}
+
+::-webkit-scrollbar-track {
+    background: var(--color-scrollbar-track);
+}
+
+::-webkit-scrollbar-thumb {
+    background: var(--color-scrollbar-thumb);
+    border-radius: 10px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+    background: var(--color-scrollbar-thumb-hover);
+}

@@ -36,7 +36,7 @@
 }
 
 .matrix-body .metrics-summary .label {
-    color: #777;
+    color: var(--color-muted);
     font-size: 12px;
     margin-bottom: 2px;
 }
@@ -67,7 +67,7 @@
     border: 1px solid var(--border-color);
     border-radius: 6px;
     margin-bottom: 10px;
-    background: #f8fafc;
+    background: var(--color-surface-muted);
 }
 
 .matrix-body .diagnosis-head {
@@ -76,20 +76,20 @@
 }
 
 .matrix-body .diagnosis-details {
-    color: #444;
+    color: var(--color-text);
     font-size: 13px;
 }
 
 .matrix-body .metrics-legend {
     margin-top: 10px;
     font-size: 13px;
-    color: #444;
+    color: var(--color-text);
     line-height: 1.4;
 }
 
 .matrix-body .test-status {
     font-size: 13px;
-    color: #444;
+    color: var(--color-text);
 }
 
 /* Matrix Dashboard */
@@ -107,8 +107,8 @@
 .matrix-body .matrix-header {
     padding: 10px 16px;
     background: var(--color-accent-strong);
-    color: #fff;
-    box-shadow: 0 2px 6px rgba(0,0,0,0.1);
+    color: var(--color-inverse);
+    box-shadow: var(--shadow-card);
     position: sticky;
     top: 0;
     z-index: 200;
@@ -116,7 +116,7 @@
 }
 
 .matrix-body .matrix-header .subtext {
-    color: rgba(255,255,255,0.78);
+    color: color-mix(in srgb, var(--color-inverse) 78%, transparent);
 }
 
 .matrix-body .filter-row {
@@ -145,9 +145,9 @@
 
 .matrix-body .filter-row select,
 .matrix-body .filter-row input {
-    background: #f9fbff;
+    background: var(--color-surface);
     color: var(--color-text-strong);
-    border: 1px solid #cdd9eb;
+    border: 1px solid var(--color-border);
     border-radius: 10px;
     padding: 8px 10px;
     display: inline-flex;
@@ -156,7 +156,7 @@
 
 .matrix-body .filter-row select:focus,
 .matrix-body .filter-row input:focus {
-    outline: 2px solid #b1c5f6;
+    outline: var(--focus-ring);
 }
 
 .matrix-body .filter-row .btn {
@@ -203,11 +203,11 @@
 
 .matrix-body .tab-bar {
     display: inline-flex;
-    background: #fff;
+    background: var(--color-surface);
     padding: 6px;
     border-radius: 12px;
     border: 1px solid var(--border-color);
-    box-shadow: 0 8px 16px rgba(15, 23, 42, 0.08);
+    box-shadow: var(--shadow-card);
     gap: 6px;
 }
 
@@ -218,13 +218,13 @@
     border-radius: 10px;
     cursor: pointer;
     font-weight: 600;
-    color: #334155;
+    color: var(--color-text);
 }
 
 .matrix-body .tab.active {
-    background: linear-gradient(135deg, #2563eb, #0ea5e9);
-    color: #f8fafc;
-    box-shadow: 0 8px 16px rgba(37, 99, 235, 0.24);
+    background: linear-gradient(135deg, var(--color-accent), var(--color-accent-soft));
+    color: var(--color-inverse);
+    box-shadow: var(--shadow-soft);
 }
 
 .matrix-body .tab-panel {
@@ -244,7 +244,7 @@
     border: 1px solid var(--border-color);
     border-radius: 14px;
     padding: 14px;
-    box-shadow: 0 12px 28px rgba(15, 23, 42, 0.08);
+    box-shadow: var(--shadow-card);
     overflow: visible;
 }
 
@@ -270,8 +270,8 @@
     padding: 10px 12px;
     border: 1px solid var(--border-color);
     border-radius: 12px;
-    background: linear-gradient(145deg, #fff, #f7faff);
-    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.6);
+    background: linear-gradient(145deg, var(--color-surface), var(--color-surface-muted));
+    box-shadow: inset 0 1px 0 color-mix(in srgb, var(--color-inverse) 60%, transparent);
 }
 
 .matrix-body .kpi-card .label {
@@ -303,7 +303,7 @@
     border: 1px solid var(--border-color);
     border-radius: 12px;
     padding: 10px 12px;
-    background: #fff;
+    background: var(--color-surface);
 }
 
 .matrix-body .status-card .status-head {
@@ -322,7 +322,7 @@
 .matrix-body .status-dot.green { background: var(--green); }
 .matrix-body .status-dot.yellow { background: var(--yellow); }
 .matrix-body .status-dot.red { background: var(--red); }
-.matrix-body .status-dot.unknown { background: #94a3b8; }
+.matrix-body .status-dot.unknown { background: var(--color-muted); }
 
 .matrix-body .status-title {
     font-weight: 700;
@@ -351,8 +351,8 @@
     border: 1px solid var(--border-color);
     border-radius: 12px;
     padding: 10px;
-    background: #fff;
-    box-shadow: 0 4px 10px rgba(15,23,42,0.06);
+    background: var(--color-surface);
+    box-shadow: var(--shadow-soft);
 }
 
 .matrix-body .cause-card .cause-head {
@@ -368,13 +368,13 @@
 
 .matrix-body .cause-card .cause-evidence {
     font-size: 12px;
-    color: #475569;
+    color: var(--color-muted);
     line-height: 1.4;
 }
 
-.matrix-body .cause-card.red { border-color: #fecdd3; }
-.matrix-body .cause-card.yellow { border-color: #fef3c7; }
-.matrix-body .cause-card.green { border-color: #dcfce7; }
+.matrix-body .cause-card.red { border-color: color-mix(in srgb, var(--color-danger) 28%, var(--border-color)); }
+.matrix-body .cause-card.yellow { border-color: color-mix(in srgb, var(--color-warning) 28%, var(--border-color)); }
+.matrix-body .cause-card.green { border-color: color-mix(in srgb, var(--color-success) 28%, var(--border-color)); }
 
 .matrix-body .chart.timeline {
     display: flex;
@@ -386,7 +386,7 @@
 
 .matrix-body .spark-bar {
     width: 8px;
-    background: #e5e7eb;
+    background: var(--color-border);
     border-radius: 4px 4px 2px 2px;
     position: relative;
     overflow: hidden;
@@ -396,7 +396,7 @@
 .matrix-body .spark-bar span {
     display: block;
     width: 100%;
-    background: linear-gradient(180deg, #2563eb, #0ea5e9);
+    background: linear-gradient(180deg, var(--color-accent), var(--color-accent-soft));
     position: absolute;
     bottom: 0;
     left: 0;
@@ -432,14 +432,14 @@
 
 .matrix-body .chart.hist-chart .fill {
     width: 100%;
-    background: linear-gradient(180deg, #2563eb, #0ea5e9);
+    background: linear-gradient(180deg, var(--color-accent), var(--color-accent-soft));
     border-radius: 10px 10px 4px 4px;
     min-height: 6px;
 }
 
 .matrix-body .chart.hist-chart .bar-label {
     font-size: 11px;
-    color: #475569;
+    color: var(--color-muted);
     text-align: center;
 }
 
@@ -457,7 +457,7 @@
 }
 
 .matrix-body .pipe-bar {
-    background: #e5e7eb;
+    background: var(--color-border);
     border-radius: 12px;
     height: 12px;
     position: relative;
@@ -467,7 +467,7 @@
 .matrix-body .pipe-bar .bar-50 {
     position: absolute;
     height: 100%;
-    background: #a5b4fc;
+    background: color-mix(in srgb, var(--color-accent) 65%, var(--color-surface));
     border-radius: 12px;
     left: 0;
     top: 0;
@@ -476,7 +476,7 @@
 .matrix-body .pipe-bar .bar-95 {
     position: absolute;
     height: 100%;
-    background: #2563eb;
+    background: var(--color-accent);
     opacity: 0.6;
     border-radius: 12px;
     left: 0;
@@ -485,7 +485,7 @@
 
 .matrix-body .pipe-values {
     font-size: 12px;
-    color: #475569;
+    color: var(--color-muted);
 }
 
 .matrix-body .metrics-table.compact td,
@@ -507,8 +507,8 @@
     border: 1px solid var(--border-color);
     border-radius: 12px;
     padding: 10px;
-    background: #fff;
-    box-shadow: 0 8px 16px rgba(15, 23, 42, 0.06);
+    background: var(--color-surface);
+    box-shadow: var(--shadow-soft);
 }
 
 .matrix-body .spark-head {
@@ -520,7 +520,7 @@
 }
 
 .matrix-body .spark-value {
-    color: #2563eb;
+    color: var(--color-accent);
 }
 
 .matrix-body .sparkline {
@@ -535,7 +535,7 @@
     border-radius: 10px;
     padding: 8px 10px;
     margin-bottom: 6px;
-    background: #f8fbff;
+    background: var(--color-surface-muted);
 }
 
 .matrix-body .run-id {
@@ -549,7 +549,7 @@
 
 .matrix-body .run-load {
     border: 1px solid var(--accent);
-    background: #fff;
+    background: var(--color-surface);
     color: var(--accent);
     padding: 6px 10px;
     border-radius: 10px;

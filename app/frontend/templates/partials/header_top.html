@@ -48,5 +48,14 @@
                 <span class="{{ action.class or 'pill version-pill' }}" {% if action.id %}id="{{ action.id }}"{% endif %}>{{ action.label }}</span>
             {% endif %}
         {% endfor %}
+        {% if theme_switcher %}
+            <div class="theme-switcher">
+                <button type="button" class="theme-chip" id="theme-toggle" aria-haspopup="true" aria-expanded="false">
+                    <span class="theme-chip-label">Theme</span>
+                    <span class="theme-chip-value" id="theme-toggle-label">–</span>
+                </button>
+                <div class="theme-menu hidden" id="theme-menu" role="menu" aria-label="Theme auswählen"></div>
+            </div>
+        {% endif %}
     </div>
 </div>

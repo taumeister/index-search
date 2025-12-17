@@ -2,9 +2,9 @@
     position: fixed;
     min-width: 240px;
     max-width: 320px;
-    background: linear-gradient(180deg, #f9fbff, #ffffff);
-    border: 1px solid var(--border);
-    box-shadow: 0 14px 28px rgba(15, 23, 42, 0.14), 0 6px 14px rgba(15, 23, 42, 0.1);
+    background: linear-gradient(180deg, color-mix(in srgb, var(--color-surface-muted) 80%, var(--color-surface) 20%), var(--color-surface));
+    border: 1px solid var(--color-border);
+    box-shadow: var(--shadow-modal);
     border-radius: 12px;
     padding: 4px 4px 8px;
     color: var(--color-text-strong);
@@ -17,11 +17,11 @@
     align-items: center;
     gap: 8px;
     padding: 8px 10px 6px;
-    background: linear-gradient(180deg, rgba(92, 126, 220, 0.12), rgba(92, 126, 220, 0.02));
-    border: 1px solid rgba(183, 200, 236, 0.7);
+    background: linear-gradient(180deg, color-mix(in srgb, var(--color-accent) 16%, var(--color-surface-muted)), color-mix(in srgb, var(--color-accent) 6%, var(--color-surface)));
+    border: 1px solid color-mix(in srgb, var(--color-accent) 35%, var(--color-border));
     border-radius: 10px;
     margin: 3px 3px 8px;
-    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.6);
+    box-shadow: inset 0 1px 0 color-mix(in srgb, var(--color-inverse) 60%, transparent);
 }
 
 .context-menu__pill {
@@ -29,14 +29,14 @@
     height: 36px;
     padding: 0 12px;
     border-radius: 10px;
-    background: linear-gradient(180deg, #5c7edc, #3b64c7);
-    color: #ffffff;
+    background: linear-gradient(180deg, var(--color-accent-soft), var(--color-accent));
+    color: var(--color-inverse);
     font-weight: 700;
     letter-spacing: 0.06em;
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    box-shadow: 0 10px 20px rgba(68, 96, 161, 0.3);
+    box-shadow: 0 10px 20px color-mix(in srgb, var(--color-accent) 28%, transparent);
 }
 
 .context-menu__title-wrap {
@@ -57,7 +57,7 @@
 }
 
 .context-menu__path {
-    color: var(--muted);
+    color: var(--color-muted);
     font-size: 12px;
     white-space: nowrap;
     overflow: hidden;
@@ -69,7 +69,7 @@
 }
 
 .context-menu__section + .context-menu__section {
-    border-top: 1px solid #e6ebf3;
+    border-top: 1px solid var(--color-border);
     margin-top: 2px;
     padding-top: 8px;
 }
@@ -79,7 +79,7 @@
     font-size: 10px;
     text-transform: uppercase;
     letter-spacing: 0.08em;
-    color: #64748b;
+    color: var(--color-muted);
     font-weight: 700;
 }
 
@@ -99,7 +99,7 @@
     border: 1px solid transparent;
     border-radius: 10px;
     padding: 8px 10px;
-    background: rgba(255, 255, 255, 0.9);
+    background: color-mix(in srgb, var(--color-surface) 94%, transparent);
     color: var(--color-text-strong);
     cursor: pointer;
     text-align: left;
@@ -107,9 +107,9 @@
 }
 
 .context-menu__item:hover {
-    background: linear-gradient(180deg, #eef3ff, #e5edff);
-    border-color: #c8d6f5;
-    box-shadow: 0 8px 22px rgba(47, 73, 140, 0.18);
+    background: color-mix(in srgb, var(--color-accent) 12%, var(--color-surface-muted));
+    border-color: color-mix(in srgb, var(--color-accent) 32%, var(--color-border));
+    box-shadow: var(--shadow-card);
 }
 
 .context-menu__item:active {
@@ -117,14 +117,14 @@
 }
 
 .context-menu__item:focus-visible {
-    outline: 2px solid #94b8ff;
+    outline: var(--focus-ring);
     outline-offset: 2px;
 }
 
 .context-menu__icon {
     width: 18px;
     height: 18px;
-    color: #355fad;
+    color: var(--color-accent-contrast);
 }
 
 .context-menu__text {
@@ -142,28 +142,28 @@
 
 .context-menu__hint {
     font-size: 10px;
-    color: var(--muted);
+    color: var(--color-muted);
 }
 
 .context-menu__shortcut {
     font-size: 10px;
-    color: #4b5d7a;
+    color: var(--color-text);
     font-weight: 700;
     letter-spacing: 0.04em;
 }
 
 .context-menu__item.danger {
-    color: #b91c1c;
+    color: var(--color-danger);
 }
 
 .context-menu__item.danger .context-menu__icon {
-    color: #b91c1c;
+    color: var(--color-danger);
 }
 
 .context-menu__item.danger:hover {
-    background: linear-gradient(180deg, #fff2f2, #ffe3e3);
-    border-color: #f3c2c2;
-    box-shadow: 0 8px 22px rgba(185, 28, 28, 0.15);
+    background: color-mix(in srgb, var(--color-danger) 12%, var(--color-surface));
+    border-color: color-mix(in srgb, var(--color-danger) 30%, var(--color-border));
+    box-shadow: var(--shadow-card);
 }
 
 .context-menu__item[disabled] {
@@ -171,12 +171,12 @@
     cursor: not-allowed;
     box-shadow: none;
     border-color: transparent;
-    background: rgba(248, 249, 252, 0.8);
-    color: #8b95a5;
+    background: color-mix(in srgb, var(--color-surface) 85%, transparent);
+    color: var(--color-muted);
 }
 
 .context-menu__item[disabled] .context-menu__icon {
-    color: #94a3b8;
+    color: var(--color-muted);
 }
 
 .context-menu__item[disabled]:hover {

@@ -15,6 +15,22 @@
             document.documentElement.style.setProperty("--app-zoom", DEFAULT_ZOOM);
         })();
     </script>
+    <script>
+        (function applyStoredTheme() {
+            const KEY = "theme";
+            const DEFAULT_THEME = "lumen-atelier";
+            let theme = DEFAULT_THEME;
+            try {
+                const stored = localStorage.getItem(KEY);
+                if (stored && typeof stored === "string") {
+                    theme = stored;
+                }
+            } catch (_) {
+                /* ignore */
+            }
+            document.documentElement.setAttribute("data-theme", theme);
+        })();
+    </script>
     <link rel="stylesheet" href="/static/css/app.css">
     <script>
         window.defaultPreview = "{{ default_preview }}";
@@ -31,6 +47,7 @@
     {% set header_slogan = "Kanzlei Schmitt, wir können nur Enterprise..." %}
     {% set header_eyebrow = None %}
     {% set version_badge = app_version or 'v?' %}
+    {% set theme_switcher = True %}
     {% set base_actions = [
         {"type":"icon","href":"/metrics","label":"Metrics","icon":"metrics"},
         {"type":"icon","href":"/dashboard","label":"Dashboard","icon":"dashboard"}
@@ -130,7 +147,7 @@
                 </div>
                 <div class="preview-actions">
                     <button id="print-doc">Drucken</button>
-                    <button id="open-popup">Pop-up</button>
+                    <button id="open-popup">Popup</button>
                     <a id="download-link" target="_blank" rel="noopener">Download</a>
                 </div>
             </div>
