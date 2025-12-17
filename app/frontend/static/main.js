@@ -2557,11 +2557,7 @@ function clampZoom(value) {
 
 function readSavedZoom() {
     try {
-        const raw = localStorage.getItem(APP_ZOOM_KEY);
-        const parsed = parseFloat(raw);
-        if (Number.isFinite(parsed)) {
-            return clampZoom(parsed);
-        }
+        localStorage.removeItem(APP_ZOOM_KEY);
     } catch (_) {
         /* ignore */
     }
@@ -2578,13 +2574,6 @@ function getActiveZoom() {
 function applyZoom(value, { persist = true } = {}) {
     const clamped = clampZoom(value);
     document.documentElement.style.setProperty("--app-zoom", clamped);
-    if (persist) {
-        try {
-            localStorage.setItem(APP_ZOOM_KEY, String(clamped));
-        } catch (_) {
-            /* ignore */
-        }
-    }
     updateZoomDisplay(clamped);
     positionPreview();
     return clamped;

@@ -3,6 +3,18 @@
 <head>
     <meta charset="UTF-8">
     <title>Performance Diagnose</title>
+    <script>
+        (function enforceDefaultZoom() {
+            const KEY = "appZoom";
+            const DEFAULT_ZOOM = 1;
+            try {
+                localStorage.removeItem(KEY);
+            } catch (_) {
+                /* ignore */
+            }
+            document.documentElement.style.setProperty("--app-zoom", DEFAULT_ZOOM);
+        })();
+    </script>
     <link rel="stylesheet" href="/static/styles.css">
 </head>
 <body class="matrix-body">
