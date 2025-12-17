@@ -1,0 +1,128 @@
+.search-wrap {
+    position: relative;
+    display: flex;
+    align-items: center;
+}
+
+.search-input-wrap #search-input {
+    padding-right: 30px;
+}
+
+.search-fav {
+    position: absolute;
+    right: 8px;
+    top: 50%;
+    transform: translateY(-50%);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 16px;
+    height: 16px;
+    border-radius: 5px;
+    border: 1px solid transparent;
+    background: rgba(255,255,255,0.5);
+    color: var(--color-accent-strong);
+    cursor: pointer;
+    transition: background 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease, color 0.15s ease;
+    z-index: 3;
+    font-size: 10px;
+    line-height: 1;
+}
+
+.search-fav:hover {
+    background: rgba(255,255,255,0.8);
+    border-color: var(--border);
+}
+
+.search-fav:focus-visible {
+    outline: 2px solid #b1c5f6;
+    outline-offset: 2px;
+}
+
+.search-fav.active {
+    background: linear-gradient(135deg, var(--color-accent-strong), var(--color-accent-contrast));
+    color: #f8fafc;
+    border-color: #355d9b;
+}
+
+.fav-dropdown {
+    position: absolute;
+    top: calc(100% + 6px);
+    left: 50%;
+    transform: translateX(-50%);
+    min-width: 220px;
+    max-width: 260px;
+    background: rgba(255,255,255,0.92);
+    border: 1px solid rgba(199, 210, 227, 0.8);
+    border-radius: 12px;
+    box-shadow: 0 12px 24px rgba(15, 23, 42, 0.14);
+    padding: 6px;
+    z-index: 9000;
+    display: none;
+}
+
+.fav-dropdown.visible {
+    display: block;
+}
+
+.fav-dropdown h4 {
+    margin: 4px 0 8px;
+    font-size: 12px;
+    color: #475569;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+}
+
+.fav-list {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    max-height: 260px;
+    overflow: auto;
+}
+
+.fav-item {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    gap: 8px;
+    align-items: center;
+    padding: 8px 10px;
+    border-radius: 10px;
+    border: 1px solid #e2e8f0;
+    background: #fff;
+    cursor: pointer;
+    transition: border-color 0.12s ease, box-shadow 0.12s ease, background 0.12s ease;
+}
+
+.fav-item:hover {
+    background: #eef3ff;
+    border-color: #cdd9eb;
+    box-shadow: 0 8px 16px rgba(47, 73, 140, 0.14);
+}
+
+.fav-item .label {
+    font-size: 13px;
+    color: var(--color-text-strong);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.fav-remove {
+    border: none;
+    background: transparent;
+    color: #9ca3af;
+    cursor: pointer;
+    font-size: 14px;
+    width: 24px;
+    height: 24px;
+    border-radius: 6px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.fav-remove:hover {
+    background: rgba(0,0,0,0.04);
+    color: #ef4444;
+}

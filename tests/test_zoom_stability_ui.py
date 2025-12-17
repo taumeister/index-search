@@ -42,13 +42,15 @@ def resolve_base_url():
 
 
 def resolve_secret():
-    if os.getenv("APP_SECRET"):
-        return os.getenv("APP_SECRET")
     env_path = Path(".env")
     if env_path.exists():
         for line in env_path.read_text().splitlines():
             if line.startswith("APP_SECRET="):
-                return line.split("=", 1)[1].strip()
+                value = line.split("=", 1)[1].strip()
+                if value:
+                    return value
+    if os.getenv("APP_SECRET"):
+        return os.getenv("APP_SECRET")
     return ""
 
 

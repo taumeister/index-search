@@ -62,6 +62,12 @@
 - Auto-Index: `GET/POST /api/auto-index/config` (Plan laden/speichern + Status), `POST /api/auto-index/run` (manuell starten), `GET /api/auto-index/status` (Status/Polling). Scheduler läuft als Hintergrund-Thread, Lock verhindert parallele Läufe.
 
 ## Frontend
+### Styles / Theming
+- Einstieg: `app/frontend/static/css/app.css` wird in den Templates geladen (statt monolithisch `styles.css`).
+- Struktur: `00-tokens.css` (Design Tokens), `01-base.css` (Body/Typo), `02-layout.css` (Header/Main), Komponenten unter `03-components/*` (Buttons, Filter/Form, Tabellen, Preview, Dialoge, Context-Menu, Toasts, Feedback), Seiten unter `04-pages/*` (Search, Dashboard, Metrics/Matrix, Viewer).
+- Tokens: Farben, Abstände, Radien, Schatten, Focus-Ring, Filter-Defaults; Legacy-Aliase (`--border`, `--muted`, `--panel` etc.) für Kompatibilität bestehen.
+- Viewer/Dashboard/Metrics nutzen jetzt ihre Seiten-CSS statt Inline/Separate Files; `static/styles.css` und `static/viewer.css` leiten nur noch auf `css/app.css`.
+
 - Layout: oben kompakter Header (Titel, Zoom-Controls, Dashboard) auf allen Seiten, darunter Suche + Filter; Trefferliste links, Preview rechts (umschaltbar auf Popup).
 - Header und Tabellenkopf bleiben beim Scrollen sichtbar; Trefferliste scrollt unabhängig in einem eigenen Scroll-Bereich.
 - Header zeigt die aktuelle Versionsnummer (aus `VERSION`) neben dem Titel.

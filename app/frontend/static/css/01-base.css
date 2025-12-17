@@ -1,0 +1,36 @@
+html, body {
+    height: 100%;
+}
+
+body {
+    margin: 0;
+    font-family: var(--font-sans);
+    font-size: var(--font-size-md);
+    background: var(--color-bg);
+    color: var(--color-text);
+    zoom: var(--app-zoom);
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    min-height: 100vh;
+}
+
+h1 {
+    margin: 0;
+    font-weight: var(--font-weight-medium);
+    font-size: 18px;
+}
+
+.hidden {
+    display: none !important;
+}
+
+@supports not (zoom: 1) {
+    body {
+        transform: scale(var(--app-zoom));
+        transform-origin: top left;
+        width: calc(100% / var(--app-zoom));
+        min-height: calc(100vh / var(--app-zoom));
+        overflow-x: hidden;
+    }
+}

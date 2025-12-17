@@ -1,0 +1,195 @@
+.context-menu {
+    position: fixed;
+    min-width: 240px;
+    max-width: 320px;
+    background: linear-gradient(180deg, #f9fbff, #ffffff);
+    border: 1px solid var(--border);
+    box-shadow: 0 14px 28px rgba(15, 23, 42, 0.14), 0 6px 14px rgba(15, 23, 42, 0.1);
+    border-radius: 12px;
+    padding: 4px 4px 8px;
+    color: var(--color-text-strong);
+    z-index: 9999;
+    backdrop-filter: blur(6px);
+}
+
+.context-menu__header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 10px 6px;
+    background: linear-gradient(180deg, rgba(92, 126, 220, 0.12), rgba(92, 126, 220, 0.02));
+    border: 1px solid rgba(183, 200, 236, 0.7);
+    border-radius: 10px;
+    margin: 3px 3px 8px;
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.6);
+}
+
+.context-menu__pill {
+    min-width: 42px;
+    height: 36px;
+    padding: 0 12px;
+    border-radius: 10px;
+    background: linear-gradient(180deg, #5c7edc, #3b64c7);
+    color: #ffffff;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: 0 10px 20px rgba(68, 96, 161, 0.3);
+}
+
+.context-menu__title-wrap {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    min-width: 0;
+}
+
+.context-menu__title {
+    font-weight: 700;
+    font-size: 14px;
+    letter-spacing: 0.01em;
+    color: var(--color-text-strong);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.context-menu__path {
+    color: var(--muted);
+    font-size: 12px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.context-menu__section {
+    padding: 2px 4px;
+}
+
+.context-menu__section + .context-menu__section {
+    border-top: 1px solid #e6ebf3;
+    margin-top: 2px;
+    padding-top: 8px;
+}
+
+.context-menu__section-title {
+    padding: 2px 8px;
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: #64748b;
+    font-weight: 700;
+}
+
+.context-menu__list {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    padding: 0;
+}
+
+.context-menu__item {
+    display: grid;
+    grid-template-columns: auto 1fr auto;
+    gap: 10px;
+    align-items: center;
+    width: 100%;
+    border: 1px solid transparent;
+    border-radius: 10px;
+    padding: 8px 10px;
+    background: rgba(255, 255, 255, 0.9);
+    color: var(--color-text-strong);
+    cursor: pointer;
+    text-align: left;
+    transition: border-color 0.12s ease, box-shadow 0.12s ease, background 0.12s ease, transform 0.08s ease;
+}
+
+.context-menu__item:hover {
+    background: linear-gradient(180deg, #eef3ff, #e5edff);
+    border-color: #c8d6f5;
+    box-shadow: 0 8px 22px rgba(47, 73, 140, 0.18);
+}
+
+.context-menu__item:active {
+    transform: translateY(1px);
+}
+
+.context-menu__item:focus-visible {
+    outline: 2px solid #94b8ff;
+    outline-offset: 2px;
+}
+
+.context-menu__icon {
+    width: 18px;
+    height: 18px;
+    color: #355fad;
+}
+
+.context-menu__text {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 0;
+}
+
+.context-menu__label {
+    font-weight: 700;
+    font-size: 12px;
+    letter-spacing: 0.01em;
+}
+
+.context-menu__hint {
+    font-size: 10px;
+    color: var(--muted);
+}
+
+.context-menu__shortcut {
+    font-size: 10px;
+    color: #4b5d7a;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+}
+
+.context-menu__item.danger {
+    color: #b91c1c;
+}
+
+.context-menu__item.danger .context-menu__icon {
+    color: #b91c1c;
+}
+
+.context-menu__item.danger:hover {
+    background: linear-gradient(180deg, #fff2f2, #ffe3e3);
+    border-color: #f3c2c2;
+    box-shadow: 0 8px 22px rgba(185, 28, 28, 0.15);
+}
+
+.context-menu__item[disabled] {
+    opacity: 0.6;
+    cursor: not-allowed;
+    box-shadow: none;
+    border-color: transparent;
+    background: rgba(248, 249, 252, 0.8);
+    color: #8b95a5;
+}
+
+.context-menu__item[disabled] .context-menu__icon {
+    color: #94a3b8;
+}
+
+.context-menu__item[disabled]:hover {
+    transform: none;
+}
+
+@media (max-width: 640px) {
+    .context-menu {
+        min-width: 240px;
+        max-width: 300px;
+    }
+
+    .context-menu__header {
+        margin: 2px 2px 8px;
+    }
+}

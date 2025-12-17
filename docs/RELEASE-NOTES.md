@@ -68,3 +68,7 @@
 
 ## v019 - Stop-API fix
 - Stop-Endpoint aktiviert (Import), Tests: Indexlauf 474/474, Suche liefert Ergebnisse.
+## v0.3.12
+- CSS: Styles modularisiert (Tokens, Base/Layout, Components, Pages) mit zentralem Einstieg `static/css/app.css`, Vorbereitung für Theming (Design Tokens, Variablen für Farben/Spacing/Radien/Shadows).
+- Dashboard/Metrics/Viewer: Inline-Styles und Einzel-CSS in Seitenmodule überführt, Komponenten auf gemeinsame Tokens umgestellt.
+- Tests: UI-Zoom-Test robust gegen APP_SECRET aus .env; keine funktionalen Änderungen erwartet.

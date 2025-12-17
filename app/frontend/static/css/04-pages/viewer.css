@@ -1,0 +1,69 @@
+.viewer-body {
+    margin: 0;
+    font-family: var(--font-sans);
+    background: var(--color-surface-muted);
+    color: var(--color-text);
+}
+
+.viewer-body header {
+    background: var(--color-accent-strong);
+    color: #fff;
+    padding: 10px 14px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
+
+.viewer-body .title {
+    font-size: 16px;
+    font-weight: 600;
+}
+
+.viewer-body .actions {
+    display: flex;
+    gap: 8px;
+}
+
+.viewer-body button,
+.viewer-body a.button {
+    background: #2d6cdf;
+    color: #fff;
+    border: none;
+    padding: 8px 12px;
+    border-radius: 6px;
+    cursor: pointer;
+    text-decoration: none;
+}
+
+.viewer-body main {
+    padding: 6px;
+    height: calc(100vh - 60px);
+    box-sizing: border-box;
+}
+
+.viewer-body .viewer-panel {
+    background: #fff;
+    border-radius: 8px;
+    box-shadow: 0 2px 6px rgba(0,0,0,0.08);
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+}
+
+.viewer-body .content {
+    flex: 1;
+    overflow: auto;
+    padding: 0;
+}
+
+.viewer-body .content iframe.pdf-frame {
+    width: 100%;
+    height: calc(100vh - 120px);
+    border: none;
+    background: var(--color-text-strong);
+}
+
+.viewer-body .content pre {
+    white-space: pre-wrap;
+    font-family: Consolas, monospace;
+}

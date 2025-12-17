@@ -1,0 +1,102 @@
+:root {
+    /* Core color palette */
+    --color-bg: #f7f9fb;
+    --color-surface: #ffffff;
+    --color-surface-muted: #f5f7fb;
+    --color-surface-strong: #eef3ff;
+    --color-border: #d7dde7;
+    --color-border-strong: #cbd5e1;
+    --color-muted: #6b7280;
+    --color-text: #1f2933;
+    --color-text-strong: #0f172a;
+    --color-heading: #0f172a;
+    --color-inverse: #ffffff;
+    --color-accent: #2563eb;
+    --color-accent-strong: #1b3a5d;
+    --color-accent-soft: #5c7edc;
+    --color-accent-contrast: #2b5999;
+    --color-success: #16a34a;
+    --color-warning: #f59e0b;
+    --color-danger: #b91c1c;
+    --color-info: #355fad;
+    --color-panel: #ffffff;
+
+    /* Legacy dashboard aliases */
+    --panel: var(--color-panel);
+    --bg: #f4f6fb;
+    --primary: #2563eb;
+    --success: var(--color-success);
+    --danger: var(--color-danger);
+
+    /* Legacy aliases for existing rules */
+    --border: #d7dde7;
+    --muted: var(--color-muted);
+
+    /* Layout */
+    --app-zoom: 1;
+    --panel-width: clamp(320px, 32vw, 520px);
+
+    /* Typography */
+    --font-sans: "Segoe UI", Tahoma, sans-serif;
+    --font-mono: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+    --font-size-xxs: 10px;
+    --font-size-xs: 11px;
+    --font-size-sm: 12px;
+    --font-size-md: 13px;
+    --font-size-lg: 14px;
+    --font-size-xl: 16px;
+    --font-weight-regular: 400;
+    --font-weight-medium: 600;
+    --font-weight-bold: 700;
+
+    /* Radius */
+    --radius-xs: 6px;
+    --radius-sm: 8px;
+    --radius-md: 10px;
+    --radius-lg: 12px;
+    --radius-xl: 14px;
+    --radius-pill: 999px;
+
+    /* Spacing */
+    --space-1: 2px;
+    --space-2: 4px;
+    --space-3: 6px;
+    --space-4: 8px;
+    --space-5: 10px;
+    --space-6: 12px;
+    --space-7: 14px;
+    --space-8: 16px;
+    --space-9: 18px;
+
+    /* Shadows */
+    --shadow-soft: 0 1px 3px rgba(0, 0, 0, 0.06);
+    --shadow-card: 0 8px 16px rgba(15, 23, 42, 0.08);
+    --shadow-strong: 0 10px 24px rgba(10, 28, 64, 0.25);
+    --shadow-modal: 0 16px 36px rgba(15, 23, 42, 0.22);
+
+    /* Focus */
+    --focus-ring: 2px solid #b1c5f6;
+    --focus-offset: 2px;
+
+    /* Filters */
+    --filter-font-size: 11px;
+    --filter-font-weight: 600;
+    --filter-padding-y: 7px;
+    --filter-padding-x: 10px;
+    --filter-group-height: 34px;
+    --filter-radius: 9px;
+    --filter-chip-radius: 8px;
+
+    /* Metrics/Matrix */
+    --panel-bg: #ffffff;
+    --border-color: #dbe4f0;
+    --header-bg: #f2f6fb;
+    --accent: #2563eb;
+    --green: #16a34a;
+    --yellow: #f59e0b;
+    --red: #dc2626;
+}
+
+:root[data-theme="dark"] {
+    /* Placeholder for future theming; keeps structure ready without changing visuals now */
+}
