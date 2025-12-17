@@ -20,6 +20,7 @@ from app import api
 from app import config_db
 from app.config_loader import CentralConfig, ensure_dirs, load_config
 from app.db import datenbank as db
+from app import index_runner
 from app.indexer.index_lauf_service import (
     stop_event,
     load_run_id,
@@ -53,22 +54,35 @@ def resolve_active_roots(config: CentralConfig) -> list[tuple[Path, str]]:
     Liefert aktive Roots aus der Config-DB, andernfalls die env/INI-Roots.
     Validiert Basis-Pfad und Existenz, fällt aber nicht stillschweigend auf /data zurück.
     """
-    db_roots = config_db.list_roots(active_only=True)
+    env_val = os.getenv("DATA_CONTAINER_PATH")
+    if env_val == "/":
+        raise ValueError("Ungültiger Basis-Pfad für Daten (DATA_CONTAINER_PATH)")
+    base_raw = config_db.get_setting("base_data_root", None) or env_val or "/data"
+    base_root = Path(base_raw).resolve()
+    if str(base_root) in {"", "/"}:
+        raise ValueError("Ungültiger Basis-Pfad für Daten (DATA_CONTAINER_PATH)")
+    if not base_root.exists() or not base_root.is_dir():
+        raise ValueError(f"Basis-Ordner nicht gefunden: {base_root}")
+
+    db_roots = config_db.list_roots(active_only=False)
     if db_roots:
-        base_root = Path(config_db.get_setting("base_data_root", "/data")).resolve()
-        if not base_root.exists():
-            raise ValueError(f"Basis-Ordner nicht gefunden: {base_root}")
+        active = [(path, label, rid, active) for path, label, rid, active in db_roots if active]
+        if not active:
+            raise ValueError("Keine aktiven Quellen konfiguriert")
         resolved: list[tuple[Path, str]] = []
-        for path, label, _rid, _active in db_roots:
+        for path, label, _rid, _active in active:
             p = Path(path).resolve()
-            if not p.is_dir():
-                raise ValueError(f"Wurzelpfad nicht gefunden: {p}")
             try:
                 p.relative_to(base_root)
             except ValueError:
-                raise ValueError(f"Pfad {p} liegt nicht unter Basis {base_root}")
+                continue
+            if not p.exists() or not p.is_dir():
+                logger.warning("Aktiver Root nicht gefunden: %s", p)
+                continue
             resolved.append((p, label or p.name))
-        return resolved
+        if resolved:
+            return resolved
+        raise ValueError("Keine aktiven Quellen verfügbar")
 
     # Fallback: env/INI-Roots
     if config.paths.roots:
@@ -469,12 +483,9 @@ def create_app(config: Optional[CentralConfig] = None) -> FastAPI:
     def list_sources(_auth: bool = Depends(require_secret)):
         labels: list[str] = []
         try:
-            labels = [label for _, label in resolve_active_roots(config)]
+            labels = [lab for _path, lab, _rid, _active in config_db.list_roots(active_only=True)]
         except Exception:
-            try:
-                labels = [label for _, label in getattr(config.paths, "roots", [])]
-            except Exception:
-                labels = []
+            labels = []
         cleaned = sorted({(lbl or "").strip() for lbl in labels if (lbl or "").strip()})
         return {"labels": cleaned}
 
@@ -741,33 +752,58 @@ def create_app(config: Optional[CentralConfig] = None) -> FastAPI:
 
     @app.get("/api/admin/status")
     def admin_status(request: Request, _auth: bool = Depends(require_secret)):
-        db.init_db()
-        file_ops.refresh_quarantine_state()
+        try:
+            db.init_db()
+        except Exception as exc:
+            logger.error("DB-Init fehlgeschlagen: %s", exc)
+        try:
+            file_ops.refresh_quarantine_state()
+        except Exception as exc:
+            logger.error("Quarantäne-Refresh fehlgeschlagen: %s", exc)
         ops_state = file_ops.get_status()
         admin_flag = is_admin(request)
-        with db.get_conn() as conn:
-            status = db.get_status(conn)
-            ext_counts = [
-                {"extension": row["extension"], "count": row["c"]}
-                for row in status["ext_counts"]
-            ]
-            recent_runs = [dict(r) for r in status["recent_runs"]]
-            last_run = dict(status["last_run"]) if status["last_run"] else None
-            return {
+        try:
+            with db.get_conn() as conn:
+                status = db.get_status(conn)
+                ext_counts = [
+                    {"extension": row["extension"], "count": row["c"]}
+                    for row in status["ext_counts"]
+                ]
+                recent_runs = [dict(r) for r in status["recent_runs"]]
+                last_run = dict(status["last_run"]) if status["last_run"] else None
+                return {
+                    "admin": admin_flag,
+                    "file_ops_enabled": ops_state["file_ops_enabled"],
+                    "quarantine_ready_sources": ops_state["quarantine_ready_sources"],
+                    "quarantine_retention_days": ops_state.get("quarantine_retention_days"),
+                    "quarantine_cleanup_schedule": ops_state.get("quarantine_cleanup_schedule"),
+                    "quarantine_cleanup_dry_run": ops_state.get("quarantine_cleanup_dry_run"),
+                    "index_exclude_dirs": getattr(config.indexer, "exclude_dirs", []),
+                    "total_docs": int(status["total_docs"]),
+                    "ext_counts": ext_counts,
+                    "last_run": last_run,
+                    "recent_runs": recent_runs,
+                    "errors_total": db.error_count(conn),
+                    "send_report_enabled": config_db.get_setting("send_report_enabled", "0") == "1",
+                }
+        except Exception as exc:
+            logger.error("Admin-Status fehlgeschlagen: %s", exc, exc_info=True)
+            fallback = {
                 "admin": admin_flag,
-                "file_ops_enabled": ops_state["file_ops_enabled"],
-                "quarantine_ready_sources": ops_state["quarantine_ready_sources"],
+                "file_ops_enabled": ops_state.get("file_ops_enabled", False),
+                "quarantine_ready_sources": ops_state.get("quarantine_ready_sources", []),
                 "quarantine_retention_days": ops_state.get("quarantine_retention_days"),
                 "quarantine_cleanup_schedule": ops_state.get("quarantine_cleanup_schedule"),
                 "quarantine_cleanup_dry_run": ops_state.get("quarantine_cleanup_dry_run"),
                 "index_exclude_dirs": getattr(config.indexer, "exclude_dirs", []),
-                "total_docs": int(status["total_docs"]),
-                "ext_counts": ext_counts,
-                "last_run": last_run,
-                "recent_runs": recent_runs,
-                "errors_total": db.error_count(conn),
-                "send_report_enabled": config_db.get_setting("send_report_enabled", "0") == "1",
+                "total_docs": 0,
+                "ext_counts": [],
+                "last_run": None,
+                "recent_runs": [],
+                "errors_total": 0,
+                "send_report_enabled": False,
             }
+            return JSONResponse({"status": "error", "detail": str(exc), "fallback": fallback}, status_code=200)
 
     @app.post("/api/admin/login")
     def admin_login(payload: Dict[str, Any], response: Response, _auth: bool = Depends(require_secret)):
@@ -816,8 +852,21 @@ def create_app(config: Optional[CentralConfig] = None) -> FastAPI:
 
     @app.delete("/api/admin/roots/{root_id}")
     def delete_root(root_id: int, _auth: bool = Depends(require_secret)):
+        root = config_db.get_root(root_id)
+        if not root:
+            raise HTTPException(status_code=404, detail="Root nicht gefunden")
+        _path, label, _rid, _active = root
         config_db.delete_root(root_id)
-        return {"status": "ok"}
+        try:
+            with db.get_conn() as conn:
+                db.delete_documents_by_source(conn, [label])
+        except Exception as exc:
+            logger.error("Dokumente für Root %s konnten nicht entfernt werden: %s", label, exc)
+        try:
+            file_ops.refresh_quarantine_state()
+        except Exception:
+            pass
+        return {"status": "ok", "removed_source": label}
 
     @app.post("/api/admin/roots/{root_id}/activate")
     def activate_root(root_id: int, active: bool = Query(True), _auth: bool = Depends(require_secret)):
@@ -838,14 +887,24 @@ def create_app(config: Optional[CentralConfig] = None) -> FastAPI:
 
     @app.post("/api/admin/index/reset")
     def reset_index(_auth: bool = Depends(require_secret)):
-        status = start_index_run(full_reset=True, reason="reset", resolve_roots=resolve_active_roots)
-        if status == "busy":
-            return JSONResponse({"status": "busy"}, status_code=409)
-        return {"status": status}
+        try:
+            index_runner.clear_index_files()
+        except Exception as exc:
+            return JSONResponse({"status": "error", "detail": str(exc)}, status_code=500)
+        return {"status": "cleared"}
 
     @app.post("/api/admin/index/reset_run")
     def reset_and_run(_auth: bool = Depends(require_secret)):
-        status = start_index_run(full_reset=True, reason="reset_run", resolve_roots=resolve_active_roots)
+        cfg = load_config()
+        try:
+            roots = resolve_active_roots(cfg)
+        except ValueError as exc:
+            return JSONResponse({"status": "error", "detail": str(exc)}, status_code=400)
+        try:
+            index_runner.clear_index_files()
+        except Exception as exc:
+            return JSONResponse({"status": "error", "detail": str(exc)}, status_code=500)
+        status = start_index_run(full_reset=False, cfg_override=cfg, roots_override=roots, reason="reset_run", resolve_roots=resolve_active_roots)
         if status == "busy":
             return JSONResponse({"status": "busy"}, status_code=409)
         return {"status": status}

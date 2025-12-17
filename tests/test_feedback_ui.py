@@ -1,4 +1,5 @@
 import os
+import httpx
 
 import pytest
 from playwright.sync_api import sync_playwright, Route
@@ -7,6 +8,10 @@ from playwright.sync_api import sync_playwright, Route
 @pytest.mark.e2e
 def test_feedback_overlay_flow():
     base_url = os.getenv("APP_BASE_URL", "http://localhost:8010")
+    try:
+        httpx.get(base_url, timeout=2)
+    except Exception:
+        pytest.skip("APP_BASE_URL nicht erreichbar")
     with sync_playwright() as p:
         browser = p.chromium.launch(headless=True)
         context = browser.new_context()

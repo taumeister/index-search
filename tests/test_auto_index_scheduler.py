@@ -33,6 +33,10 @@ def setup_env(monkeypatch, tmp_path: Path):
         "SMTP_TO",
     ]:
         monkeypatch.delenv(key, raising=False)
+    base = tmp_path / "data"
+    base.mkdir()
+    config_db.set_setting("base_data_root", str(base))
+    config_db.add_root(str(base), "data", True)
 
 
 def test_compute_next_run_daily_future():

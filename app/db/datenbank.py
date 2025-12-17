@@ -598,3 +598,15 @@ def error_count(conn: sqlite3.Connection) -> int:
 def list_existing_meta(conn: sqlite3.Connection) -> Dict[str, Tuple[float, float]]:
     cursor = conn.execute("SELECT path, size_bytes, mtime FROM documents")
     return {row["path"]: (row["size_bytes"], row["mtime"]) for row in cursor.fetchall()}
+
+
+def delete_documents_by_source(conn: sqlite3.Connection, sources: List[str]) -> int:
+    if not sources:
+        return 0
+    placeholders = ",".join("?" * len(sources))
+    cursor = conn.execute(f"SELECT id FROM documents WHERE source IN ({placeholders})", sources)
+    ids = [row[0] for row in cursor.fetchall()]
+    if ids:
+        conn.execute(f"DELETE FROM documents WHERE id IN ({','.join('?' * len(ids))})", ids)
+        conn.execute(f"DELETE FROM documents_fts WHERE doc_id IN ({','.join('?' * len(ids))})", ids)
+    return len(ids)

@@ -21,7 +21,9 @@ def setup_env(monkeypatch, tmp_path: Path) -> Path:
     os.environ["AUTO_INDEX_DISABLE"] = "1"
     root = tmp_path / "root"
     root.mkdir(parents=True, exist_ok=True)
-    os.environ["INDEX_ROOTS"] = f"{root}:Root"
+    os.environ["DATA_CONTAINER_PATH"] = str(root)
+    config_db.set_setting("base_data_root", str(tmp_path))
+    config_db.add_root(str(root), "Root", True)
     return root
 
 
@@ -251,3 +253,52 @@ def test_rename_rollback_keeps_original(monkeypatch, tmp_path):
     if quarantine_dir.exists():
         matches = list(quarantine_dir.rglob("doc.txt"))
         assert not matches
+
+
+def test_move_rejects_deleted_target_source(monkeypatch, tmp_path):
+    client, headers, root = create_admin_client(monkeypatch, tmp_path)
+    other = root.parent / "other"
+    other.mkdir(parents=True)
+    config_db.add_root(str(other), "Other", True)
+    file_ops.refresh_quarantine_state()
+
+    file_path = root / "doc.txt"
+    file_path.write_text("hello", encoding="utf-8")
+    doc_id = seed_document(file_path, "Root")
+    config_db.delete_root(next(r[2] for r in config_db.list_roots(active_only=False) if r[1] == "Other"))
+    file_ops.refresh_quarantine_state()
+
+    resp = client.post(
+        f"/api/files/{doc_id}/move",
+        json={"target_dir": "", "target_source": "Other"},
+        headers=headers,
+    )
+    assert resp.status_code == 400
+    assert "Quelle nicht verfügbar" in resp.json().get("detail", "")
+
+
+def test_admin_ops_work_with_one_ready_one_missing_root(monkeypatch, tmp_path):
+    client, headers, root = create_admin_client(monkeypatch, tmp_path)
+    missing = root.parent / "missing"
+    config_db.add_root(str(missing), "Missing", True)
+    file_ops.refresh_quarantine_state()
+
+    file_path = root / "doc.txt"
+    file_path.write_text("hello", encoding="utf-8")
+    doc_id = seed_document(file_path, "Root")
+
+    resp = client.post(f"/api/files/{doc_id}/rename", json={"new_name": "renamed.txt"}, headers=headers)
+    assert resp.status_code == 200
+    assert (root / "renamed.txt").exists()
+    assert not file_path.exists()
+
+
+def test_quarantine_delete_rejects_symlink_outside(monkeypatch, tmp_path):
+    client, headers, root = create_admin_client(monkeypatch, tmp_path)
+    link_path = root / "hosts_link"
+    link_path.symlink_to(Path("/etc/hosts"))
+    doc_id = seed_document(link_path, "Root")
+
+    resp = client.post(f"/api/files/{doc_id}/quarantine-delete", headers=headers)
+    assert resp.status_code == 400
+    assert link_path.exists()

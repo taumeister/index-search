@@ -33,6 +33,10 @@ def setup_env(monkeypatch, tmp_path):
         monkeypatch.delenv(key, raising=False)
     monkeypatch.setattr(feedback, "_feedback_rate", {})
     os.environ["APP_SECRET"] = "secret"
+    base = tmp_path / "data"
+    base.mkdir()
+    config_db.set_setting("base_data_root", str(base))
+    config_db.add_root(str(base), "data", True)
 
 
 def test_feedback_disabled(monkeypatch, tmp_path):

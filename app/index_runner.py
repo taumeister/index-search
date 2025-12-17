@@ -5,11 +5,31 @@ from pathlib import Path
 from typing import Optional, Callable, Iterable
 
 from app.config_loader import CentralConfig, load_config
-from app.indexer.index_lauf_service import run_index_lauf
+from app.indexer.index_lauf_service import run_index_lauf, RUN_STATUS_FILE, HEARTBEAT_FILE, LIVE_STATUS_FILE
+from app.db import datenbank as db
 
 logger = logging.getLogger(__name__)
 
 index_lock = threading.Lock()
+
+
+def clear_index_files() -> None:
+    base = Path(getattr(db, "DB_PATH", Path("data/index.db")))
+    candidates = [
+        base,
+        base.with_suffix(base.suffix + "-wal"),
+        base.with_suffix(base.suffix + "-shm"),
+        RUN_STATUS_FILE,
+        HEARTBEAT_FILE,
+        LIVE_STATUS_FILE,
+    ]
+    for p in candidates:
+        try:
+            if p.exists():
+                p.unlink()
+        except Exception as exc:
+            logger.error("Index-Datei konnte nicht gelöscht werden: %s", exc)
+            raise
 
 
 def start_index_run(
@@ -46,10 +66,7 @@ def start_index_run(
                 return
             if full_reset:
                 try:
-                    for suffix in ["data/index.db", "data/index.db-wal", "data/index.db-shm"]:
-                        p = Path(suffix)
-                        if p.exists():
-                            p.unlink()
+                    clear_index_files()
                 except Exception as exc:
                     logger.error("Reset fehlgeschlagen: %s", exc)
                     status = "error"

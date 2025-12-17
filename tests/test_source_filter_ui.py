@@ -1,4 +1,5 @@
 import os
+import httpx
 from urllib.parse import urlparse, parse_qs
 
 import pytest
@@ -8,6 +9,10 @@ from playwright.sync_api import sync_playwright, Route
 @pytest.mark.e2e
 def test_source_filter_adds_params():
     base_url = os.getenv("APP_BASE_URL", "http://localhost:8010")
+    try:
+        httpx.get(base_url, timeout=2)
+    except Exception:
+        pytest.skip("APP_BASE_URL nicht erreichbar")
     secret = os.getenv("APP_SECRET", "")
     search_requests: list[str] = []
 

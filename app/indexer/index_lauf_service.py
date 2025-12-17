@@ -10,12 +10,13 @@ from dataclasses import dataclass, asdict
 from email.message import EmailMessage
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Deque, Dict, List, Optional, Tuple
+from typing import Any, Deque, Dict, Iterable, List, Optional, Tuple
 import queue
 import threading
 from logging.handlers import RotatingFileHandler
 
 from app.config_loader import CentralConfig
+from app import config_db
 from app.db import datenbank as db
 from app.db.datenbank import DocumentMeta
 from app.indexer import extractors
@@ -35,6 +36,37 @@ WARN_CONTEXT = threading.local()
 LOG_BUFFER_MAX = 2000
 LOG_BUFFER: Deque[Tuple[int, str]] = deque()
 LOG_SEQ = 0
+
+
+def _get_base_root(env_default: str = "/data") -> Path:
+    raw = os.getenv("DATA_CONTAINER_PATH")
+    if raw:
+        return Path(raw).resolve()
+    try:
+        return Path(config_db.get_setting("base_data_root", env_default) or env_default).resolve()
+    except Exception:
+        return Path(env_default).resolve()
+
+
+def validate_root_entries(root_entries: Iterable[tuple[Path, str]], base_root: Optional[Path] = None) -> List[tuple[Path, str]]:
+    base = (base_root or _get_base_root()).resolve()
+    if str(base) in {"", "/"}:
+        raise ValueError("Ungültiger Basis-Pfad für Daten (DATA_CONTAINER_PATH)")
+    if not base.exists() or not base.is_dir():
+        raise ValueError(f"Basis-Ordner nicht gefunden: {base}")
+    validated: List[tuple[Path, str]] = []
+    for raw_root, label in root_entries:
+        root = Path(raw_root).resolve()
+        if str(root) in {"", "/"}:
+            raise ValueError("Ungültiger Wurzelpfad")
+        if not root.exists() or not root.is_dir():
+            raise ValueError(f"Wurzelpfad nicht gefunden: {root}")
+        try:
+            root.relative_to(base)
+        except ValueError:
+            raise ValueError(f"Wurzelpfad {root} liegt nicht unter Basis {base}")
+        validated.append((root, label))
+    return validated
 
 
 @dataclass
@@ -239,7 +271,7 @@ def run_index_lauf(config: CentralConfig) -> Dict[str, int]:
         db.reset_scanned_paths(conn, run_id)
         save_run_id(run_id)
 
-    root_entries = config.paths.roots
+    root_entries = validate_root_entries(config.paths.roots)
     if not root_entries:
         logger.warning("Keine roots konfiguriert, Indexlauf beendet")
         init_live_status(run_id, start_time, 0)

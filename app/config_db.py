@@ -139,6 +139,14 @@ def list_roots(active_only: bool = True) -> List[Tuple[str, str, int, bool]]:
         return [(row[0], row[1], row[2], bool(row[3]) if len(row) > 3 else True) for row in rows]
 
 
+def get_root(root_id: int) -> Optional[Tuple[str, str, int, bool]]:
+    with get_conn() as conn:
+        row = conn.execute("SELECT path, label, id, active FROM roots WHERE id = ?", (root_id,)).fetchone()
+        if not row:
+            return None
+        return (row[0], row[1], row[2], bool(row[3]) if len(row) > 3 else True)
+
+
 def add_root(path: str, label: Optional[str] = None, active: bool = True) -> int:
     label = label or Path(path).name
     with get_conn() as conn:

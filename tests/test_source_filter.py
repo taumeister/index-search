@@ -32,11 +32,14 @@ def setup_env(monkeypatch, tmp_path: Path):
     ]:
         monkeypatch.delenv(key, raising=False)
     os.environ["APP_SECRET"] = "secret"
+    os.environ["DATA_CONTAINER_PATH"] = str(tmp_path)
     root1 = tmp_path / "src1"
     root2 = tmp_path / "src2"
     root1.mkdir(parents=True, exist_ok=True)
     root2.mkdir(parents=True, exist_ok=True)
-    os.environ["INDEX_ROOTS"] = f"{root1}:Test 1,{root2}:Test 2"
+    config_db.set_setting("base_data_root", str(tmp_path))
+    config_db.add_root(str(root1), "Test 1", True)
+    config_db.add_root(str(root2), "Test 2", True)
 
 
 def seed_documents(tmp_path: Path):

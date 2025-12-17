@@ -43,3 +43,8 @@
    - Release Notes aktualisieren
    - Commit erstellen
 
+## Admin-/API-Debug-Vorgehen (verbindlich)
+
+- Bei Admin-Fehlern immer das `APP_SECRET` und `ADMIN_PASSWORD` aus der lokalen `.env` verwenden und einen gültigen Admin-Login per API durchführen (`/api/admin/login` mit Header `X-App-Secret`), bevor geschützte Endpunkte getestet werden.
+- Nach Login Cookies/Token verwenden (kein anonymer Zugriff), dann `/api/admin/status`, `/api/admin/indexer_status` und eine geschützte Datei-Operation (Rename/Move/Delete) aufrufen, um Verhalten zu prüfen.
+- Bei Änderungen an Quellen/Roots: aktive Roots aus der DB lesen (`config/config.db`) und sicherstellen, dass entfernte/inaktive Roots nicht mehr in API-Responses (z. B. `/api/sources`, Move-Ziele) auftauchen.

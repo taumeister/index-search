@@ -7,11 +7,12 @@ services:
       - "8010:8000"
     volumes:
       - ./:/app
-      - ${DATA_ROOT}:/data:rw
+      - ${DATA_HOST_PATH:-/storage/unimatrix/99_index}:/data:rw
     environment:
       - TZ=${TZ}
       - APP_SECRET=${APP_SECRET}
       - ADMIN_PASSWORD=${ADMIN_PASSWORD}
+      - DATA_CONTAINER_PATH=${DATA_CONTAINER_PATH:-/data}
       - INDEX_ROOTS=${INDEX_ROOTS}
       - INDEX_WORKER_COUNT=${INDEX_WORKER_COUNT}
       - INDEX_MAX_FILE_SIZE_MB=${INDEX_MAX_FILE_SIZE_MB}

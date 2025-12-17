@@ -15,6 +15,7 @@ from typing import Dict, Iterable, List, Optional, Tuple
 
 from app.db import datenbank as db
 from app.db.datenbank import DocumentMeta, QuarantineEntry
+from app import config_db
 
 logger = logging.getLogger(__name__)
 
@@ -56,6 +57,27 @@ def _canonical(path: Path) -> Path:
         return Path(os.path.abspath(path))
 
 
+def _assert_safe_root(root: Path) -> Path:
+    canonical = _canonical(root)
+    if str(canonical) in {"", "/"}:
+        raise FileOpError("Ungültiger Basis-Pfad", status_code=400)
+    if not canonical.exists() or not canonical.is_dir():
+        raise FileOpError("Quelle nicht verfügbar (Mount fehlt)", status_code=400)
+    return canonical
+
+
+def _guard_path(target: Path, root: Path, allow_root: bool = False, must_exist: bool = True) -> Path:
+    canonical_root = _assert_safe_root(root)
+    canonical_target = _canonical(target)
+    if must_exist and not canonical_target.exists():
+        raise FileOpError("Pfad nicht gefunden", status_code=404)
+    if not canonical_target.is_relative_to(canonical_root):
+        raise FileOpError("Pfad liegt außerhalb der Quelle", status_code=400)
+    if canonical_target == canonical_root and not allow_root:
+        raise FileOpError("Operation auf Root verboten", status_code=400)
+    return canonical_target
+
+
 def check_within_root(path: Path, root: Path) -> bool:
     try:
         canonical_path = _canonical(path)
@@ -89,6 +111,8 @@ def _audit(entry: Dict[str, object]) -> None:
 
 def ensure_quarantine(root: Path) -> Tuple[Path, bool]:
     canonical_root = _canonical(root)
+    if not canonical_root.exists() or not canonical_root.is_dir():
+        return canonical_root / ".quarantine", False
     quarantine_dir = canonical_root / ".quarantine"
     try:
         quarantine_dir.mkdir(parents=True, exist_ok=True)
@@ -111,14 +135,35 @@ def init_sources(root_entries: List[Tuple[Path, str]]) -> None:
     global _sources
     _sources = {}
     for root, label in root_entries:
-        quarantine_dir, ready = ensure_quarantine(root)
-        _sources[label] = SourceInfo(label=label, root=_canonical(root), quarantine_dir=quarantine_dir, ready=ready)
+        canonical_root = _canonical(root)
+        quarantine_dir, ready = ensure_quarantine(canonical_root)
+        _sources[label] = SourceInfo(label=label, root=canonical_root, quarantine_dir=quarantine_dir, ready=ready)
 
 
 def refresh_quarantine_state() -> None:
-    for label, info in list(_sources.items()):
-        quarantine_dir, ready = ensure_quarantine(info.root)
-        _sources[label] = SourceInfo(label=label, root=info.root, quarantine_dir=quarantine_dir, ready=ready)
+    active_roots: List[Tuple[Path, str]] = []
+    try:
+        base_raw = config_db.get_setting("base_data_root", "/data") or "/data"
+        base = Path(base_raw).resolve()
+        for path, label, _rid, active in config_db.list_roots(active_only=False):
+            if not active:
+                continue
+            p = Path(path).resolve()
+            try:
+                p.relative_to(base)
+            except ValueError:
+                continue
+            # Lass Root zu, auch wenn er gerade nicht existiert; readiness wird separat geprüft
+            active_roots.append((p, label or p.name))
+    except Exception:
+        pass
+
+    if active_roots:
+        init_sources(active_roots)
+    else:
+        # leere oder ungültige DB-Roots -> bestehende Quellen als not ready markieren
+        for label, info in list(_sources.items()):
+            _sources[label] = SourceInfo(label=label, root=info.root, quarantine_dir=info.quarantine_dir, ready=False)
 
 
 def apply_settings(settings: Optional[QuarantineSettings]) -> None:
@@ -210,11 +255,7 @@ def list_directories(source_label: str, rel_path: str = "", limit: int = 500) ->
     info = _resolve_source(source_label)
     _assert_quarantine_ready(info)
     safe_rel = _normalize_rel_path(rel_path)
-    base_dir = _canonical(info.root / safe_rel)
-    if not check_within_root(base_dir, info.root):
-        raise FileOpError("Pfad liegt außerhalb der Quelle", status_code=400)
-    if not base_dir.exists():
-        raise FileOpError("Pfad nicht gefunden", status_code=404)
+    base_dir = _guard_path(info.root / safe_rel, info.root, allow_root=True, must_exist=True)
     if not base_dir.is_dir():
         raise FileOpError("Pfad ist kein Verzeichnis", status_code=400)
 
@@ -251,13 +292,29 @@ def list_directories(source_label: str, rel_path: str = "", limit: int = 500) ->
 def _resolve_source(label: str, fallback_root: Optional[str] = None) -> SourceInfo:
     info = _sources.get(label)
     if info:
-        quarantine_dir, ready = ensure_quarantine(info.root)
-        info = SourceInfo(label=label, root=info.root, quarantine_dir=quarantine_dir, ready=ready)
+        canonical_root = _assert_safe_root(info.root)
+        quarantine_dir, ready = ensure_quarantine(canonical_root)
+        info = SourceInfo(label=label, root=canonical_root, quarantine_dir=quarantine_dir, ready=ready)
         _sources[label] = info
         return info
+    # Versuche, die Quelle aus aktiven Roots der DB zu laden
+    try:
+        for path, lab, _rid, active in config_db.list_roots(active_only=True):
+            if lab == label and active:
+                root_path = _assert_safe_root(Path(path))
+                if not root_path.exists() or not root_path.is_dir():
+                    raise FileOpError("Quelle nicht verfügbar (Mount fehlt)", status_code=400)
+                quarantine_dir, ready = ensure_quarantine(root_path)
+                info = SourceInfo(label=lab, root=root_path, quarantine_dir=quarantine_dir, ready=ready)
+                _sources[label] = info
+                return info
+    except FileOpError:
+        raise
+    except Exception:
+        pass
     if not fallback_root:
         raise FileOpError("Quelle nicht verfügbar", status_code=400)
-    root_path = _canonical(Path(fallback_root))
+    root_path = _assert_safe_root(Path(fallback_root))
     quarantine_dir, ready = ensure_quarantine(root_path)
     info = SourceInfo(label=label, root=root_path, quarantine_dir=quarantine_dir, ready=ready)
     _sources[label] = info
@@ -266,7 +323,7 @@ def _resolve_source(label: str, fallback_root: Optional[str] = None) -> SourceIn
 
 def _assert_quarantine_ready(info: SourceInfo) -> None:
     if not info.ready:
-        raise FileOpError("Quarantäne nicht verfügbar", status_code=400)
+        raise FileOpError("Quarantäne nicht verfügbar (Mount fehlt?)", status_code=400)
 
 
 def _validate_new_filename(new_name: str, current_name: str, current_suffix: str) -> str:
@@ -300,16 +357,11 @@ def rename_file(doc_id: int, new_name: str, actor: str = "admin") -> Dict[str, o
     abs_path = doc.get("abs_path")
     if not isinstance(abs_path, Path):
         raise FileOpError("Pfad ungültig", status_code=400)
-    if not check_within_root(abs_path, info.root):
-        raise FileOpError("Pfad liegt außerhalb der Quelle", status_code=400)
-    if not abs_path.exists():
-        raise FileOpError("Datei nicht gefunden", status_code=404)
+    abs_path = _guard_path(abs_path, info.root, allow_root=False, must_exist=True)
 
     validated_name = _validate_new_filename(new_name, abs_path.name, abs_path.suffix)
-    target_path = _canonical(abs_path.parent / validated_name)
+    target_path = _guard_path(abs_path.parent / validated_name, info.root, allow_root=False, must_exist=False)
     if abs_path.parent != target_path.parent:
-        raise FileOpError("Pfad liegt außerhalb der Quelle", status_code=400)
-    if not check_within_root(target_path, info.root):
         raise FileOpError("Pfad liegt außerhalb der Quelle", status_code=400)
     if target_path.exists():
         raise FileOpError("Name schon vorhanden", status_code=409)
@@ -443,23 +495,16 @@ def move_file(doc_id: int, target_dir: str, target_source: Optional[str] = None,
     abs_path = doc.get("abs_path")
     if not isinstance(abs_path, Path):
         raise FileOpError("Pfad ungültig", status_code=400)
-    if not check_within_root(abs_path, src_info.root):
-        raise FileOpError("Pfad liegt außerhalb der Quelle", status_code=400)
-    if not abs_path.exists():
-        raise FileOpError("Datei nicht gefunden", status_code=404)
+    abs_path = _guard_path(abs_path, src_info.root, allow_root=False, must_exist=True)
 
     safe_target_dir = _normalize_rel_path(target_dir)
-    target_base = _canonical(dest_info.root / safe_target_dir)
-    if not check_within_root(target_base, dest_info.root):
-        raise FileOpError("Ziel liegt außerhalb der Quelle", status_code=400)
-    if not target_base.exists() or not target_base.is_dir():
+    target_base = _guard_path(dest_info.root / safe_target_dir, dest_info.root, allow_root=True, must_exist=True)
+    if not target_base.is_dir():
         raise FileOpError("Zielordner nicht gefunden", status_code=404)
     if str(target_base).startswith(str(dest_info.quarantine_dir)):
         raise FileOpError("Quarantäne kann nicht als Ziel genutzt werden", status_code=400)
 
-    target_path = _canonical(target_base / abs_path.name)
-    if not check_within_root(target_path, dest_info.root):
-        raise FileOpError("Ziel liegt außerhalb der Quelle", status_code=400)
+    target_path = _guard_path(target_base / abs_path.name, dest_info.root, allow_root=False, must_exist=False)
     if target_path == abs_path and dest_source_label == source_label:
         raise FileOpError("Ziel entspricht dem aktuellen Ort", status_code=400)
     if target_path.exists():
@@ -543,23 +588,16 @@ def copy_file(doc_id: int, target_dir: str, target_source: Optional[str] = None,
     abs_path = doc.get("abs_path")
     if not isinstance(abs_path, Path):
         raise FileOpError("Pfad ungültig", status_code=400)
-    if not check_within_root(abs_path, src_info.root):
-        raise FileOpError("Pfad liegt außerhalb der Quelle", status_code=400)
-    if not abs_path.exists():
-        raise FileOpError("Datei nicht gefunden", status_code=404)
+    abs_path = _guard_path(abs_path, src_info.root, allow_root=False, must_exist=True)
 
     safe_target_dir = _normalize_rel_path(target_dir)
-    target_base = _canonical(dest_info.root / safe_target_dir)
-    if not check_within_root(target_base, dest_info.root):
-        raise FileOpError("Ziel liegt außerhalb der Quelle", status_code=400)
-    if not target_base.exists() or not target_base.is_dir():
+    target_base = _guard_path(dest_info.root / safe_target_dir, dest_info.root, allow_root=True, must_exist=True)
+    if not target_base.is_dir():
         raise FileOpError("Zielordner nicht gefunden", status_code=404)
     if str(target_base).startswith(str(dest_info.quarantine_dir)):
         raise FileOpError("Quarantäne kann nicht als Ziel genutzt werden", status_code=400)
 
-    target_path = _canonical(target_base / abs_path.name)
-    if not check_within_root(target_path, dest_info.root):
-        raise FileOpError("Ziel liegt außerhalb der Quelle", status_code=400)
+    target_path = _guard_path(target_base / abs_path.name, dest_info.root, allow_root=False, must_exist=False)
     if target_path.exists():
         raise FileOpError("Ziel existiert bereits", status_code=409)
 
@@ -660,14 +698,12 @@ def quarantine_delete(doc_id: int, actor: str = "admin") -> Dict[str, object]:
     abs_path = doc.get("abs_path")
     if not isinstance(abs_path, Path):
         raise FileOpError("Pfad ungültig", status_code=400)
-    if not check_within_root(abs_path, info.root):
-        raise FileOpError("Pfad liegt außerhalb der Quelle", status_code=400)
-    if not abs_path.exists():
-        raise FileOpError("Datei nicht gefunden", status_code=404)
+    abs_path = _guard_path(abs_path, info.root, allow_root=False, must_exist=True)
 
     date_folder = datetime.now().strftime("%Y-%m-%d")
     target_dir = info.quarantine_dir / date_folder
     target_path = target_dir / f"{doc_id}__{abs_path.name}"
+    _guard_path(target_dir, info.quarantine_dir, allow_root=True, must_exist=False)
     if target_path.exists():
         raise FileOpError("Quarantäne-Ziel existiert bereits", status_code=409)
 
@@ -732,6 +768,24 @@ def _load_entry(entry_id: int) -> Dict[str, object]:
     return dict(row)
 
 
+def _mark_missing_entry(entry: Dict[str, object], reason: str) -> None:
+    try:
+        with db.get_conn() as conn:
+            db.mark_quarantine_cleanup_deleted(conn, entry["id"], datetime.now(timezone.utc).isoformat())
+    except Exception:
+        pass
+    _audit(
+        {
+            "action": "quarantine_missing",
+            "entry_id": entry.get("id"),
+            "source": entry.get("source"),
+            "quarantine_path": entry.get("quarantine_path"),
+            "reason": reason,
+            "status": "cleanup_marked",
+        }
+    )
+
+
 def _validate_quarantine_entry(entry: Dict[str, object]) -> None:
     status = (entry.get("status") or "").lower()
     if status != "quarantined":
@@ -749,6 +803,15 @@ def list_quarantine_entries(
     results: List[Dict[str, object]] = []
     for row in rows:
         entry = dict(row)
+        try:
+            info = _resolve_source(entry.get("source") or "", fallback_root=entry.get("source_root"))
+            quarantine_path = _guard_path(Path(entry.get("quarantine_path", "")), info.quarantine_dir, allow_root=False, must_exist=False)
+            if not quarantine_path.exists():
+                _mark_missing_entry(entry, "file_missing")
+                continue
+        except FileOpError:
+            _mark_missing_entry(entry, "invalid_path")
+            continue
         moved_at = entry.get("moved_at")
         if max_age_days is not None and moved_at:
             try:
@@ -773,15 +836,12 @@ def quarantine_restore(entry_id: int, actor: str = "admin") -> Dict[str, object]
     info = _resolve_source(entry.get("source") or "", fallback_root=entry.get("source_root"))
     _assert_quarantine_ready(info)
 
-    quarantine_path = _canonical(Path(entry["quarantine_path"]))
-    if not check_within_root(quarantine_path, info.quarantine_dir):
-        raise FileOpError("Ungültiger Quarantänepfad", status_code=400)
+    quarantine_path = _guard_path(Path(entry["quarantine_path"]), info.quarantine_dir, allow_root=False, must_exist=False)
     if not quarantine_path.exists():
+        _mark_missing_entry(entry, "missing_on_restore")
         raise FileOpError("Datei in Quarantäne nicht gefunden", status_code=404)
 
-    original_path = _canonical(Path(entry["original_path"]))
-    if not check_within_root(original_path, info.root):
-        raise FileOpError("Originalpfad liegt außerhalb der Quelle", status_code=400)
+    original_path = _guard_path(Path(entry["original_path"]), info.root, allow_root=False, must_exist=False)
 
     target_path = original_path
     if target_path.exists():
@@ -827,9 +887,10 @@ def quarantine_hard_delete(entry_id: int, actor: str = "admin") -> Dict[str, obj
     info = _resolve_source(entry.get("source") or "", fallback_root=entry.get("source_root"))
     _assert_quarantine_ready(info)
 
-    quarantine_path = _canonical(Path(entry["quarantine_path"]))
-    if not check_within_root(quarantine_path, info.quarantine_dir):
-        raise FileOpError("Ungültiger Quarantänepfad", status_code=400)
+    quarantine_path = _guard_path(Path(entry["quarantine_path"]), info.quarantine_dir, allow_root=False, must_exist=False)
+    if not quarantine_path.exists():
+        _mark_missing_entry(entry, "missing_on_hard_delete")
+        return {"entry_id": entry_id, "deleted": False, "status": "missing"}
 
     audit_base = {
         "action": "hard_delete",
@@ -877,7 +938,17 @@ def run_cleanup_now(now: Optional[datetime] = None) -> Dict[str, int]:
     for info in _sources.values():
         if not info.ready:
             continue
+        try:
+            _assert_safe_root(info.root)
+        except FileOpError:
+            summary["errors"] += 1
+            continue
         base = info.quarantine_dir
+        try:
+            base = _guard_path(base, info.root, allow_root=False, must_exist=False)
+        except FileOpError:
+            summary["errors"] += 1
+            continue
         if not base.exists():
             try:
                 base.mkdir(parents=True, exist_ok=True)
@@ -888,7 +959,9 @@ def run_cleanup_now(now: Optional[datetime] = None) -> Dict[str, int]:
                 continue
             if path.name.startswith(".rw_test"):
                 continue
-            if not check_within_root(path, base):
+            try:
+                _guard_path(path, base, allow_root=False, must_exist=True)
+            except FileOpError:
                 _audit(
                     {
                         "action": "cleanup_delete",

@@ -150,3 +150,43 @@ def test_quarantine_list_requires_admin(monkeypatch, tmp_path):
 
     resp = client.get("/api/quarantine/list", headers=headers)
     assert resp.status_code == 403
+
+
+def test_missing_quarantine_entry_is_cleaned_up(monkeypatch, tmp_path):
+    client, headers, root = create_admin_client(tmp_path, monkeypatch)
+    file_path = root / "ghost.txt"
+    file_path.write_text("ghost", encoding="utf-8")
+    doc_id = seed_document(file_path, "Root")
+    resp = client.post(f"/api/files/{doc_id}/quarantine-delete", headers=headers)
+    entry_id = resp.json()["entry_id"]
+    quarantine_path = Path(resp.json()["quarantine_path"])
+    assert quarantine_path.exists()
+    quarantine_path.unlink()
+
+    resp_list = client.get("/api/quarantine/list", headers=headers)
+    assert resp_list.status_code == 200
+    entries = resp_list.json().get("entries", [])
+    assert all(e.get("id") != entry_id for e in entries)
+    with db.get_conn() as conn:
+        entry = db.get_quarantine_entry(conn, entry_id)
+    assert entry["status"] == "cleanup_deleted"
+
+
+def test_hard_delete_missing_file_marks_clean(monkeypatch, tmp_path):
+    client, headers, root = create_admin_client(tmp_path, monkeypatch)
+    file_path = root / "miss.txt"
+    file_path.write_text("missing", encoding="utf-8")
+    doc_id = seed_document(file_path, "Root")
+    resp = client.post(f"/api/files/{doc_id}/quarantine-delete", headers=headers)
+    entry_id = resp.json()["entry_id"]
+    quarantine_path = Path(resp.json()["quarantine_path"])
+    assert quarantine_path.exists()
+    quarantine_path.unlink()
+
+    hard = client.post(f"/api/quarantine/{entry_id}/hard-delete", headers=headers)
+    assert hard.status_code == 200
+    body = hard.json()
+    assert body.get("status") == "missing"
+    with db.get_conn() as conn:
+        entry = db.get_quarantine_entry(conn, entry_id)
+    assert entry["status"] == "cleanup_deleted"
