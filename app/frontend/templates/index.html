@@ -48,13 +48,14 @@
     {% set header_eyebrow = None %}
     {% set version_badge = app_version or 'v?' %}
     {% set theme_switcher = True %}
-    {% set base_actions = [
+{% set base_actions = [
         {"type":"icon","href":"/metrics","label":"Metrics","icon":"metrics"},
         {"type":"icon","href":"/dashboard","label":"Dashboard","icon":"dashboard"}
     ] %}
-    {% set header_actions = base_actions
+{% set header_actions = base_actions
         + ([{"type":"icon_button","label":"Feedback","icon_text":"F","id":"feedback-trigger","classes":"feedback-icon"}] if feedback_enabled else [])
         + [{"type":"icon_button","label":"Admin","icon_text":"A","id":"admin-button","classes":"admin-entry"}]
+        + [{"type":"button","label":"ZEN","id":"zen-toggle","class":"btn btn-secondary zen-header-toggle"}]
     %}
     <header class="app-header">
         {% include "partials/header_top.html" with context %}

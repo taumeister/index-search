@@ -193,6 +193,40 @@
     color: var(--color-text-strong);
 }
 
+.zen-header-toggle {
+    min-width: 52px;
+    height: 34px;
+    padding: 6px 14px;
+    border-radius: var(--radius-pill);
+    border: 1px solid color-mix(in srgb, var(--color-accent-contrast) 60%, var(--color-surface-muted));
+    background: linear-gradient(135deg, color-mix(in srgb, var(--color-accent) 36%, var(--color-surface)), color-mix(in srgb, var(--color-accent-strong) 45%, var(--color-surface-muted)));
+    color: var(--color-inverse);
+    font-weight: var(--font-weight-bold);
+    letter-spacing: 0.08em;
+    font-size: 12px;
+    text-transform: uppercase;
+    box-shadow: var(--shadow-card);
+    transition: transform 0.12s ease, box-shadow 0.16s ease, background 0.2s ease, border-color 0.16s ease;
+}
+
+.zen-header-toggle:hover {
+    transform: translateY(-1px);
+    background: linear-gradient(135deg, color-mix(in srgb, var(--color-accent) 48%, var(--color-surface)), color-mix(in srgb, var(--color-accent-strong) 58%, var(--color-surface-muted)));
+    border-color: color-mix(in srgb, var(--color-accent-contrast) 80%, var(--color-surface));
+}
+
+.zen-header-toggle:focus-visible {
+    outline: var(--focus-ring);
+    outline-offset: var(--focus-offset);
+}
+
+.zen-header-toggle.active {
+    background: linear-gradient(135deg, var(--color-accent-strong), var(--color-accent-contrast));
+    box-shadow: var(--shadow-strong);
+    border-color: color-mix(in srgb, var(--color-accent-contrast) 90%, var(--color-accent));
+    color: var(--color-inverse);
+}
+
 .theme-switcher {
     position: relative;
 }

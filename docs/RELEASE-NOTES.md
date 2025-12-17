@@ -1,5 +1,11 @@
 # Release-Notizen
 
+## v0.3.14
+- Zen-Modus für die Trefferliste: Toggle im Header, sichtbare Treffer stufenweise 6/12/alle, ruhigeres Layout mit größeren Fonts/Spacing.
+- Normalmodus bleibt kompakt; Snippet-/Spalten-Layout stabilisiert (kein Überlaufen/Überdecken, Auszug bleibt in seiner Spalte).
+- Load-More-Button integriert in Zen-Stufen, Reset auf 6 bei neuer Suche; Styling theme-konform aktualisiert.
+- Tests: API-/UI-Basis-Tests laufen unverändert.
+
 ## v0.3.11
 - Explorer: Admin-Operation „Umbenennen…“ (POST `/api/files/{doc_id}/rename`) mit Write-Checks, Temp-Kopie+atomarem Move, Backup in `.quarantine/<Datum>/.rename_backup`, Rollback-Pfad und Audit-Log (`file_ops.jsonl`), Index-Update behält doc_id bei.
 - UI: Kontextmenü-Eintrag „Umbenennen…“ nur im Admin-Modus, Modal mit Validierung (kein Pfad/keine Endungsänderung), Treffer aktualisiert ohne Reload.

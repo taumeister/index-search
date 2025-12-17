@@ -10,6 +10,8 @@ const DEFAULT_ZOOM = 1;
 const MIN_ZOOM = 0.6;
 const MAX_ZOOM = 1.6;
 const ZOOM_STEP = 0.1;
+const ZEN_STEPS = [6, 12, Infinity];
+const DEFAULT_ZEN_STEP_IDX = 0;
 const SEARCH_LIMIT = 200;
 const MIN_QUERY_LENGTH = 2;
 const SEARCH_DEBOUNCE_MS = 400;
@@ -29,6 +31,8 @@ const TIME_FILTER_ORDER = [...TIME_PRIMARY_OPTIONS, ...TIME_MORE_OPTIONS];
 let searchOffset = 0;
 let searchHasMore = false;
 let searchLoading = false;
+let zenModeEnabled = false;
+let zenStepIdx = DEFAULT_ZEN_STEP_IDX;
 let currentSearchMode = DEFAULT_SEARCH_MODE;
 let currentTypeFilter = "";
 let currentTimeFilter = "";
@@ -827,6 +831,10 @@ async function search({ append = false } = {}) {
     if (!append) {
         searchOffset = 0;
         searchHasMore = false;
+        if (zenModeEnabled) {
+            resetZenLimit();
+            applyZenVisibility();
+        }
     }
 
     if (!trimmed) {
@@ -897,6 +905,7 @@ async function search({ append = false } = {}) {
         }
         renderResults(rows, { append });
         searchOffset = append ? searchOffset + rows.length : rows.length;
+        updateLoadMoreButton();
         updateSortIndicators();
     } catch (err) {
         if (err.name === "AbortError") return;
@@ -929,6 +938,59 @@ async function sendClientMetric(payload) {
     }
 }
 
+function getZenVisibleLimit() {
+    if (!zenModeEnabled) return Infinity;
+    const step = ZEN_STEPS[zenStepIdx] ?? Infinity;
+    return step;
+}
+
+function resetZenLimit() {
+    zenStepIdx = DEFAULT_ZEN_STEP_IDX;
+}
+
+function advanceZenStep(totalRows) {
+    if (!zenModeEnabled) return;
+    const maxIdx = ZEN_STEPS.length - 1;
+    if (zenStepIdx >= maxIdx) return;
+    const limit = getZenVisibleLimit();
+    if (Number.isFinite(limit) && totalRows <= limit) return;
+    zenStepIdx = Math.min(maxIdx, zenStepIdx + 1);
+}
+
+function applyZenVisibility() {
+    const tbody = document.querySelector("#results-table tbody");
+    if (!tbody) return;
+    const limit = getZenVisibleLimit();
+    const rows = Array.from(tbody.children || []);
+    rows.forEach((tr, idx) => {
+        if (!zenModeEnabled) {
+            tr.classList.remove("zen-hidden");
+            return;
+        }
+        if (Number.isFinite(limit) && idx >= limit) {
+            tr.classList.add("zen-hidden");
+        } else {
+            tr.classList.remove("zen-hidden");
+        }
+    });
+}
+
+function setZenMode(enabled) {
+    zenModeEnabled = Boolean(enabled);
+    const pane = document.getElementById("results-pane");
+    const toggle = document.getElementById("zen-toggle");
+    if (pane) pane.classList.toggle("zen-mode", zenModeEnabled);
+    if (toggle) {
+        toggle.classList.toggle("active", zenModeEnabled);
+        toggle.setAttribute("aria-pressed", zenModeEnabled ? "true" : "false");
+    }
+    if (zenModeEnabled) {
+        resetZenLimit();
+    }
+    applyZenVisibility();
+    updateLoadMoreButton();
+}
+
 function renderResults(results, { append = false } = {}) {
     const tbody = document.querySelector("#results-table tbody");
     if (!append) {
@@ -954,7 +1016,7 @@ function renderResults(results, { append = false } = {}) {
             <td class="cell-name" title="${escapeHtml(nameLabel)}">
                 <span class="filename">${escapeHtml(nameLabel)}</span>
             </td>
-            <td class="snippet" title="${escapeHtml(snippetText)}">${snippetHtml || ""}</td>
+            <td class="snippet" title="${escapeHtml(snippetText)}"><div class="snippet-content">${snippetHtml || ""}</div></td>
             <td>${escapeHtml(mtimeLabel)}</td>
             <td>${escapeHtml(sizeLabel)}</td>
             <td>${escapeHtml(row.extension)}</td>
@@ -972,6 +1034,7 @@ function renderResults(results, { append = false } = {}) {
         tr.addEventListener("contextmenu", (e) => showContextMenu(e, rowId));
         tbody.appendChild(tr);
     });
+    applyZenVisibility();
 }
 
 function renderMessageRow(text) {
@@ -984,6 +1047,23 @@ function renderMessageRow(text) {
 function updateLoadMoreButton() {
     const btn = document.getElementById("load-more");
     if (!btn) return;
+    if (zenModeEnabled) {
+        const tbody = document.querySelector("#results-table tbody");
+        const totalRows = tbody ? tbody.children.length : 0;
+        const limit = getZenVisibleLimit();
+        const maxIdx = ZEN_STEPS.length - 1;
+        const hasNextStep = zenStepIdx < maxIdx && totalRows > limit;
+        if (hasNextStep) {
+            const nextLimit = ZEN_STEPS[Math.min(zenStepIdx + 1, maxIdx)];
+            btn.textContent = Number.isFinite(nextLimit) ? `Mehr anzeigen (${nextLimit})` : "Alle anzeigen";
+        } else {
+            btn.textContent = "Mehr laden";
+        }
+        btn.disabled = searchLoading;
+        btn.classList.toggle("hidden", !hasNextStep);
+        return;
+    }
+    btn.textContent = "Mehr laden";
     btn.disabled = searchLoading;
     btn.classList.toggle("hidden", !searchHasMore);
 }
@@ -1393,11 +1473,32 @@ setupDeleteConfirm();
 setupRenameDialog();
 setupMoveDialog();
 refreshAdminStatus();
-    document.getElementById("search-input").addEventListener("input", debounceSearch);
-    setupSearchFavorites();
-    const loadMoreBtn = document.getElementById("load-more");
+document.getElementById("search-input").addEventListener("input", debounceSearch);
+setupSearchFavorites();
+const zenToggle = document.getElementById("zen-toggle");
+if (zenToggle) {
+    setZenMode(false);
+    zenToggle.addEventListener("click", () => {
+        setZenMode(!zenModeEnabled);
+        scheduleFocusSearchInput();
+    });
+}
+
+const loadMoreBtn = document.getElementById("load-more");
 if (loadMoreBtn) {
     loadMoreBtn.addEventListener("click", () => {
+        if (zenModeEnabled) {
+            const tbody = document.querySelector("#results-table tbody");
+            const totalRows = tbody ? tbody.children.length : 0;
+            const beforeIdx = zenStepIdx;
+            advanceZenStep(totalRows);
+            applyZenVisibility();
+            updateLoadMoreButton();
+            if (beforeIdx !== zenStepIdx) {
+                scheduleFocusSearchInput();
+            }
+            return;
+        }
         if (searchHasMore && !searchLoading) {
             search({ append: true });
         }

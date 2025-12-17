@@ -25,12 +25,14 @@ th, td {
     overflow: hidden;
     text-overflow: ellipsis;
     position: relative;
+    line-height: 1.3;
 }
 
 td.cell-name {
     display: flex;
     align-items: center;
     gap: 8px;
+    white-space: nowrap;
 }
 
 .filename {
@@ -41,6 +43,39 @@ td.cell-name {
 td.snippet {
     color: var(--color-text);
     font-size: 13px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.snippet-content {
+    display: block;
+    white-space: inherit;
+    overflow: inherit;
+    text-overflow: inherit;
+}
+
+#results-pane:not(.zen-mode) th,
+#results-pane:not(.zen-mode) td {
+    padding: 6px 8px;
+    line-height: 1.3;
+}
+
+#results-pane:not(.zen-mode) .filename {
+    font-size: 13px;
+    font-weight: 600;
+    letter-spacing: 0;
+}
+
+#results-pane:not(.zen-mode) td.snippet {
+    font-size: 13px;
+    white-space: nowrap;
+    line-height: 1.3;
+}
+
+#results-pane:not(.zen-mode) .path-cell {
+    font-size: 12px;
+    white-space: nowrap;
 }
 
 th {
@@ -59,6 +94,8 @@ th {
     z-index: 3;
     background: var(--table-header-bg);
 }
+
+/* Zen toggle styles are applied via header button */
 
 th.sortable {
     cursor: pointer;
@@ -153,6 +190,81 @@ tr.active {
 .snippet mark {
     background: var(--color-highlight-bg);
     color: var(--color-highlight-fg);
+}
+
+.zen-hidden {
+    display: none;
+}
+
+#results-pane.zen-mode th,
+#results-pane.zen-mode td {
+    padding: 8px 10px;
+    line-height: 1.35;
+    vertical-align: middle;
+}
+
+#results-pane.zen-mode tr:hover {
+    background: color-mix(in srgb, var(--table-row-hover-bg) 80%, var(--color-surface));
+}
+
+#results-pane.zen-mode tr.active {
+    background: color-mix(in srgb, var(--table-row-active-bg) 80%, var(--color-surface-muted));
+    box-shadow: inset 3px 0 0 var(--color-accent);
+}
+
+#results-pane.zen-mode .filename {
+    font-size: 14px;
+    font-weight: var(--font-weight-bold);
+    letter-spacing: 0.003em;
+    white-space: nowrap;
+}
+
+#results-pane.zen-mode td.snippet {
+    font-size: 14px;
+    line-height: 1.35;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    color: var(--color-text);
+}
+
+#results-pane.zen-mode td.snippet .snippet-content {
+    display: block;
+    white-space: inherit;
+    overflow: inherit;
+    text-overflow: inherit;
+}
+
+#results-pane.zen-mode .path-cell {
+    font-size: 12px;
+    color: var(--color-muted);
+    letter-spacing: 0.005em;
+    white-space: nowrap;
+}
+
+#results-pane.zen-mode td:nth-child(3),
+#results-pane.zen-mode td:nth-child(4),
+#results-pane.zen-mode td:nth-child(5) {
+    font-size: 12px;
+    color: var(--color-muted);
+    white-space: nowrap;
+}
+
+#results-pane.zen-mode #load-more {
+    padding: 8px 16px;
+    min-height: 0;
+    height: auto;
+    border-radius: var(--radius-pill);
+    background: linear-gradient(135deg, var(--color-accent-contrast), var(--color-accent-strong));
+    color: var(--color-inverse);
+    border: 1px solid color-mix(in srgb, var(--color-accent-contrast) 90%, var(--color-accent));
+    box-shadow: var(--shadow-card);
+    font-weight: var(--font-weight-bold);
+    letter-spacing: 0.01em;
+}
+
+#results-pane.zen-mode #load-more:hover {
+    background: linear-gradient(135deg, color-mix(in srgb, var(--color-accent-contrast) 85%, var(--color-accent)), var(--color-accent-strong));
 }
 
 .resize-handle {
