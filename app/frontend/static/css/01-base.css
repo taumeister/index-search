@@ -25,6 +25,10 @@ h1 {
     display: none !important;
 }
 
+.dragging-columns {
+    user-select: none;
+}
+
 @supports not (zoom: 1) {
     body {
         transform: scale(var(--app-zoom));

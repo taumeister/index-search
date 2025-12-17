@@ -157,9 +157,9 @@ tr.active {
 
 .resize-handle {
     position: absolute;
-    right: -12px;
+    right: -9px;
     top: 0;
-    width: 24px;
+    width: 18px;
     height: 100%;
     cursor: col-resize;
 }
@@ -169,7 +169,7 @@ tr.active {
     position: absolute;
     top: 0;
     bottom: 0;
-    right: 10px;
+    right: 9px;
     width: 1px;
     background: color-mix(in srgb, var(--color-muted) 70%, transparent);
     opacity: 0.6;

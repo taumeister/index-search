@@ -42,10 +42,10 @@ const DEFAULT_THEME = "lumen-atelier";
 const THEMES = [
     { id: "lumen-atelier", label: "Lumen Atelier", tone: "Light" },
     { id: "marble-coast", label: "Marble Coast", tone: "Light" },
+    { id: "aurora-atelier", label: "Aurora Atelier", tone: "Light" },
     { id: "nocturne-atlas", label: "Nocturne Atlas", tone: "Dark" },
     { id: "graphite-ember", label: "Graphite Ember", tone: "Dark" },
     { id: "velvet-eclipse", label: "Velvet Eclipse", tone: "Dark" },
-    { id: "aurora-atelier", label: "Aurora Atelier", tone: "Light" },
     { id: "obsidian-prism", label: "Obsidian Prism", tone: "Dark" },
 ];
 
@@ -1412,12 +1412,18 @@ focusSearchInput();
 function setupResizableColumns() {
     const headerRow = document.querySelector("#results-table thead tr");
     const tbody = document.querySelector("#results-table tbody");
+    const colgroup = document.querySelector("#results-table colgroup");
     if (!headerRow) return;
+    const MIN_COL_WIDTH = 80;
 
     function setColumnWidth(colIdx, widthPx) {
-        const value = `${Math.max(40, widthPx)}px`;
+        const value = `${Math.max(MIN_COL_WIDTH, widthPx)}px`;
         const th = headerRow.querySelectorAll("th")[colIdx];
         if (th) th.style.width = value;
+        if (colgroup) {
+            const col = colgroup.querySelector(`col[data-col-idx="${colIdx}"]`);
+            if (col) col.style.width = value;
+        }
         if (!tbody) return;
         tbody.querySelectorAll(`tr td:nth-child(${colIdx + 1})`).forEach((td) => {
             td.style.width = value;
@@ -1436,11 +1442,18 @@ function setupResizableColumns() {
             }
         } else if (th.dataset.width) {
             th.style.width = th.dataset.width;
+            if (colgroup) {
+                const col = colgroup.querySelector(`col[data-col-idx="${index}"]`);
+                if (col) col.style.width = th.dataset.width;
+            }
         }
         const handle = document.createElement("div");
         handle.className = "resize-handle";
         let startX = 0;
         let startWidth = 0;
+        let nextWidth = 0;
+        let hasNext = index < headerRow.querySelectorAll("th").length - 1;
+        const table = document.getElementById("results-table");
         let dragging = false;
 
         handle.addEventListener("click", (e) => e.stopPropagation());
@@ -1449,10 +1462,21 @@ function setupResizableColumns() {
             dragging = true;
             startX = e.clientX ?? 0;
             startWidth = parseFloat(getComputedStyle(th).width) || th.offsetWidth;
+            hasNext = index < headerRow.querySelectorAll("th").length - 1;
+            if (hasNext) {
+                const nextTh = headerRow.querySelectorAll("th")[index + 1];
+                nextWidth = parseFloat(getComputedStyle(nextTh).width) || nextTh.offsetWidth;
+            } else {
+                nextWidth = 0;
+            }
             try {
                 handle.setPointerCapture(e.pointerId);
             } catch (_) {
                 /* ignore */
+            }
+            document.body.classList.add("dragging-columns");
+            if (tbody) {
+                tbody.style.pointerEvents = "none";
             }
             document.addEventListener("pointermove", onDrag, true);
             document.addEventListener("pointerup", stopDrag, true);
@@ -1466,9 +1490,20 @@ function setupResizableColumns() {
                 return;
             }
             const clientX = e.clientX ?? startX;
-            const newWidth = Math.max(40, startWidth + (clientX - startX));
+            const delta = clientX - startX;
+            if (hasNext) {
+                const total = startWidth + nextWidth;
+                const newCurrent = Math.min(Math.max(MIN_COL_WIDTH, startWidth + delta), total - MIN_COL_WIDTH);
+                const newNext = total - newCurrent;
+                setColumnWidth(index, newCurrent);
+                setColumnWidth(index + 1, newNext);
+            } else {
+                const tableWidth = table ? table.clientWidth : window.innerWidth;
+                const maxCurrent = Math.max(MIN_COL_WIDTH, tableWidth - MIN_COL_WIDTH * (headerRow.querySelectorAll("th").length - 1));
+                const newWidth = Math.min(Math.max(MIN_COL_WIDTH, startWidth + delta), maxCurrent);
+                setColumnWidth(index, newWidth);
+            }
             e.preventDefault();
-            setColumnWidth(index, newWidth);
         }
 
         function stopDrag() {
@@ -1476,16 +1511,26 @@ function setupResizableColumns() {
             dragging = false;
             document.removeEventListener("pointermove", onDrag, true);
             document.removeEventListener("pointerup", stopDrag, true);
+            document.body.classList.remove("dragging-columns");
             const widths = {};
             headerRow.querySelectorAll("th").forEach((th2, idx) => {
                 if (th2.style.width) widths[idx] = th2.style.width;
             });
             localStorage.setItem("colWidths", JSON.stringify(widths));
+            if (tbody) {
+                tbody.style.pointerEvents = "";
+            }
             setTimeout(() => {
                 resizingColumn = false;
             }, 50);
         }
         th.appendChild(handle);
+    });
+
+    // Ensure initial widths apply to cols as well (for datasets without stored widths)
+    headerRow.querySelectorAll("th").forEach((th, idx) => {
+        const w = th.style.width || th.dataset.width;
+        if (w) setColumnWidth(idx, parseFloat(w));
     });
 }
 
