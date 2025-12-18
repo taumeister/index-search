@@ -10,7 +10,7 @@ const DEFAULT_ZOOM = 1;
 const MIN_ZOOM = 0.6;
 const MAX_ZOOM = 1.6;
 const ZOOM_STEP = 0.1;
-const ZEN_STEPS = [6, 12, Infinity];
+const ZEN_STEPS = [15, 30, 45, Infinity];
 const DEFAULT_ZEN_STEP_IDX = 0;
 const SEARCH_LIMIT = 200;
 const MIN_QUERY_LENGTH = 2;
@@ -33,6 +33,8 @@ let searchHasMore = false;
 let searchLoading = false;
 let zenModeEnabled = false;
 let zenStepIdx = DEFAULT_ZEN_STEP_IDX;
+let zenToggleHome = null;
+let zenToggleNextSibling = null;
 let currentSearchMode = DEFAULT_SEARCH_MODE;
 let currentTypeFilter = "";
 let currentTimeFilter = "";
@@ -41,6 +43,9 @@ let availableSources = [];
 let activeSourceLabels = new Set();
 let adminState = { admin: false, fileOpsEnabled: false, readySources: [] };
 let adminReadySources = new Set();
+if (typeof window !== "undefined" && !window.openAdminModal) {
+    window.openAdminModal = () => console.error("[admin] Admin-Overlay nicht initialisiert.");
+}
 const THEME_KEY = "theme";
 const DEFAULT_THEME = "lumen-atelier";
 const THEMES = [
@@ -685,7 +690,18 @@ function setupAdminControls() {
     const logoutBtn = document.getElementById("admin-logout");
     const input = document.getElementById("admin-password");
     const statusEl = document.getElementById("admin-modal-status");
-    if (!btn || !modal || !loginBtn || !logoutBtn || !input || !statusEl) return;
+    if (!btn || !modal || !loginBtn || !logoutBtn || !input || !statusEl) {
+        console.error("[admin] Admin-UI fehlt oder ist unvollständig.", {
+            button: !!btn,
+            modal: !!modal,
+            loginBtn: !!loginBtn,
+            logoutBtn: !!logoutBtn,
+            input: !!input,
+            statusEl: !!statusEl,
+        });
+        window.openAdminModal = () => console.error("[admin] Admin-Overlay nicht initialisiert.");
+        return;
+    }
 
     function setStatus(kind, text) {
         statusEl.classList.remove("error", "success", "hidden");
@@ -698,18 +714,41 @@ function setupAdminControls() {
         statusEl.textContent = text;
     }
 
-    function openModal() {
+    async function forceLogout(reason = "reauth") {
+        updateAdminState({ admin: false, file_ops_enabled: adminState.fileOpsEnabled, quarantine_ready_sources: adminState.readySources });
+        try {
+            await fetch("/api/admin/logout", { method: "POST" });
+        } catch (err) {
+            console.error("[admin] Logout fehlgeschlagen (%s)", reason, err);
+        }
+        await refreshAdminStatus();
+    }
+
+    async function openModal(options = {}) {
+        const opts = typeof options === "object" && options !== null ? options : {};
+        const forceReauth = opts.forceReauth !== false;
+        setStatus("", "");
+        if (forceReauth) {
+            await forceLogout("force-open");
+        }
         renderAdminUi();
         modal.classList.remove("hidden");
-        setStatus("", "");
         input.value = "";
-        input.focus();
+        document.body.classList.add("dialog-open");
+        document.body.style.overflow = "hidden";
+        try {
+            input.focus({ preventScroll: true });
+        } catch (_) {
+            input.focus();
+        }
     }
 
     function closeModal() {
         modal.classList.add("hidden");
         setStatus("", "");
         input.value = "";
+        document.body.classList.remove("dialog-open");
+        document.body.style.overflow = "";
     }
 
     async function submitLogin() {
@@ -729,33 +768,29 @@ function setupAdminControls() {
                 } catch (_) {
                     /* ignore */
                 }
-                setStatus("error", detail);
+                setStatus("error", detail || "Falsches Passwort oder keine Berechtigung.");
                 return;
             }
             const data = await res.json();
             updateAdminState({ ...data, admin: true });
             setStatus("success", "Admin-Modus aktiviert.");
             setTimeout(() => closeModal(), 400);
-        } catch (_) {
+        } catch (err) {
+            console.error("[admin] Login-Request fehlgeschlagen.", err);
             setStatus("error", "Login fehlgeschlagen.");
         }
     }
 
     async function submitLogout() {
         setStatus("", "");
-        try {
-            await fetch("/api/admin/logout", { method: "POST" });
-        } catch (_) {
-            /* ignore */
-        }
-        updateAdminState({ admin: false, file_ops_enabled: adminState.fileOpsEnabled, quarantine_ready_sources: adminState.readySources });
+        await forceLogout("manual");
         closeModal();
     }
 
     btn.addEventListener("click", () => {
-        if (btn.classList.contains("hidden")) return;
-        openModal();
+        openModal({ forceReauth: true });
     });
+    window.openAdminModal = openModal;
     loginBtn.addEventListener("click", submitLogin);
     logoutBtn.addEventListener("click", submitLogout);
     closeBtn?.addEventListener("click", closeModal);
@@ -975,11 +1010,34 @@ function applyZenVisibility() {
     });
 }
 
+function relocateZenToggle(inZen) {
+    const toggle = document.getElementById("zen-toggle");
+    if (!toggle) return;
+    if (!zenToggleHome) {
+        zenToggleHome = toggle.parentElement;
+        zenToggleNextSibling = toggle.nextElementSibling;
+    }
+    const slot = document.getElementById("zen-slot");
+    if (inZen) {
+        if (slot && toggle.parentElement !== slot) {
+            slot.appendChild(toggle);
+        }
+    } else if (zenToggleHome && toggle.parentElement !== zenToggleHome) {
+        if (zenToggleNextSibling && zenToggleNextSibling.parentNode === zenToggleHome) {
+            zenToggleHome.insertBefore(toggle, zenToggleNextSibling);
+        } else {
+            zenToggleHome.appendChild(toggle);
+        }
+    }
+}
+
 function setZenMode(enabled) {
     zenModeEnabled = Boolean(enabled);
     const pane = document.getElementById("results-pane");
     const toggle = document.getElementById("zen-toggle");
     if (pane) pane.classList.toggle("zen-mode", zenModeEnabled);
+    document.documentElement.setAttribute("data-zen", zenModeEnabled ? "true" : "false");
+    relocateZenToggle(zenModeEnabled);
     if (toggle) {
         toggle.classList.toggle("active", zenModeEnabled);
         toggle.setAttribute("aria-pressed", zenModeEnabled ? "true" : "false");
@@ -1531,12 +1589,22 @@ if (loadMoreBtn) {
 function setupHeaderMenu() {
     const toggle = document.getElementById("header-menu");
     const dropdown = document.getElementById("header-menu-dropdown");
-    if (!toggle || !dropdown) return;
+    if (!toggle || !dropdown) {
+        console.error("[menu] Header-Menü konnte nicht initialisiert werden (Toggle/Dropdown fehlt).", { toggle: !!toggle, dropdown: !!dropdown });
+        return;
+    }
+    const repositionDropdown = () => {
+        const rect = toggle.getBoundingClientRect();
+        dropdown.style.position = "fixed";
+        dropdown.style.top = `${rect.bottom + 10}px`;
+        dropdown.style.right = `${Math.max(10, window.innerWidth - rect.right)}px`;
+    };
     const closeMenu = () => {
         dropdown.classList.add("hidden");
         toggle.setAttribute("aria-expanded", "false");
     };
     const openMenu = () => {
+        repositionDropdown();
         dropdown.classList.remove("hidden");
         toggle.setAttribute("aria-expanded", "true");
     };
@@ -1553,6 +1621,12 @@ function setupHeaderMenu() {
             closeMenu();
         }
     });
+    window.addEventListener("resize", () => {
+        if (!dropdown.classList.contains("hidden")) repositionDropdown();
+    });
+    document.addEventListener("scroll", () => {
+        if (!dropdown.classList.contains("hidden")) repositionDropdown();
+    }, true);
     document.addEventListener("keydown", (e) => {
         if (e.key === "Escape") closeMenu();
     });
@@ -1560,9 +1634,25 @@ function setupHeaderMenu() {
     if (adminBtn) {
         adminBtn.addEventListener("click", () => {
             closeMenu();
+            if (typeof window.openAdminModal === "function") {
+                window.openAdminModal({ forceReauth: true });
+                return;
+            }
             const adminTrigger = document.getElementById("admin-button");
-            if (adminTrigger) adminTrigger.click();
+            if (adminTrigger) {
+                adminTrigger.classList.remove("hidden");
+                adminTrigger.click();
+            } else {
+                const modal = document.getElementById("admin-modal");
+                if (modal) {
+                    modal.classList.remove("hidden");
+                } else {
+                    console.error("[admin] Admin-Overlay nicht gefunden, Menü-Click ohne Wirkung.");
+                }
+            }
         });
+    } else {
+        console.error("[menu] Admin-Menüeintrag fehlt.");
     }
     const feedbackBtn = document.getElementById("feedback-trigger-menu");
     if (feedbackBtn) {

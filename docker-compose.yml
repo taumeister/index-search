@@ -11,7 +11,7 @@ services:
     environment:
       - TZ=${TZ}
       - APP_SECRET=${APP_SECRET}
-      - ADMIN_PASSWORD=${ADMIN_PASSWORD}
+      - ADMIN_PASSWORD=${ADMIN_PASSWORD:-admin}
       - DATA_CONTAINER_PATH=${DATA_CONTAINER_PATH:-/data}
       - INDEX_ROOTS=${INDEX_ROOTS}
       - INDEX_WORKER_COUNT=${INDEX_WORKER_COUNT}

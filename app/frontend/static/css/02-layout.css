@@ -7,6 +7,10 @@
     top: 0;
     z-index: 200;
     min-height: 64px;
+    display: grid;
+    grid-template-rows: auto auto;
+    row-gap: 0;
+    transition: padding var(--zen-transition-duration) var(--zen-transition-ease);
 }
 
 .header-top {
@@ -14,12 +18,21 @@
     align-items: center;
     gap: 12px;
     min-height: 48px;
+    max-height: 120px;
+    overflow: visible;
+    position: relative;
+    z-index: 500;
+    transform-origin: top;
+    transition: max-height var(--zen-transition-duration) var(--zen-transition-ease), opacity var(--zen-transition-fade) var(--zen-transition-ease), transform var(--zen-transition-duration) var(--zen-transition-ease), margin var(--zen-transition-duration) var(--zen-transition-ease), filter var(--zen-transition-duration) var(--zen-transition-ease);
 }
 
 .header-title {
     display: flex;
     flex-direction: column;
     gap: 4px;
+    max-height: 120px;
+    overflow: hidden;
+    transition: opacity var(--zen-transition-fade) var(--zen-transition-ease), transform var(--zen-transition-duration) var(--zen-transition-ease), max-height var(--zen-transition-duration) var(--zen-transition-ease), margin var(--zen-transition-duration) var(--zen-transition-ease);
 }
 
 .header-title-row {
@@ -50,11 +63,67 @@
     display: flex;
     align-items: center;
     gap: 10px;
+    transition: gap var(--zen-transition-duration) var(--zen-transition-ease);
+}
+
+.header-actions > * {
+    transition: opacity var(--zen-transition-fade) var(--zen-transition-ease), transform var(--zen-transition-duration) var(--zen-transition-ease), max-width var(--zen-transition-duration) var(--zen-transition-ease), margin var(--zen-transition-duration) var(--zen-transition-ease), filter var(--zen-transition-duration) var(--zen-transition-ease);
+    will-change: transform, opacity, max-width;
+    transition-delay: 80ms;
+}
+
+.header-actions .theme-toggle-btn,
+.header-actions .menu-wrapper,
+.header-actions .theme-switcher {
+    max-width: 220px;
 }
 
 .compact-actions {
     gap: 8px;
 }
+
+[data-zen="true"] .app-header {
+    padding-top: 8px;
+    row-gap: 0;
+    min-height: auto;
+}
+
+[data-zen="true"] .header-top {
+    max-height: 120px;
+    min-height: 48px;
+    opacity: 1;
+    transform: none;
+    margin: 0;
+    pointer-events: auto;
+    overflow: visible;
+    filter: none;
+}
+
+[data-zen="true"] .header-title {
+    opacity: 0;
+    transform: translateY(-6px);
+    max-height: 0;
+    margin: 0;
+}
+
+[data-zen="true"] .header-actions {
+    gap: 6px;
+}
+
+[data-zen="true"] .header-actions .theme-switcher,
+[data-zen="true"] .header-actions .theme-toggle-btn,
+[data-zen="true"] .header-actions .menu-wrapper {
+    opacity: 1;
+    transform: none;
+    pointer-events: auto;
+    max-width: 220px;
+    width: auto;
+    margin: initial;
+    padding: initial;
+    overflow: visible;
+    transition-delay: 0ms;
+}
+
 
 main {
     padding: 10px;

@@ -40,6 +40,8 @@
     align-items: center;
     justify-content: center;
     background: var(--color-overlay);
+    backdrop-filter: blur(3px);
+    -webkit-backdrop-filter: blur(3px);
     z-index: 12000;
     padding: 12px;
 }

@@ -6,6 +6,7 @@
 - Frontend: Explorer-ähnliche Oberfläche (Suchfeld, Tabelle, Preview rechts/Popup), PDF via pdf.js, andere Formate als Text/HTML.
 - Konfiguration: zentrale Datei `config/central_config.ini`, wird beim Start validiert.
 - Auth: Alle API-Endpunkte (Suche, Dokument, Admin) verlangen `APP_SECRET`, das aus `.env` gelesen oder beim ersten Start erzeugt wird.
+- Admin-Passwort: Backend liest `ADMIN_PASSWORD` (Default `admin`), Vorgabe per ENV/Compose setzen; Passwort wird nicht im Frontend gespeichert, erneutes Öffnen des Admin-Overlays erfordert Re-Auth.
 - Feedback: Aktivierbar über `FEEDBACK_ENABLED`/`FEEDBACK_TO` und SMTP-Settings; im UI öffnet der Feedback-Button ein Overlay mit WYSIWYG-Light-Toolbar (Fett/Kursiv/Listen), 5000-Zeichen-Limit, Bestätigung und Versand via `/api/feedback`.
 
 ## Verzeichnisstruktur

@@ -43,6 +43,7 @@ logger = logging.getLogger(__name__)
 _auto_scheduler: Optional[AutoIndexScheduler] = None
 ADMIN_SESSION_COOKIE = "admin_session"
 ADMIN_SESSION_TTL_SEC = 12 * 3600
+_ADMIN_PASSWORD_CACHE: Optional[str] = None
 
 
 def get_config() -> CentralConfig:
@@ -121,9 +122,13 @@ def ensure_app_secret(env_path: Path = Path(".env")) -> str:
 
 
 def get_admin_password(env_path: Path = Path(".env")) -> str:
+    global _ADMIN_PASSWORD_CACHE
+    if _ADMIN_PASSWORD_CACHE:
+        return _ADMIN_PASSWORD_CACHE
     value = os.getenv("ADMIN_PASSWORD")
     if value and value.strip():
-        return value.strip()
+        _ADMIN_PASSWORD_CACHE = value.strip()
+        return _ADMIN_PASSWORD_CACHE
     try:
         if env_path.exists():
             for line in env_path.read_text(encoding="utf-8").splitlines():
@@ -131,10 +136,15 @@ def get_admin_password(env_path: Path = Path(".env")) -> str:
                     candidate = line.split("=", 1)[1].strip()
                     if candidate:
                         os.environ["ADMIN_PASSWORD"] = candidate
+                        _ADMIN_PASSWORD_CACHE = candidate
                         return candidate
-    except Exception:
-        pass
-    raise ValueError("ADMIN_PASSWORD muss gesetzt sein")
+    except Exception as exc:
+        logger.warning("ADMIN_PASSWORD konnte nicht aus .env gelesen werden: %s", exc)
+    default_pw = "admin"
+    logger.warning("ADMIN_PASSWORD nicht gesetzt, verwende Default '%s'. Bitte per ENV überschreiben.", default_pw)
+    os.environ["ADMIN_PASSWORD"] = default_pw
+    _ADMIN_PASSWORD_CACHE = default_pw
+    return default_pw
 
 
 def _admin_token_secret() -> str:

@@ -45,6 +45,9 @@
     /* Layout */
     --app-zoom: 1;
     --panel-width: clamp(320px, 32vw, 520px);
+    --zen-transition-duration: 380ms;
+    --zen-transition-fade: 300ms;
+    --zen-transition-ease: cubic-bezier(0.25, 0.8, 0.4, 1);
 
     /* Typography */
     --font-sans: "Segoe UI", Tahoma, sans-serif;
@@ -414,4 +417,12 @@
     --shadow-modal: 0 24px 56px rgba(0, 0, 0, 0.58);
 
     --focus-ring: 2px solid rgba(90, 226, 255, 0.7);
+}
+
+@media (prefers-reduced-motion: reduce) {
+    :root {
+        --zen-transition-duration: 0ms;
+        --zen-transition-fade: 0ms;
+        --zen-transition-ease: linear;
+    }
 }

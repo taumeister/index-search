@@ -198,8 +198,8 @@ tr.active {
 
 #results-pane.zen-mode th,
 #results-pane.zen-mode td {
-    padding: 8px 10px;
-    line-height: 1.35;
+    padding: 9px 12px;
+    line-height: 1.4;
     vertical-align: middle;
 }
 
@@ -213,15 +213,15 @@ tr.active {
 }
 
 #results-pane.zen-mode .filename {
-    font-size: 14px;
+    font-size: 15px;
     font-weight: var(--font-weight-bold);
-    letter-spacing: 0.003em;
+    letter-spacing: 0.006em;
     white-space: nowrap;
 }
 
 #results-pane.zen-mode td.snippet {
-    font-size: 14px;
-    line-height: 1.35;
+    font-size: 15px;
+    line-height: 1.42;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -236,7 +236,7 @@ tr.active {
 }
 
 #results-pane.zen-mode .path-cell {
-    font-size: 12px;
+    font-size: 13px;
     color: var(--color-muted);
     letter-spacing: 0.005em;
     white-space: nowrap;
@@ -245,7 +245,7 @@ tr.active {
 #results-pane.zen-mode td:nth-child(3),
 #results-pane.zen-mode td:nth-child(4),
 #results-pane.zen-mode td:nth-child(5) {
-    font-size: 12px;
+    font-size: 13px;
     color: var(--color-muted);
     white-space: nowrap;
 }
