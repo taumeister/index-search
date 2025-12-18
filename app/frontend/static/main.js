@@ -2030,14 +2030,15 @@ function resetMoveState() {
     moveState = {
         open: false,
         docId: null,
-    source: "",
-    currentPath: "",
-    currentName: "",
-    selection: null,
-    mode: "move",
-    nodes: new Map(),
-    loading: false,
-};
+        source: "",
+        currentPath: "",
+        currentName: "",
+        selection: null,
+        mode: "move",
+        nodes: new Map(),
+        loading: false,
+    };
+    updateMoveTargetPath();
 }
 
 function handleMoveAction(id) {
@@ -2082,6 +2083,18 @@ function splitMoveKey(key) {
     const source = sourcePart || "";
     const path = rest.join("::") || "";
     return { source, path };
+}
+
+function updateMoveTargetPath() {
+    const targetEl = document.getElementById("move-target-path");
+    if (!targetEl) return;
+    if (!moveState.selection) {
+        targetEl.textContent = "Bitte Ordner wählen";
+        return;
+    }
+    const { source, path } = splitMoveKey(moveState.selection || "");
+    const label = path ? `${source ? source + "/" : ""}${path}` : source || "/";
+    targetEl.textContent = label || "Bitte Ordner wählen";
 }
 
 async function fetchMoveChildren(source, path) {
@@ -2141,20 +2154,34 @@ function renderMoveTree() {
     const tree = document.getElementById("move-tree");
     const confirmBtn = document.getElementById("move-confirm");
     if (!tree) return;
-    tree.innerHTML = "";
+    const prevScrollTop = tree.scrollTop;
+    const prevScrollLeft = tree.scrollLeft;
+    const fragment = document.createDocumentFragment();
 
-    function renderNode(pathKey, depth = 0) {
+    function renderBranch(pathKey, depth = 0) {
         const node = getMoveNode(pathKey);
         if (!node) return null;
+        const branch = document.createElement("div");
+        branch.className = "move-branch";
+        branch.dataset.depth = String(depth);
         const row = document.createElement("div");
         row.className = "move-node";
+        row.dataset.pathKey = pathKey || "";
         row.setAttribute("role", "treeitem");
         row.setAttribute("aria-level", String(depth + 1));
-        row.style.paddingLeft = `${depth * 16 + 6}px`;
+        row.setAttribute("aria-expanded", node.hasChildren ? String(Boolean(node.expanded)) : "false");
+        row.style.paddingLeft = `${depth * 16 + 8}px`;
+        const isSelected = pathKey === (moveState.selection || "");
+        if (isSelected) {
+            row.classList.add("is-selected");
+            row.setAttribute("aria-selected", "true");
+        } else {
+            row.setAttribute("aria-selected", "false");
+        }
         const toggle = document.createElement("button");
         toggle.type = "button";
         toggle.className = "move-node__toggle";
-        toggle.textContent = node.hasChildren ? (node.expanded ? "▾" : "▸") : "•";
+        toggle.textContent = node.loading ? "…" : node.hasChildren ? (node.expanded ? "▾" : "▸") : "•";
         toggle.disabled = !node.hasChildren || node.loading;
         toggle.addEventListener("click", () => toggleMoveNode(pathKey));
 
@@ -2162,9 +2189,10 @@ function renderMoveTree() {
         radio.type = "radio";
         radio.name = "move-target";
         radio.value = pathKey || "";
-        radio.checked = pathKey === (moveState.selection || "");
+        radio.checked = isSelected;
         radio.addEventListener("change", () => {
             moveState.selection = pathKey || "";
+            updateMoveTargetPath();
             renderMoveTree();
         });
 
@@ -2174,6 +2202,7 @@ function renderMoveTree() {
         label.title = node.path ? `${node.source || ""}/${node.path}` : node.source || "/";
         label.addEventListener("click", () => {
             moveState.selection = pathKey || "";
+            updateMoveTargetPath();
             renderMoveTree();
         });
 
@@ -2189,30 +2218,53 @@ function renderMoveTree() {
             status.textContent = "";
         }
 
+        row.addEventListener("click", (ev) => {
+            if (ev.target === toggle) return;
+            if (ev.target === radio) return;
+            moveState.selection = pathKey || "";
+            updateMoveTargetPath();
+            renderMoveTree();
+        });
+
+        row.addEventListener("dblclick", () => {
+            if (node.hasChildren) {
+                toggleMoveNode(pathKey);
+            }
+        });
+
         row.appendChild(toggle);
         row.appendChild(radio);
         row.appendChild(label);
         if (status.textContent) row.appendChild(status);
 
-        tree.appendChild(row);
+        branch.appendChild(row);
 
         if (node.expanded && node.children && node.children.length) {
+            const childrenWrap = document.createElement("div");
+            childrenWrap.className = "move-children";
             node.children.forEach((childKey) => {
-                const childRow = renderNode(childKey, depth + 1);
-                if (childRow) tree.appendChild(childRow);
+                const childBranch = renderBranch(childKey, depth + 1);
+                if (childBranch) childrenWrap.appendChild(childBranch);
             });
+            branch.appendChild(childrenWrap);
         }
-        return row;
+        return branch;
     }
 
     moveState.nodes.forEach((node, key) => {
         if (key.endsWith("::")) {
-            renderNode(key);
+            const rendered = renderBranch(key);
+            if (rendered) fragment.appendChild(rendered);
         }
     });
+
+    tree.replaceChildren(fragment);
+    tree.scrollTop = prevScrollTop;
+    tree.scrollLeft = prevScrollLeft;
     if (confirmBtn) {
         confirmBtn.disabled = moveState.selection === null || moveState.selection === undefined;
     }
+    updateMoveTargetPath();
 }
 
 function toggleMoveNode(path) {
@@ -2248,6 +2300,7 @@ async function showMoveDialog(docId, mode = "move") {
     moveState.selection = null;
     moveState.mode = mode === "copy" ? "copy" : "move";
     moveState.nodes = new Map();
+    updateMoveTargetPath();
     errorEl.textContent = "";
     errorEl.classList.add("hidden");
     confirmBtn.disabled = true;
@@ -2369,6 +2422,22 @@ async function submitMove() {
     }
 }
 
+function handleMoveDialogKeydown(e) {
+    if (!moveState.open) return;
+    const modal = document.getElementById("move-dialog");
+    if (!modal || modal.classList.contains("hidden")) return;
+    if (e.key === "Escape") {
+        e.preventDefault();
+        closeMoveDialog();
+    } else if (e.key === "Enter") {
+        const confirmBtn = document.getElementById("move-confirm");
+        if (confirmBtn && !confirmBtn.disabled) {
+            e.preventDefault();
+            submitMove();
+        }
+    }
+}
+
 function setupMoveDialog() {
     const modal = document.getElementById("move-dialog");
     if (!modal) return;
@@ -2378,6 +2447,7 @@ function setupMoveDialog() {
     closeBtn?.addEventListener("click", closeMoveDialog);
     cancelBtn?.addEventListener("click", closeMoveDialog);
     confirmBtn?.addEventListener("click", submitMove);
+    document.addEventListener("keydown", handleMoveDialogKeydown, true);
     modal.addEventListener("click", (e) => {
         if (e.target === modal) closeMoveDialog();
     });

@@ -1,5 +1,12 @@
 # Release-Notizen
 
+# Release-Notizen
+
+## v0.3.16
+- UX: Move/Copy-Explorer vergrößert und stabilisiert (mehr Ebenen gleichzeitig aufklappbar ohne Layout-Sprünge, Zielpfad immer sichtbar, kompakter Header).
+- Tree-UI modernisiert: klare Einrückung, Hover/Selection-States, feste Steuerungsbreiten; Dialog-Felder (Admin/Rename) passen sich an ohne Überstand.
+- Verhalten/Copy/Move-Logik unverändert; Tastaturkürzel (Enter/ESC) im Dialog aktiv.
+
 ## v0.3.15
 - Header: ZEN/Theme/Burger stilistisch vereinheitlicht; Burger nur als Punkte, Theme-Dropdown bündig; Admin/Feedback im Menü mit funktionierendem Trigger.
 - Navigation: Buttons „Zur Suche“ auf Dashboard/Metrics als Links mit Theme-Style; Extra-Buttons entfernt.

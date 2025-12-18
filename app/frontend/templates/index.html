@@ -243,14 +243,20 @@
                 </div>
                 <button type="button" class="btn btn-ghost" id="move-close">Schließen</button>
             </div>
-            <div class="dialog-body move-dialog-body">
-                <div class="move-current">
+            <div class="move-head">
+                <div class="move-head-labels">
                     <div class="dialog-label">Datei</div>
                     <div class="dialog-strong" id="move-current-name"></div>
                     <div class="dialog-muted" id="move-current-path"></div>
                 </div>
-                <div class="move-target">
-                    <div class="dialog-label">Zielordner</div>
+                <div class="move-head-meta">
+                    <div class="dialog-label">Ziel</div>
+                    <div class="move-target-path" id="move-target-path">Bitte Ordner wählen</div>
+                    <div class="move-target-hint">Mehrere Ebenen aufklappen und Ziel markieren.</div>
+                </div>
+            </div>
+            <div class="move-dialog-body">
+                <div class="move-tree-shell">
                     <div class="move-tree" id="move-tree" role="tree" aria-label="Zielordner"></div>
                 </div>
                 <div class="dialog-status hidden" id="move-error"></div>
