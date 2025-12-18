@@ -94,9 +94,9 @@
     /* Filters */
     --filter-font-size: 11px;
     --filter-font-weight: 600;
-    --filter-padding-y: 7px;
+    --filter-padding-y: 6px;
     --filter-padding-x: 10px;
-    --filter-group-height: 34px;
+    --filter-group-height: 36px;
     --filter-radius: 9px;
     --filter-chip-radius: 8px;
 
