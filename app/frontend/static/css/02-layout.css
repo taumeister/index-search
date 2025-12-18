@@ -51,9 +51,9 @@
     font-size: 10px;
     font-style: italic;
     letter-spacing: 0.08em;
-    color: color-mix(in srgb, var(--color-inverse) 72%, transparent);
-    text-shadow: 0 0 6px color-mix(in srgb, var(--color-inverse) 45%, transparent);
-    transform: translateY(2px);
+    color: color-mix(in srgb, var(--color-inverse) 98%, transparent);
+    text-shadow: 0 0 12px color-mix(in srgb, var(--color-inverse) 70%, transparent);
+    transform: translateY(-1px);
     pointer-events: none;
     white-space: nowrap;
 }
