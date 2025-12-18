@@ -322,8 +322,8 @@
 }
 
 .source-chip {
-    border: 1px solid var(--color-border);
-    background: var(--color-surface);
+    border: none;
+    background: transparent;
     padding: var(--filter-padding-y) var(--filter-padding-x);
     font-size: var(--filter-font-size);
     font-weight: var(--filter-font-weight);
@@ -331,8 +331,8 @@
     color: var(--color-text-strong);
     letter-spacing: 0.01em;
     cursor: pointer;
-    border-radius: 8px;
-    box-shadow: inset 0 1px 0 color-mix(in srgb, var(--color-inverse) 65%, transparent);
+    border-radius: var(--filter-chip-radius);
+    box-shadow: none;
 }
 
 .source-chip:hover {
