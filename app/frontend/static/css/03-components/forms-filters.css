@@ -52,16 +52,20 @@
 }
 
 .search-bar select {
-    padding: 7px 10px;
+    -webkit-appearance: none;
+    -moz-appearance: none;
+    appearance: none;
+    padding: var(--filter-padding-y) var(--filter-padding-x);
     border: 1px solid var(--color-border);
-    border-radius: 9px;
+    border-radius: var(--filter-radius);
     background: linear-gradient(180deg, var(--color-surface), var(--color-surface-muted));
     color: var(--color-text-strong);
     min-width: 150px;
-    height: calc(var(--filter-group-height) + 15px);
-    line-height: 1.4;
-    box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--color-inverse) 70%, transparent), var(--shadow-soft);
-    font-size: 13px;
+    height: var(--filter-group-height);
+    line-height: 1.2;
+    box-shadow: var(--shadow-soft);
+    font-size: var(--filter-font-size);
+    font-weight: var(--filter-font-weight);
 }
 
 .search-bar .filters {
@@ -307,20 +311,23 @@
 .source-filter {
     display: inline-flex;
     align-items: center;
-    gap: 4px;
+    gap: 6px;
     flex-wrap: wrap;
-    padding: 2px;
+    padding: 1px 4px;
     border: 1px solid var(--color-border);
-    border-radius: 10px;
+    border-radius: var(--filter-radius);
     background: var(--color-surface);
     box-shadow: var(--shadow-soft);
+    min-height: var(--filter-group-height);
 }
 
 .source-chip {
     border: 1px solid var(--color-border);
     background: var(--color-surface);
-    padding: 6px 10px;
-    font-size: 12px;
+    padding: var(--filter-padding-y) var(--filter-padding-x);
+    font-size: var(--filter-font-size);
+    font-weight: var(--filter-font-weight);
+    line-height: 1.2;
     color: var(--color-text-strong);
     letter-spacing: 0.01em;
     cursor: pointer;
