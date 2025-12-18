@@ -93,8 +93,7 @@
     height: auto;
     opacity: 1;
     pointer-events: auto;
-    overflow-x: auto;
-    overflow-y: hidden;
+    overflow: visible;
     flex-wrap: nowrap;
     align-items: center;
 }
