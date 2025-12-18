@@ -12,7 +12,8 @@
     align-items: center;
     flex-wrap: wrap;
     margin-top: 8px;
-    width: 100%;
+    width: calc(100% + 10px);
+    margin-left: -10px;
     transform: translateY(0) scale(1);
     transition: margin var(--zen-transition-duration) var(--zen-transition-ease), transform var(--zen-transition-duration) var(--zen-transition-ease), filter var(--zen-transition-duration) var(--zen-transition-ease);
     transition-delay: 80ms;
