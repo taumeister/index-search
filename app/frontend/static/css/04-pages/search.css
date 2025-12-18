@@ -6,11 +6,12 @@
 
 .search-input-wrap #search-input {
     padding-right: 30px;
+    width: 100%;
 }
 
 .search-fav {
     position: absolute;
-    right: 8px;
+    right: 10px;
     top: 50%;
     transform: translateY(-50%);
     display: inline-flex;
