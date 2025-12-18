@@ -88,8 +88,11 @@ def test_missing_admin_password(monkeypatch, tmp_path):
     os.environ["APP_SECRET"] = "secret"
     os.environ["AUTO_INDEX_DISABLE"] = "1"
     monkeypatch.chdir(tmp_path)
-    with pytest.raises(ValueError):
-        create_app(load_config(use_env=True))
+    app = create_app(load_config(use_env=True))
+    client = TestClient(app)
+    headers = {"X-App-Secret": os.environ["APP_SECRET"]}
+    resp = client.post("/api/admin/login", json={"password": "admin"}, headers=headers)
+    assert resp.status_code == 200
 
 
 def test_delete_requires_admin(monkeypatch, tmp_path):
@@ -122,7 +125,7 @@ def test_delete_requires_ready_source(monkeypatch, tmp_path):
         root.chmod(0o755)
     except Exception:
         pass
-    assert resp.status_code == 400
+    assert resp.status_code == 503
     assert file_path.exists()
 
 

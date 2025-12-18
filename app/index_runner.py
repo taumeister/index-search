@@ -7,10 +7,24 @@ from typing import Optional, Callable, Iterable
 from app.config_loader import CentralConfig, load_config
 from app.indexer.index_lauf_service import run_index_lauf, RUN_STATUS_FILE, HEARTBEAT_FILE, LIVE_STATUS_FILE
 from app.db import datenbank as db
+from app.services import readiness
 
 logger = logging.getLogger(__name__)
 
 index_lock = threading.Lock()
+
+
+def check_sources_readiness_for_index(roots: Iterable[tuple[Path, str]]):
+    roots_list = list(roots)
+    try:
+        with db.get_conn() as conn:
+            labels = [label for _, label in roots_list]
+            counts = db.count_documents_by_source(conn, labels)
+            samples = db.get_sample_paths_by_source(conn, labels)
+    except Exception:
+        counts = {}
+        samples = {}
+    return readiness.check_sources_ready(roots_list, counts, samples)
 
 
 def clear_index_files() -> None:

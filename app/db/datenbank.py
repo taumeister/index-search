@@ -536,6 +536,29 @@ def list_paths_by_sources(conn: sqlite3.Connection, sources: List[str]) -> List[
     return [row[0] for row in cursor.fetchall()]
 
 
+def count_documents_by_source(conn: sqlite3.Connection, sources: List[str]) -> Dict[str, int]:
+    if not sources:
+        return {}
+    placeholders = ",".join("?" * len(sources))
+    cursor = conn.execute(
+        f"SELECT source, COUNT(*) FROM documents WHERE source IN ({placeholders}) GROUP BY source",
+        sources,
+    )
+    return {row[0]: row[1] for row in cursor.fetchall()}
+
+
+def get_sample_paths_by_source(conn: sqlite3.Connection, sources: List[str]) -> Dict[str, str]:
+    if not sources:
+        return {}
+    result: Dict[str, str] = {}
+    for src in sources:
+        cur = conn.execute("SELECT path FROM documents WHERE source = ? LIMIT 1", (src,))
+        row = cur.fetchone()
+        if row and row[0]:
+            result[src] = row[0]
+    return result
+
+
 def add_scanned_path(conn: sqlite3.Connection, run_id: int, path: str) -> None:
     conn.execute(
         "INSERT OR IGNORE INTO scanned_paths (run_id, path) VALUES (?, ?)",

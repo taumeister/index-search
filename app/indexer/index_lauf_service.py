@@ -20,6 +20,7 @@ from app import config_db
 from app.db import datenbank as db
 from app.db.datenbank import DocumentMeta
 from app.indexer import extractors
+from app.services import readiness
 
 logger = logging.getLogger("indexer")
 
@@ -265,6 +266,9 @@ def run_index_lauf(config: CentralConfig) -> Dict[str, int]:
 
     start_time = datetime.now(timezone.utc).isoformat()
     counters = {"scanned": 0, "added": 0, "updated": 0, "removed": 0, "errors": 0, "skipped": 0}
+    finish_message: Optional[str] = None
+    status_override: Optional[str] = None
+    existing_counts: Dict[str, int] = {}
 
     with db.get_conn() as conn:
         run_id = db.record_index_run_start(conn, start_time)
@@ -272,6 +276,35 @@ def run_index_lauf(config: CentralConfig) -> Dict[str, int]:
         save_run_id(run_id)
 
     root_entries = validate_root_entries(config.paths.roots)
+    sample_paths: Dict[str, str] = {}
+    try:
+        with db.get_conn() as conn:
+            existing_counts = db.count_documents_by_source(conn, [label for _, label in root_entries])
+            sample_paths = db.get_sample_paths_by_source(conn, [label for _, label in root_entries])
+    except Exception:
+        existing_counts = {}
+        sample_paths = {}
+    readiness_result = readiness.check_sources_ready(root_entries, existing_counts, sample_paths)
+    if not readiness_result.ok:
+        finish_message = readiness_result.message or "Netzlaufwerk nicht bereit"
+        logger.warning("Indexlauf #%s abgebrochen: %s", run_id, finish_message)
+        init_live_status(run_id, start_time, 0)
+        update_live_status(counters, status="error", message=finish_message, finished=True)
+        with db.get_conn() as conn:
+            db.record_index_run_finish(
+                conn,
+                run_id,
+                datetime.now(timezone.utc).isoformat(),
+                "error",
+                0,
+                0,
+                0,
+                0,
+                0,
+                finish_message,
+            )
+        clear_run_id()
+        return counters
     if not root_entries:
         logger.warning("Keine roots konfiguriert, Indexlauf beendet")
         init_live_status(run_id, start_time, 0)
@@ -497,13 +530,22 @@ def run_index_lauf(config: CentralConfig) -> Dict[str, int]:
     flush_live_status(force=True)
 
     with db.get_conn() as conn:
-        removed_count = db.remove_documents_not_scanned(conn, run_id, [src for _, src in root_entries])
-        counters["removed"] = removed_count
-        db.cleanup_scanned_paths(conn, run_id)
+        post_check = readiness.check_sources_ready(root_entries, existing_counts)
+        if not post_check.ok:
+            finish_message = finish_message or post_check.message or "Netzlaufwerk nicht bereit"
+            logger.warning("Indexlauf #%s: Cleanup übersprungen: %s", run_id, finish_message)
+            counters["errors"] += 1
+            counters["removed"] = 0
+            status_override = status_override or "error"
+            db.cleanup_scanned_paths(conn, run_id)
+        else:
+            removed_count = db.remove_documents_not_scanned(conn, run_id, [src for _, src in root_entries])
+            counters["removed"] = removed_count
+            db.cleanup_scanned_paths(conn, run_id)
 
     end_time = datetime.now(timezone.utc).isoformat()
-    status = "stopped" if stop_event.is_set() else ("completed" if counters["errors"] == 0 else "completed_with_errors")
-    update_live_status(counters, status=status, finished=True)
+    status = status_override or ("stopped" if stop_event.is_set() else ("completed" if counters["errors"] == 0 else "completed_with_errors"))
+    update_live_status(counters, status=status, message=finish_message, finished=True)
     logger.info(
         "Indexlauf #%s beendet mit Status %s | gescannt=%s, added=%s, updated=%s, removed=%s, errors=%s, skipped=%s",
         run_id,
@@ -526,7 +568,7 @@ def run_index_lauf(config: CentralConfig) -> Dict[str, int]:
             counters["updated"],
             counters["removed"],
             counters["errors"],
-            None,
+            finish_message,
         )
     clear_run_id()
     send_report_if_configured(config, counters, status, run_id, start_time, end_time)

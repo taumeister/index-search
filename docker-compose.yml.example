@@ -1,0 +1,35 @@
+services:
+  web:
+    build: .
+    container_name: index-search-web
+    user: "0:0"
+    ports:
+      - "8010:8000"
+    volumes:
+      - ./:/app
+      - ${DATA_HOST_PATH}:/data:rw
+    environment:
+      - TZ=${TZ}
+      - APP_SECRET=${APP_SECRET}
+      - ADMIN_PASSWORD=${ADMIN_PASSWORD:-admin}
+      - DATA_CONTAINER_PATH=${DATA_CONTAINER_PATH:-/data}
+      - INDEX_WORKER_COUNT=${INDEX_WORKER_COUNT}
+      - INDEX_MAX_FILE_SIZE_MB=${INDEX_MAX_FILE_SIZE_MB}
+      - INDEX_EXCLUDE_DIRS=${INDEX_EXCLUDE_DIRS}
+      - QUARANTINE_RETENTION_DAYS=${QUARANTINE_RETENTION_DAYS}
+      - QUARANTINE_CLEANUP_SCHEDULE=${QUARANTINE_CLEANUP_SCHEDULE}
+      - QUARANTINE_CLEANUP_DRYRUN=${QUARANTINE_CLEANUP_DRYRUN}
+      - LOG_LEVEL=${LOG_LEVEL}
+      - LOG_DIR=${LOG_DIR}
+      - LOG_ROTATION_MB=${LOG_ROTATION_MB}
+      - SMTP_HOST=${SMTP_HOST}
+      - SMTP_PORT=${SMTP_PORT}
+      - SMTP_USE_TLS=${SMTP_USE_TLS}
+      - SMTP_USER=${SMTP_USER}
+      - SMTP_PASS=${SMTP_PASS}
+      - SMTP_FROM=${SMTP_FROM}
+      - SMTP_TO=${SMTP_TO}
+      - SEND_REPORT_ENABLED=${SEND_REPORT_ENABLED}
+      - FEEDBACK_ENABLED=${FEEDBACK_ENABLED}
+      - FEEDBACK_TO=${FEEDBACK_TO}
+    restart: unless-stopped

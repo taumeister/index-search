@@ -361,10 +361,12 @@
         function updateQuarantineMeta(statusData) {
             const pill = document.getElementById("quarantine-availability");
             const readyList = Array.isArray(statusData && statusData.quarantine_ready_sources) ? statusData.quarantine_ready_sources : [];
+            const issues = Array.isArray(statusData && statusData.quarantine_issues) ? statusData.quarantine_issues : [];
             const enabled = Boolean(statusData && statusData.file_ops_enabled && readyList.length);
             if (pill) {
                 pill.textContent = enabled ? "Bereit" : "Nicht bereit";
                 pill.dataset.state = enabled ? "running" : "idle";
+                pill.title = issues.length ? issues.map((i) => `${i.label || ""}: ${i.issue || i.reason || ""}`).join(" | ") : "";
             }
             const retention = document.getElementById("quarantine-retention");
             if (retention) {
@@ -373,8 +375,10 @@
             }
             const schedule = document.getElementById("quarantine-schedule");
             if (schedule) {
-                const sched = (statusData && statusData.quarantine_cleanup_schedule) || "–";
-                const dry = statusData && statusData.quarantine_cleanup_dry_run ? " (Dry-run)" : "";
+                const autoPurge = Boolean(statusData && statusData.quarantine_auto_purge_enabled);
+                const schedRaw = (statusData && statusData.quarantine_cleanup_schedule) || "–";
+                const sched = autoPurge ? schedRaw : "aus";
+                const dry = autoPurge && statusData && statusData.quarantine_cleanup_dry_run ? " (Dry-run)" : "";
                 schedule.textContent = `Cleanup: ${sched}${dry}`;
             }
             const sourceSelect = document.getElementById("quarantine-source-filter");
@@ -599,6 +603,8 @@
             if (!res || !res.config) return;
             const cfg = res.config;
             const st = res.status || {};
+            const hasError = Boolean(st.last_error) || (st.last_status && st.last_status.toLowerCase() === "not_ready");
+            const errorText = st.last_error || (st.last_status && st.last_status.toLowerCase() === "not_ready" ? "Netzlaufwerk nicht bereit" : "");
             state.autoMode = cfg.mode || "daily";
             const enabled = Boolean(cfg.enabled);
             document.getElementById("auto-enabled").checked = enabled;
@@ -610,12 +616,13 @@
             const running = Boolean(st.running);
             state.autoRunning = running;
             document.getElementById("auto-run-now").disabled = running;
-            updateAutoStatusPill(running ? "Läuft" : "Wartet", running ? "running" : (st.last_status || "idle"));
-            document.getElementById("auto-status-label").textContent = running ? "Läuft" : (st.last_status || "Idle");
+            const statusCode = running ? "running" : (st.last_status || "idle");
+            updateAutoStatusPill(running ? "Läuft" : (statusLabel(statusCode)), statusCode);
+            document.getElementById("auto-status-label").textContent = running ? "Läuft" : statusLabel(statusCode);
             document.getElementById("auto-next").textContent = st.next_run_at ? fmtDateTime(st.next_run_at) : "–";
             document.getElementById("auto-last").textContent = st.last_run_at ? fmtDateTime(st.last_run_at) : "–";
             document.getElementById("auto-duration").textContent = st.last_duration_sec ? fmtDuration(st.last_duration_sec) : "–";
-            document.getElementById("auto-error").textContent = st.last_error || "–";
+            document.getElementById("auto-error").textContent = hasError ? errorText : "–";
             document.getElementById("auto-plan").textContent = describePlan(cfg);
         }
 
@@ -673,6 +680,11 @@
             const statusText = statusLabel(statusCode);
             updateStatusPill(statusText, statusCode);
             setText("metric-status", statusText);
+            if (statusData && statusData.sources_ready === false) {
+                const offlineMsg = "Netzlaufwerk nicht bereit";
+                updateStatusPill(offlineMsg, "error");
+                setText("metric-status", offlineMsg);
+            }
             setText("metric-total-docs", fmtNumber(statusData.total_docs || 0));
             setText("metric-total-scan", fmtNumber(live.total_files ?? 0));
             const scanned = live.scanned ?? 0;
@@ -975,6 +987,19 @@
                 const res = await fetch("/api/auto-index/run", { method: "POST" });
                 if (res.status === 409) {
                     alert("Indexlauf läuft bereits");
+                } else if (!res.ok) {
+                    let msg = res.statusText;
+                    try {
+                        const body = await res.json();
+                        msg = body.detail || body.status || msg;
+                    } catch (_) {
+                        try {
+                            msg = await res.text();
+                        } catch (_) {
+                            /* ignore */
+                        }
+                    }
+                    alert(`Auto-Index fehlgeschlagen: ${msg}`);
                 }
             } catch (err) {
                 console.error("Auto-Index-Run fehlgeschlagen", err);
@@ -985,6 +1010,22 @@
             const res = await fetch(`/api/admin/index/run?full_reset=${fullReset}`, { method: "POST" });
             if (res.status === 409) {
                 alert("Indexlauf läuft bereits");
+                return;
+            }
+            if (!res.ok) {
+                let msg = res.statusText;
+                try {
+                    const body = await res.json();
+                    msg = body.detail || body.status || msg;
+                } catch (_) {
+                    try {
+                        msg = await res.text();
+                    } catch (_) {
+                        /* ignore */
+                    }
+                }
+                alert(`Indexstart fehlgeschlagen: ${msg}`);
+                return;
             }
         }
 

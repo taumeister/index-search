@@ -16,6 +16,7 @@ from typing import Dict, Iterable, List, Optional, Tuple
 from app.db import datenbank as db
 from app.db.datenbank import DocumentMeta, QuarantineEntry
 from app import config_db
+from app.services import readiness
 
 logger = logging.getLogger(__name__)
 
@@ -26,13 +27,15 @@ class SourceInfo:
     root: Path
     quarantine_dir: Path
     ready: bool
+    issue: Optional[str] = None
 
 
 @dataclass
 class QuarantineSettings:
     retention_days: int = 30
-    cleanup_schedule: str = "daily"
+    cleanup_schedule: str = "off"
     cleanup_dry_run: bool = False
+    auto_purge_enabled: bool = False
 
 
 class FileOpError(Exception):
@@ -51,19 +54,16 @@ _cleanup_stop = threading.Event()
 
 
 def _canonical(path: Path) -> Path:
-    try:
-        return path.resolve()
-    except Exception:
-        return Path(os.path.abspath(path))
+    return readiness._canonical(path)
 
 
 def _assert_safe_root(root: Path) -> Path:
     canonical = _canonical(root)
-    if str(canonical) in {"", "/"}:
-        raise FileOpError("Ungültiger Basis-Pfad", status_code=400)
-    if not canonical.exists() or not canonical.is_dir():
-        raise FileOpError("Quelle nicht verfügbar (Mount fehlt)", status_code=400)
-    return canonical
+    result = readiness.check_sources_ready([(canonical, canonical.name)])
+    if result.ok:
+        return canonical
+    msg = result.message or "Netzlaufwerk nicht bereit"
+    raise FileOpError(msg, status_code=503)
 
 
 def _guard_path(target: Path, root: Path, allow_root: bool = False, must_exist: bool = True) -> Path:
@@ -75,6 +75,13 @@ def _guard_path(target: Path, root: Path, allow_root: bool = False, must_exist: 
         raise FileOpError("Pfad liegt außerhalb der Quelle", status_code=400)
     if canonical_target == canonical_root and not allow_root:
         raise FileOpError("Operation auf Root verboten", status_code=400)
+    return canonical_target
+
+
+def safe_delete(target: Path, allowed_root: Path) -> Path:
+    canonical_target = _guard_path(target, allowed_root, allow_root=False, must_exist=True)
+    with _locked_paths([canonical_target]):
+        canonical_target.unlink()
     return canonical_target
 
 
@@ -109,26 +116,35 @@ def _audit(entry: Dict[str, object]) -> None:
         logger.debug("Audit-Log schreiben fehlgeschlagen", exc_info=True)
 
 
-def ensure_quarantine(root: Path) -> Tuple[Path, bool]:
+def ensure_quarantine(root: Path, label: str = "") -> Tuple[Path, bool, Optional[str]]:
     canonical_root = _canonical(root)
-    if not canonical_root.exists() or not canonical_root.is_dir():
-        return canonical_root / ".quarantine", False
+    src_result = readiness.check_sources_ready(
+        [(canonical_root, label or canonical_root.name)],
+        existing_counts={},
+        sample_paths={},
+        require_non_empty=True,
+    )
+    if not src_result.ok:
+        reason = src_result.issues[0].reason if src_result.issues else "Netzlaufwerk nicht bereit"
+        return canonical_root / ".quarantine", False, reason
+    try:
+        if not canonical_root.is_dir():
+            return canonical_root / ".quarantine", False, "Quelle nicht verfügbar (Mount fehlt)"
+        if not any(canonical_root.iterdir()):
+            return canonical_root / ".quarantine", False, "Quelle nicht verfügbar (leer/offline)"
+    except Exception:
+        return canonical_root / ".quarantine", False, "Quelle nicht verfügbar (Mount fehlt)"
     quarantine_dir = canonical_root / ".quarantine"
-    try:
-        quarantine_dir.mkdir(parents=True, exist_ok=True)
-    except Exception:
-        return quarantine_dir, False
-    test_file = quarantine_dir / ".rw_test"
-    try:
-        test_file.write_text("ok", encoding="utf-8")
-        test_file.unlink(missing_ok=True)
-        return quarantine_dir, True
-    except Exception:
+    if not quarantine_dir.exists():
         try:
-            test_file.unlink(missing_ok=True)
+            quarantine_dir.mkdir(parents=False, exist_ok=False)
         except Exception:
-            pass
-        return quarantine_dir, False
+            return quarantine_dir, False, "Quarantäne nicht beschreibbar"
+    q_result = readiness.check_quarantine_writable(quarantine_dir)
+    if not q_result.ok:
+        reason = q_result.issues[0].reason if q_result.issues else "Quarantäne nicht beschreibbar"
+        return quarantine_dir, False, reason
+    return quarantine_dir, True, None
 
 
 def init_sources(root_entries: List[Tuple[Path, str]]) -> None:
@@ -136,8 +152,8 @@ def init_sources(root_entries: List[Tuple[Path, str]]) -> None:
     _sources = {}
     for root, label in root_entries:
         canonical_root = _canonical(root)
-        quarantine_dir, ready = ensure_quarantine(canonical_root)
-        _sources[label] = SourceInfo(label=label, root=canonical_root, quarantine_dir=quarantine_dir, ready=ready)
+        quarantine_dir, ready, issue = ensure_quarantine(canonical_root, label)
+        _sources[label] = SourceInfo(label=label, root=canonical_root, quarantine_dir=quarantine_dir, ready=ready, issue=issue)
 
 
 def refresh_quarantine_state() -> None:
@@ -163,7 +179,7 @@ def refresh_quarantine_state() -> None:
     else:
         # leere oder ungültige DB-Roots -> bestehende Quellen als not ready markieren
         for label, info in list(_sources.items()):
-            _sources[label] = SourceInfo(label=label, root=info.root, quarantine_dir=info.quarantine_dir, ready=False)
+            _sources[label] = SourceInfo(label=label, root=info.root, quarantine_dir=info.quarantine_dir, ready=False, issue=info.issue or "Netzlaufwerk nicht bereit")
 
 
 def apply_settings(settings: Optional[QuarantineSettings]) -> None:
@@ -172,8 +188,9 @@ def apply_settings(settings: Optional[QuarantineSettings]) -> None:
         return
     _settings = QuarantineSettings(
         retention_days=max(0, int(getattr(settings, "retention_days", _settings.retention_days))),
-        cleanup_schedule=(getattr(settings, "cleanup_schedule", _settings.cleanup_schedule) or "daily").strip().lower(),
+        cleanup_schedule=(getattr(settings, "cleanup_schedule", _settings.cleanup_schedule) or "off").strip().lower(),
         cleanup_dry_run=bool(getattr(settings, "cleanup_dry_run", _settings.cleanup_dry_run)),
+        auto_purge_enabled=bool(getattr(settings, "auto_purge_enabled", _settings.auto_purge_enabled)),
     )
 
 
@@ -183,12 +200,19 @@ def get_status() -> Dict[str, object]:
         for info in _sources.values()
         if info.ready
     ]
+    issues = [
+        {"label": info.label, "root": str(info.root), "issue": info.issue or "Netzlaufwerk nicht bereit"}
+        for info in _sources.values()
+        if not info.ready
+    ]
     return {
         "file_ops_enabled": any(info.ready for info in _sources.values()),
         "quarantine_ready_sources": ready_sources,
+        "quarantine_issues": issues,
         "quarantine_retention_days": _settings.retention_days,
         "quarantine_cleanup_schedule": _settings.cleanup_schedule,
         "quarantine_cleanup_dry_run": _settings.cleanup_dry_run,
+        "quarantine_auto_purge_enabled": _settings.auto_purge_enabled,
     }
 
 
@@ -292,21 +316,23 @@ def list_directories(source_label: str, rel_path: str = "", limit: int = 500) ->
 def _resolve_source(label: str, fallback_root: Optional[str] = None) -> SourceInfo:
     info = _sources.get(label)
     if info:
-        canonical_root = _assert_safe_root(info.root)
-        quarantine_dir, ready = ensure_quarantine(canonical_root)
-        info = SourceInfo(label=label, root=canonical_root, quarantine_dir=quarantine_dir, ready=ready)
+        canonical_root = _canonical(info.root)
+        quarantine_dir, ready, issue = ensure_quarantine(canonical_root, label)
+        info = SourceInfo(label=label, root=canonical_root, quarantine_dir=quarantine_dir, ready=ready, issue=issue)
         _sources[label] = info
+        if not ready:
+            raise FileOpError(issue or "Netzlaufwerk nicht bereit", status_code=503)
         return info
     # Versuche, die Quelle aus aktiven Roots der DB zu laden
     try:
         for path, lab, _rid, active in config_db.list_roots(active_only=True):
             if lab == label and active:
-                root_path = _assert_safe_root(Path(path))
-                if not root_path.exists() or not root_path.is_dir():
-                    raise FileOpError("Quelle nicht verfügbar (Mount fehlt)", status_code=400)
-                quarantine_dir, ready = ensure_quarantine(root_path)
-                info = SourceInfo(label=lab, root=root_path, quarantine_dir=quarantine_dir, ready=ready)
+                root_path = _canonical(Path(path))
+                quarantine_dir, ready, issue = ensure_quarantine(root_path, lab)
+                info = SourceInfo(label=lab, root=root_path, quarantine_dir=quarantine_dir, ready=ready, issue=issue)
                 _sources[label] = info
+                if not ready:
+                    raise FileOpError(issue or "Netzlaufwerk nicht bereit", status_code=503)
                 return info
     except FileOpError:
         raise
@@ -314,16 +340,18 @@ def _resolve_source(label: str, fallback_root: Optional[str] = None) -> SourceIn
         pass
     if not fallback_root:
         raise FileOpError("Quelle nicht verfügbar", status_code=400)
-    root_path = _assert_safe_root(Path(fallback_root))
-    quarantine_dir, ready = ensure_quarantine(root_path)
-    info = SourceInfo(label=label, root=root_path, quarantine_dir=quarantine_dir, ready=ready)
+    root_path = _canonical(Path(fallback_root))
+    quarantine_dir, ready, issue = ensure_quarantine(root_path, label)
+    info = SourceInfo(label=label, root=root_path, quarantine_dir=quarantine_dir, ready=ready, issue=issue)
     _sources[label] = info
+    if not ready:
+        raise FileOpError(issue or "Netzlaufwerk nicht bereit", status_code=503)
     return info
 
 
 def _assert_quarantine_ready(info: SourceInfo) -> None:
     if not info.ready:
-        raise FileOpError("Quarantäne nicht verfügbar (Mount fehlt?)", status_code=400)
+        raise FileOpError(info.issue or "Netzlaufwerk nicht bereit", status_code=503)
 
 
 def _validate_new_filename(new_name: str, current_name: str, current_suffix: str) -> str:
@@ -905,7 +933,7 @@ def quarantine_hard_delete(entry_id: int, actor: str = "admin") -> Dict[str, obj
         if not quarantine_path.exists():
             raise FileOpError("Datei bereits entfernt", status_code=404)
         try:
-            quarantine_path.unlink()
+            safe_delete(quarantine_path, info.quarantine_dir)
         except Exception as exc:
             _audit({**audit_base, "status": "error", "error": str(exc)})
             raise
@@ -1002,7 +1030,14 @@ def run_cleanup_now(now: Optional[datetime] = None) -> Dict[str, int]:
                     summary["dry_run"] += 1
                     continue
                 try:
-                    path.unlink(missing_ok=True)
+                    try:
+                        safe_delete(path, base)
+                    except FileOpError as exc:
+                        if getattr(exc, "status_code", None) == 404:
+                            continue
+                        _audit({**audit_base, "status": "error", "error": str(exc)})
+                        summary["errors"] += 1
+                        continue
                     with db.get_conn() as conn:
                         entry = db.get_quarantine_entry_by_path(conn, str(path))
                         if entry:
@@ -1034,6 +1069,8 @@ def _cleanup_interval_seconds() -> int:
 
 def start_cleanup_scheduler() -> None:
     global _cleanup_thread
+    if not _settings.auto_purge_enabled:
+        return
     interval = _cleanup_interval_seconds()
     if interval <= 0:
         return

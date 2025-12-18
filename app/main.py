@@ -32,9 +32,10 @@ from app import metrics
 from app.search_modes import SearchMode, build_search_plan, normalize_mode
 from app import config_db
 from app.feedback import MAX_FEEDBACK_CHARS, check_rate_limit, send_feedback_email
-from app.index_runner import start_index_run
+from app.index_runner import start_index_run, check_sources_readiness_for_index
 from app.auto_index_scheduler import AutoIndexScheduler, AutoIndexConfig, load_config_from_db, load_status_from_db, persist_config
 from app.services import file_ops
+from app.services import readiness
 
 logging.basicConfig(level=logging.INFO)
 _metrics_thread_started = False
@@ -283,10 +284,32 @@ def create_app(config: Optional[CentralConfig] = None) -> FastAPI:
     db.init_db()
     metrics.init_metrics()
     ensure_metrics_background()
+
+    def readiness_error_response(roots: list[tuple[Path, str]]):
+        result = check_sources_readiness_for_index(roots)
+        if result.ok:
+            return None
+        issues = [
+            {"source": i.source, "path": i.path, "reason": i.reason, "errno": i.errno}
+            for i in result.issues
+        ]
+        detail = result.message or "Netzlaufwerk nicht bereit"
+        return JSONResponse({"status": "not_ready", "detail": detail, "issues": issues}, status_code=503)
+
     global _auto_scheduler
     if not os.getenv("AUTO_INDEX_DISABLE", "").lower() == "1" and not os.getenv("PYTEST_CURRENT_TEST"):
+        def scheduler_readiness():
+            try:
+                cfg_local = load_config()
+                roots_local = resolve_active_roots(cfg_local)
+            except Exception as exc:
+                base_path = config_db.get_setting("base_data_root", "/data") or "/data"
+                issue = readiness.ReadinessIssue(source="*", path=str(base_path), reason=str(exc))
+                return readiness.ReadinessResult(ok=False, issues=[issue])
+            return check_sources_readiness_for_index(roots_local)
         _auto_scheduler = AutoIndexScheduler(
-            lambda **kwargs: start_index_run(resolve_roots=resolve_active_roots, **kwargs)
+            lambda **kwargs: start_index_run(resolve_roots=resolve_active_roots, **kwargs),
+            readiness_checker=scheduler_readiness,
         )
         _auto_scheduler.start()
     feedback_enabled = bool(getattr(config, "feedback", None) and config.feedback.enabled)
@@ -299,8 +322,9 @@ def create_app(config: Optional[CentralConfig] = None) -> FastAPI:
     PREFIX_MINLEN = max(1, int(getattr(config.ui, "search_prefix_minlen", 4) or 4))
 
     app = FastAPI(title="Index-Suche")
-    templates = Jinja2Templates(directory="app/frontend/templates")
-    app.mount("/static", StaticFiles(directory="app/frontend/static"), name="static")
+    base_dir = Path(__file__).resolve().parent
+    templates = Jinja2Templates(directory=base_dir / "frontend/templates")
+    app.mount("/static", StaticFiles(directory=base_dir / "frontend/static"), name="static")
     LOG_PAGE_SIZE = 200
 
     @app.get("/", response_class=HTMLResponse)
@@ -391,9 +415,19 @@ def create_app(config: Optional[CentralConfig] = None) -> FastAPI:
         if _auto_scheduler:
             res = _auto_scheduler.trigger_now()
         else:
+            cfg = load_config()
+            try:
+                roots = resolve_active_roots(cfg)
+            except ValueError as exc:
+                return JSONResponse({"status": "error", "detail": str(exc)}, status_code=400)
+            readiness_resp = readiness_error_response(roots)
+            if readiness_resp:
+                return readiness_resp
             res = start_index_run(resolve_roots=resolve_active_roots)
         if res == "busy":
             raise HTTPException(status_code=409, detail="Lauf läuft bereits")
+        if res == "not_ready":
+            raise HTTPException(status_code=503, detail="Netzlaufwerk nicht bereit")
         return {"status": res}
 
     @app.get("/api/auto-index/status")
@@ -723,6 +757,13 @@ def create_app(config: Optional[CentralConfig] = None) -> FastAPI:
         _admin: bool = Depends(require_admin),
     ):
         file_ops.refresh_quarantine_state()
+        ops_state = file_ops.get_status()
+        if not ops_state.get("file_ops_enabled"):
+            issues = ops_state.get("quarantine_issues") or []
+            detail = "Quarantäne nicht bereit"
+            if issues:
+                detail = issues[0].get("issue") or issues[0].get("reason") or detail
+            raise HTTPException(status_code=503, detail=detail)
         try:
             entries = file_ops.list_quarantine_entries(
                 source=source,
@@ -771,6 +812,26 @@ def create_app(config: Optional[CentralConfig] = None) -> FastAPI:
         except Exception as exc:
             logger.error("Quarantäne-Refresh fehlgeschlagen: %s", exc)
         ops_state = file_ops.get_status()
+        sources_ready = True
+        source_issues: list[dict[str, object]] = []
+        try:
+            roots_for_status = resolve_active_roots(config)
+            readiness_res = check_sources_readiness_for_index(roots_for_status)
+            sources_ready = readiness_res.ok
+            source_issues = [
+                {"source": i.source, "path": i.path, "reason": i.reason, "errno": i.errno}
+                for i in readiness_res.issues
+            ]
+        except Exception as exc:
+            sources_ready = False
+            source_issues = [
+                {
+                    "source": "*",
+                    "path": str(config_db.get_setting("base_data_root", "/data") or "/data"),
+                    "reason": str(exc),
+                    "errno": None,
+                }
+            ]
         admin_flag = is_admin(request)
         try:
             with db.get_conn() as conn:
@@ -788,6 +849,8 @@ def create_app(config: Optional[CentralConfig] = None) -> FastAPI:
                     "quarantine_retention_days": ops_state.get("quarantine_retention_days"),
                     "quarantine_cleanup_schedule": ops_state.get("quarantine_cleanup_schedule"),
                     "quarantine_cleanup_dry_run": ops_state.get("quarantine_cleanup_dry_run"),
+                    "quarantine_issues": ops_state.get("quarantine_issues", []),
+                    "quarantine_auto_purge_enabled": ops_state.get("quarantine_auto_purge_enabled"),
                     "index_exclude_dirs": getattr(config.indexer, "exclude_dirs", []),
                     "total_docs": int(status["total_docs"]),
                     "ext_counts": ext_counts,
@@ -795,6 +858,8 @@ def create_app(config: Optional[CentralConfig] = None) -> FastAPI:
                     "recent_runs": recent_runs,
                     "errors_total": db.error_count(conn),
                     "send_report_enabled": config_db.get_setting("send_report_enabled", "0") == "1",
+                    "sources_ready": sources_ready,
+                    "source_issues": source_issues,
                 }
         except Exception as exc:
             logger.error("Admin-Status fehlgeschlagen: %s", exc, exc_info=True)
@@ -805,6 +870,8 @@ def create_app(config: Optional[CentralConfig] = None) -> FastAPI:
                 "quarantine_retention_days": ops_state.get("quarantine_retention_days"),
                 "quarantine_cleanup_schedule": ops_state.get("quarantine_cleanup_schedule"),
                 "quarantine_cleanup_dry_run": ops_state.get("quarantine_cleanup_dry_run"),
+                "quarantine_issues": ops_state.get("quarantine_issues", []),
+                "quarantine_auto_purge_enabled": ops_state.get("quarantine_auto_purge_enabled"),
                 "index_exclude_dirs": getattr(config.indexer, "exclude_dirs", []),
                 "total_docs": 0,
                 "ext_counts": [],
@@ -812,6 +879,8 @@ def create_app(config: Optional[CentralConfig] = None) -> FastAPI:
                 "recent_runs": [],
                 "errors_total": 0,
                 "send_report_enabled": False,
+                "sources_ready": False,
+                "source_issues": source_issues,
             }
             return JSONResponse({"status": "error", "detail": str(exc), "fallback": fallback}, status_code=200)
 
@@ -890,9 +959,14 @@ def create_app(config: Optional[CentralConfig] = None) -> FastAPI:
             roots = resolve_active_roots(cfg)
         except ValueError as exc:
             return JSONResponse({"status": "error", "detail": str(exc)}, status_code=400)
+        readiness_resp = readiness_error_response(roots)
+        if readiness_resp:
+            return readiness_resp
         status = start_index_run(full_reset, cfg_override=cfg, roots_override=roots, resolve_roots=resolve_active_roots)
         if status == "busy":
             return JSONResponse({"status": "busy"}, status_code=409)
+        if status == "not_ready":
+            return JSONResponse({"status": "not_ready", "detail": "Netzlaufwerk nicht bereit"}, status_code=503)
         return {"status": status}
 
     @app.post("/api/admin/index/reset")
@@ -910,6 +984,9 @@ def create_app(config: Optional[CentralConfig] = None) -> FastAPI:
             roots = resolve_active_roots(cfg)
         except ValueError as exc:
             return JSONResponse({"status": "error", "detail": str(exc)}, status_code=400)
+        readiness_resp = readiness_error_response(roots)
+        if readiness_resp:
+            return readiness_resp
         try:
             index_runner.clear_index_files()
         except Exception as exc:
@@ -917,6 +994,8 @@ def create_app(config: Optional[CentralConfig] = None) -> FastAPI:
         status = start_index_run(full_reset=False, cfg_override=cfg, roots_override=roots, reason="reset_run", resolve_roots=resolve_active_roots)
         if status == "busy":
             return JSONResponse({"status": "busy"}, status_code=409)
+        if status == "not_ready":
+            return JSONResponse({"status": "not_ready", "detail": "Netzlaufwerk nicht bereit"}, status_code=503)
         return {"status": status}
 
     @app.post("/api/admin/index/stop")

@@ -121,13 +121,14 @@ def persist_status(status: AutoIndexStatus) -> None:
 
 
 class AutoIndexScheduler:
-    def __init__(self, start_handler: Callable[..., str]):
+    def __init__(self, start_handler: Callable[..., str], readiness_checker: Optional[Callable[[], Any]] = None):
         self._start_handler = start_handler
         self._stop_event = threading.Event()
         self._poke_event = threading.Event()
         self._thread: Optional[threading.Thread] = None
         self._running = False
         self._lock = threading.Lock()
+        self._readiness_checker = readiness_checker
 
     def start(self):
         if self._thread and self._thread.is_alive():
@@ -199,6 +200,22 @@ class AutoIndexScheduler:
     def _launch_run(self, reason: str) -> str:
         if self._running:
             return "busy"
+        if self._readiness_checker:
+            try:
+                readiness_result = self._readiness_checker()
+            except Exception as exc:
+                logger.error("Readiness-Check fehlgeschlagen: %s", exc)
+                readiness_result = None
+            if readiness_result is not None and hasattr(readiness_result, "ok") and not readiness_result.ok:
+                status = self.status()
+                now = datetime.now(timezone.utc)
+                status.last_status = "not_ready"
+                status.last_run_at = now
+                status.last_error = getattr(readiness_result, "message", None) or "Netzlaufwerk nicht bereit"
+                status.running = False
+                status.next_run_at = compute_next_run(load_config_from_db(), now)
+                persist_status(status)
+                return "not_ready"
         status = self.status()
         now = datetime.now(timezone.utc)
         status.last_status = "running"

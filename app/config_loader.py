@@ -97,8 +97,9 @@ class FeedbackConfig(BaseModel):
 @dataclasses.dataclass
 class QuarantineConfig:
     retention_days: int = 30
-    cleanup_schedule: str = "daily"
+    cleanup_schedule: str = "off"
     cleanup_dry_run: bool = False
+    auto_purge_enabled: bool = False
 
 
 @dataclasses.dataclass
@@ -179,11 +180,19 @@ def load_config(path: Path = Path("config/central_config.ini"), use_env: bool = 
         recipients=[r.strip() for r in (os.getenv("FEEDBACK_TO", "") if use_env else "").split(",") if r.strip()],
     )
 
+    auto_purge_enabled = os.getenv("QUARANTINE_AUTO_PURGE", "false").lower() == "true" if use_env else False
+    cleanup_schedule_raw = (
+        os.getenv("QUARANTINE_CLEANUP_SCHEDULE", "off") if use_env else "off"
+    )
+    cleanup_schedule_val = (cleanup_schedule_raw or "off").strip().lower()
+    if not auto_purge_enabled:
+        cleanup_schedule_val = "off"
+
     quarantine_cfg = QuarantineConfig(
         retention_days=max(0, int(os.getenv("QUARANTINE_RETENTION_DAYS", "30") or 30)) if use_env else 30,
-        cleanup_schedule=(os.getenv("QUARANTINE_CLEANUP_SCHEDULE", "daily") if use_env else "daily").strip().lower()
-        or "daily",
+        cleanup_schedule=cleanup_schedule_val,
         cleanup_dry_run=os.getenv("QUARANTINE_CLEANUP_DRYRUN", "false").lower() == "true" if use_env else False,
+        auto_purge_enabled=auto_purge_enabled,
     )
 
     return CentralConfig(
