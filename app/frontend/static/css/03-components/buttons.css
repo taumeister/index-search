@@ -197,22 +197,22 @@
     min-width: 52px;
     height: 34px;
     padding: 6px 14px;
-    border-radius: var(--radius-pill);
-    border: 1px solid color-mix(in srgb, var(--color-accent-contrast) 60%, var(--color-surface-muted));
-    background: linear-gradient(135deg, color-mix(in srgb, var(--color-accent) 36%, var(--color-surface)), color-mix(in srgb, var(--color-accent-strong) 45%, var(--color-surface-muted)));
-    color: var(--color-inverse);
+    border-radius: var(--radius-md);
+    border: 1px solid var(--color-border-strong);
+    background: linear-gradient(180deg, var(--color-surface), var(--color-surface-muted));
+    color: var(--color-text-strong);
     font-weight: var(--font-weight-bold);
-    letter-spacing: 0.08em;
+    letter-spacing: 0.03em;
     font-size: 12px;
     text-transform: uppercase;
-    box-shadow: var(--shadow-card);
-    transition: transform 0.12s ease, box-shadow 0.16s ease, background 0.2s ease, border-color 0.16s ease;
+    box-shadow: var(--shadow-soft);
+    transition: background 0.2s ease, border-color 0.16s ease, transform 0.12s ease;
 }
 
 .zen-header-toggle:hover {
     transform: translateY(-1px);
-    background: linear-gradient(135deg, color-mix(in srgb, var(--color-accent) 48%, var(--color-surface)), color-mix(in srgb, var(--color-accent-strong) 58%, var(--color-surface-muted)));
-    border-color: color-mix(in srgb, var(--color-accent-contrast) 80%, var(--color-surface));
+    background: linear-gradient(180deg, color-mix(in srgb, var(--color-surface-muted) 80%, var(--color-accent) 20%), var(--color-surface));
+    border-color: color-mix(in srgb, var(--color-accent) 25%, var(--color-border-strong));
 }
 
 .zen-header-toggle:focus-visible {
@@ -221,10 +221,90 @@
 }
 
 .zen-header-toggle.active {
-    background: linear-gradient(135deg, var(--color-accent-strong), var(--color-accent-contrast));
-    box-shadow: var(--shadow-strong);
-    border-color: color-mix(in srgb, var(--color-accent-contrast) 90%, var(--color-accent));
-    color: var(--color-inverse);
+    background: linear-gradient(180deg, color-mix(in srgb, var(--color-accent) 32%, var(--color-surface-muted)), color-mix(in srgb, var(--color-accent-contrast) 28%, var(--color-surface)));
+    box-shadow: var(--shadow-card);
+    border-color: color-mix(in srgb, var(--color-accent) 40%, var(--color-border-strong));
+    color: var(--color-text-strong);
+}
+
+.menu-wrapper {
+    position: relative;
+}
+
+.menu-toggle {
+    min-width: 44px;
+    height: 34px;
+    padding: 6px 10px;
+    border-radius: var(--radius-md);
+    border: 1px solid var(--color-border-strong);
+    background: linear-gradient(180deg, var(--color-surface), var(--color-surface-muted));
+    color: var(--color-text-strong);
+    font-weight: var(--font-weight-medium);
+    box-shadow: var(--shadow-soft);
+    letter-spacing: 0.02em;
+}
+
+.menu-dots {
+    display: inline-block;
+    font-size: 19px;
+    line-height: 1;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+}
+
+.header-hidden-triggers {
+    display: none !important;
+}
+
+.menu-divider {
+    height: 1px;
+    background: color-mix(in srgb, var(--color-border) 80%, transparent);
+    margin: 4px 0;
+}
+
+.menu-dropdown {
+    position: absolute;
+    top: calc(100% + 6px);
+    right: 0;
+    min-width: 160px;
+    padding: 6px;
+    background: var(--color-surface);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-md);
+    box-shadow: var(--shadow-card);
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    z-index: 9000;
+}
+
+.menu-dropdown.hidden {
+    display: none;
+}
+
+.menu-item {
+    display: block;
+    width: 100%;
+    text-align: left;
+    padding: 8px 10px;
+    border-radius: var(--radius-sm);
+    border: 1px solid transparent;
+    background: transparent;
+    color: var(--color-text-strong);
+    font-weight: var(--font-weight-medium);
+    cursor: pointer;
+    text-decoration: none;
+    transition: background 0.12s ease, border-color 0.12s ease, color 0.12s ease;
+}
+
+.menu-item:hover {
+    background: color-mix(in srgb, var(--color-accent) 10%, var(--color-surface-muted));
+    border-color: color-mix(in srgb, var(--color-accent) 20%, var(--color-border));
+}
+
+.menu-item:focus-visible {
+    outline: var(--focus-ring);
+    outline-offset: var(--focus-offset);
 }
 
 .theme-switcher {
@@ -245,6 +325,32 @@
     cursor: pointer;
     box-shadow: 0 8px 20px color-mix(in srgb, var(--color-inverse) 20%, transparent);
     transition: background 0.15s ease, border-color 0.15s ease, transform 0.12s ease;
+}
+
+.theme-toggle-btn {
+    min-width: 68px;
+    height: 34px;
+    padding: 6px 12px;
+    border-radius: var(--radius-md);
+    border: 1px solid var(--color-border-strong);
+    background: linear-gradient(180deg, var(--color-surface), var(--color-surface-muted));
+    color: var(--color-text-strong);
+    font-weight: var(--font-weight-medium);
+    box-shadow: var(--shadow-soft);
+}
+
+.theme-toggle-btn:hover {
+    background: linear-gradient(180deg, color-mix(in srgb, var(--color-surface-muted) 80%, var(--color-accent) 20%), var(--color-surface));
+    border-color: color-mix(in srgb, var(--color-accent) 25%, var(--color-border-strong));
+}
+
+.theme-toggle-btn:focus-visible {
+    outline: var(--focus-ring);
+    outline-offset: var(--focus-offset);
+}
+
+.theme-toggle-hidden {
+    display: none;
 }
 
 .theme-chip:hover {
@@ -270,7 +376,7 @@
 
 .theme-menu {
     position: absolute;
-    top: calc(100% + 8px);
+    top: calc(100% + 6px);
     right: 0;
     min-width: 220px;
     max-width: 280px;

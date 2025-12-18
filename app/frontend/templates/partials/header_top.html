@@ -32,30 +32,39 @@
     </div>
     <div class="header-actions compact-actions">
         {% for action in header_actions %}
-        {% if action.type == "icon" %}
-            <a href="{{ action.href }}" class="icon-button{{ ' ' + action.classes if action.classes else '' }}" aria-label="{{ action.label }}" title="{{ action.title or action.label }}" {% if action.id %}id="{{ action.id }}"{% endif %}>
-                {% if action.icon_text %}{{ action.icon_text }}{% else %}{{ render_icon(action.icon) }}{% endif %}
-            </a>
-        {% elif action.type == "icon_button" %}
-            <button type="button" class="icon-button{{ ' ' + action.classes if action.classes else '' }}" aria-label="{{ action.label }}" title="{{ action.title or action.label }}" {% if action.id %}id="{{ action.id }}"{% endif %}>
-                {% if action.icon_text %}{{ action.icon_text }}{% else %}{{ render_icon(action.icon) }}{% endif %}
-            </button>
-        {% elif action.type == "link" %}
+            {% if action.type == "button" and action.href %}
                 <a href="{{ action.href }}" class="{{ action.class or 'btn btn-secondary' }}" {% if action.id %}id="{{ action.id }}"{% endif %}>{{ action.label }}</a>
             {% elif action.type == "button" %}
                 <button type="button" class="{{ action.class or 'btn btn-secondary' }}" {% if action.id %}id="{{ action.id }}"{% endif %}>{{ action.label }}</button>
-            {% elif action.type == "pill" %}
-                <span class="{{ action.class or 'pill version-pill' }}" {% if action.id %}id="{{ action.id }}"{% endif %}>{{ action.label }}</span>
+            {% elif action.type == "menu" %}
+                <div class="menu-wrapper">
+                    <button type="button" class="btn btn-secondary menu-toggle" id="{{ action.id }}" aria-haspopup="true" aria-expanded="false" aria-label="{{ action.label }}"><span class="menu-dots">⋮</span></button>
+                    <div class="menu-dropdown hidden" id="{{ action.id }}-dropdown" role="menu">
+                        {% for item in action.entries %}
+                            {% if item.type == "divider" %}
+                                <div class="menu-divider" role="separator"></div>
+                            {% elif item.href %}
+                                <a href="{{ item.href }}" class="menu-item" {% if item.id %}id="{{ item.id }}"{% endif %}>{{ item.label }}</a>
+                            {% else %}
+                                <button type="button" class="menu-item" {% if item.id %}id="{{ item.id }}"{% endif %}>{{ item.label }}</button>
+                            {% endif %}
+                        {% endfor %}
+                    </div>
+                </div>
             {% endif %}
         {% endfor %}
         {% if theme_switcher %}
             <div class="theme-switcher">
-                <button type="button" class="theme-chip" id="theme-toggle" aria-haspopup="true" aria-expanded="false">
+                <button type="button" class="btn btn-secondary theme-toggle-btn theme-toggle-hidden" id="theme-toggle" aria-haspopup="true" aria-expanded="false">
                     <span class="theme-chip-label">Theme</span>
                     <span class="theme-chip-value" id="theme-toggle-label">–</span>
                 </button>
                 <div class="theme-menu hidden" id="theme-menu" role="menu" aria-label="Theme auswählen"></div>
             </div>
         {% endif %}
+    </div>
+    <div class="header-hidden-triggers">
+        <button type="button" id="admin-button" class="hidden" aria-hidden="true" tabindex="-1"></button>
+        <button type="button" id="feedback-trigger" class="hidden" aria-hidden="true" tabindex="-1"></button>
     </div>
 </div>

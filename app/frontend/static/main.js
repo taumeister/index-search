@@ -1484,6 +1484,28 @@ if (zenToggle) {
     });
 }
 
+const themeToggleHeader = document.getElementById("theme-toggle-header");
+if (themeToggleHeader) {
+    themeToggleHeader.addEventListener("click", (e) => {
+        e.stopPropagation();
+        toggleThemeMenu();
+    });
+}
+const navHome = document.getElementById("nav-home");
+if (navHome) {
+    navHome.addEventListener("click", () => {
+        window.location.href = "/";
+    });
+}
+const navHomeLinks = document.querySelectorAll("a[href='/']");
+if (!navHome && navHomeLinks.length === 0) {
+    // Fallback, falls Buttons durch Templates ohne Script geladen werden
+    const btns = document.querySelectorAll("#nav-home");
+    btns.forEach((btn) => {
+        btn.addEventListener("click", () => (window.location.href = "/"));
+    });
+}
+
 const loadMoreBtn = document.getElementById("load-more");
 if (loadMoreBtn) {
     loadMoreBtn.addEventListener("click", () => {
@@ -1504,6 +1526,55 @@ if (loadMoreBtn) {
         }
     });
 }
+
+// Header menu
+function setupHeaderMenu() {
+    const toggle = document.getElementById("header-menu");
+    const dropdown = document.getElementById("header-menu-dropdown");
+    if (!toggle || !dropdown) return;
+    const closeMenu = () => {
+        dropdown.classList.add("hidden");
+        toggle.setAttribute("aria-expanded", "false");
+    };
+    const openMenu = () => {
+        dropdown.classList.remove("hidden");
+        toggle.setAttribute("aria-expanded", "true");
+    };
+    const toggleMenu = () => {
+        if (dropdown.classList.contains("hidden")) openMenu();
+        else closeMenu();
+    };
+    toggle.addEventListener("click", (e) => {
+        e.stopPropagation();
+        toggleMenu();
+    });
+    document.addEventListener("click", (e) => {
+        if (!dropdown.contains(e.target) && e.target !== toggle) {
+            closeMenu();
+        }
+    });
+    document.addEventListener("keydown", (e) => {
+        if (e.key === "Escape") closeMenu();
+    });
+    const adminBtn = document.getElementById("admin-button-menu");
+    if (adminBtn) {
+        adminBtn.addEventListener("click", () => {
+            closeMenu();
+            const adminTrigger = document.getElementById("admin-button");
+            if (adminTrigger) adminTrigger.click();
+        });
+    }
+    const feedbackBtn = document.getElementById("feedback-trigger-menu");
+    if (feedbackBtn) {
+        feedbackBtn.addEventListener("click", () => {
+            closeMenu();
+            const trigger = document.getElementById("feedback-trigger");
+            if (trigger) trigger.click();
+        });
+    }
+}
+
+setupHeaderMenu();
 
 setupPopup();
 setupPreviewResizer();

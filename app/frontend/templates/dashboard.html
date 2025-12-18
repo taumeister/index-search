@@ -39,8 +39,7 @@
     {% set header_eyebrow = None %}
     {% set version_badge = None %}
     {% set header_actions = [
-        {"type":"icon","href":"/","label":"Suche","icon":"search"},
-        {"type":"icon","href":"/metrics","label":"Metrics","icon":"metrics"}
+        {"type":"button","label":"Zur Suche","id":"nav-home","class":"btn btn-secondary","href":"/"}
     ] %}
     <header class="app-header">
         {% include "partials/header_top.html" with context %}

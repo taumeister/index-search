@@ -1,5 +1,11 @@
 # Release-Notizen
 
+## v0.3.15
+- Header: ZEN/Theme/Burger stilistisch vereinheitlicht; Burger nur als Punkte, Theme-Dropdown bündig; Admin/Feedback im Menü mit funktionierendem Trigger.
+- Navigation: Buttons „Zur Suche“ auf Dashboard/Metrics als Links mit Theme-Style; Extra-Buttons entfernt.
+- Zen/Theme: Doppelter Theme-Button entfernt, versteckte Trigger bereinigt.
+- Tests: API-/Source-Filter-Tests weiterhin grün.
+
 ## v0.3.14
 - Zen-Modus für die Trefferliste: Toggle im Header, sichtbare Treffer stufenweise 6/12/alle, ruhigeres Layout mit größeren Fonts/Spacing.
 - Normalmodus bleibt kompakt; Snippet-/Spalten-Layout stabilisiert (kein Überlaufen/Überdecken, Auszug bleibt in seiner Spalte).
