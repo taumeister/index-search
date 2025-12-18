@@ -76,9 +76,9 @@
 }
 
 [data-zen="true"] .search-bar {
-    margin-top: 0;
+    margin-top: 20px;
     gap: 6px;
-    transform: translateY(-6px);
+    transform: none;
     filter: none;
     transition-delay: 0ms;
     max-height: 120px;
