@@ -16,10 +16,14 @@
     transform: translateY(0) scale(1);
     transition: margin var(--zen-transition-duration) var(--zen-transition-ease), transform var(--zen-transition-duration) var(--zen-transition-ease), filter var(--zen-transition-duration) var(--zen-transition-ease);
     transition-delay: 80ms;
+    max-height: 200px;
+    overflow: visible;
 }
 
 .search-input-wrap {
     position: relative;
+    flex: 1 1 340px;
+    min-width: 240px;
 }
 
 .search-bar input {
@@ -69,11 +73,35 @@
 }
 
 [data-zen="true"] .search-bar {
-    margin-top: 2px;
-    gap: 8px;
-    transform: translateY(-2px) scale(1.005);
-    filter: drop-shadow(0 8px 14px rgba(0, 0, 0, 0.06));
+    margin-top: 0;
+    gap: 6px;
+    transform: translateY(-6px);
+    filter: none;
     transition-delay: 0ms;
+    max-height: 120px;
+    height: auto;
+    opacity: 1;
+    pointer-events: auto;
+    overflow-x: auto;
+    overflow-y: hidden;
+    flex-wrap: nowrap;
+    align-items: center;
+}
+
+[data-zen="true"] .search-bar > * {
+    flex-shrink: 0;
+}
+
+[data-zen="true"] .search-input-wrap {
+    flex: 1 1 320px;
+    min-width: 200px;
+}
+
+[data-zen="true"] #source-filter,
+[data-zen="true"] .search-mode,
+[data-zen="true"] .type-filter,
+[data-zen="true"] .filters {
+    flex: 0 0 auto;
 }
 
 [data-zen="true"] .zen-slot {

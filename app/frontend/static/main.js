@@ -703,6 +703,12 @@ function setupAdminControls() {
         return;
     }
 
+    function setAdminOverlayOpen(state) {
+        document.documentElement.setAttribute("data-admin-open", state ? "true" : "false");
+    }
+
+    setAdminOverlayOpen(false);
+
     function setStatus(kind, text) {
         statusEl.classList.remove("error", "success", "hidden");
         if (!text) {
@@ -734,6 +740,7 @@ function setupAdminControls() {
         renderAdminUi();
         modal.classList.remove("hidden");
         input.value = "";
+        setAdminOverlayOpen(true);
         document.body.classList.add("dialog-open");
         document.body.style.overflow = "hidden";
         try {
@@ -747,6 +754,7 @@ function setupAdminControls() {
         modal.classList.add("hidden");
         setStatus("", "");
         input.value = "";
+        setAdminOverlayOpen(false);
         document.body.classList.remove("dialog-open");
         document.body.style.overflow = "";
     }

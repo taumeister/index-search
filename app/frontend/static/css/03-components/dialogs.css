@@ -42,7 +42,7 @@
     background: var(--color-overlay);
     backdrop-filter: blur(3px);
     -webkit-backdrop-filter: blur(3px);
-    z-index: 12000;
+    z-index: 20000;
     padding: 12px;
 }
 
