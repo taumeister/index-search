@@ -96,6 +96,39 @@
     gap: 8px;
 }
 
+.about-hero {
+    display: flex;
+    justify-content: center;
+    margin: 4px 0 8px;
+}
+
+.about-avatar {
+    width: 120px;
+    height: 120px;
+    object-fit: cover;
+    border-radius: 18px;
+    box-shadow: var(--shadow-card);
+    border: 1px solid var(--color-border-strong);
+}
+
+.about-author-meta {
+    display: flex;
+    align-items: baseline;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
+.about-email {
+    color: var(--color-accent-strong);
+    text-decoration: none;
+    font-weight: 600;
+}
+
+.about-email:hover,
+.about-email:focus-visible {
+    text-decoration: underline;
+}
+
 .dialog-label {
     font-size: 13px;
     color: var(--color-muted);

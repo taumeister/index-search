@@ -1724,19 +1724,20 @@ function setupHeaderMenu() {
     if (aboutBtn) {
         aboutBtn.addEventListener("click", () => {
             closeMenu();
-            openAboutOverlay();
+            if (typeof window.openAboutOverlay === "function") {
+                window.openAboutOverlay();
+            }
         });
     }
 }
 
 function setupAboutOverlay() {
     const overlay = document.getElementById("about-overlay");
-    const closeBtn = document.getElementById("about-close");
     const okBtn = document.getElementById("about-ok");
     const titleEl = document.getElementById("about-title");
     const sloganEl = document.getElementById("about-slogan");
     const descEl = document.getElementById("about-description");
-    if (!overlay || !closeBtn || !okBtn) {
+    if (!overlay || !okBtn) {
         return;
     }
     const setOpen = (state) => {
@@ -1761,7 +1762,6 @@ function setupAboutOverlay() {
         setOpen(true);
     };
     const close = () => setOpen(false);
-    closeBtn.addEventListener("click", close);
     okBtn.addEventListener("click", close);
     overlay.addEventListener("click", (e) => {
         if (e.target === overlay) close();

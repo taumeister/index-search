@@ -188,12 +188,16 @@
                     <div class="dialog-title" id="about-title">Velvet Admin Eclipse</div>
                     <div class="dialog-muted" id="about-slogan"></div>
                 </div>
-                <button type="button" class="btn btn-ghost" id="about-close">Schließen</button>
             </div>
             <div class="dialog-body">
+                <div class="about-hero">
+                    <img src="/static/img/author.jpg" alt="Portrait von Thomas Particke" class="about-avatar" />
+                </div>
                 <div class="dialog-label">Autor</div>
-                <div class="dialog-strong">Thomas Particke</div>
-                <div class="dialog-muted"><a href="mailto:taumeister@gmail.com" class="link">taumeister@gmail.com</a></div>
+                <div class="about-author-meta">
+                    <div class="dialog-strong">Thomas Particke</div>
+                    <a href="mailto:taumeister@gmail.com" class="about-email">taumeister@gmail.com</a>
+                </div>
                 <div class="dialog-divider"></div>
                 <div class="dialog-label">Version</div>
                 <div class="dialog-strong" id="about-version">{{ app_version }}</div>
