@@ -43,6 +43,13 @@ let availableSources = [];
 let activeSourceLabels = new Set();
 let adminState = { admin: false, fileOpsEnabled: false, readySources: [] };
 let adminReadySources = new Set();
+let adminAlwaysOn = Boolean(
+    typeof window !== "undefined" &&
+        (window.adminAlwaysOn === true || String(window.adminAlwaysOn || "").toLowerCase() === "true")
+);
+if (typeof document !== "undefined") {
+    document.documentElement.setAttribute("data-admin-always-on", adminAlwaysOn ? "true" : "false");
+}
 if (typeof window !== "undefined" && !window.openAdminModal) {
     window.openAdminModal = () => console.error("[admin] Admin-Overlay nicht initialisiert.");
 }
@@ -639,14 +646,18 @@ function renderAdminUi() {
     const statusLabel = document.getElementById("admin-status-label");
     const readyListEl = document.getElementById("admin-ready-list");
     const available = adminState.fileOpsEnabled && adminReadySources.size > 0;
-    const showButton = available || adminState.admin;
+    const showButton = available || adminState.admin || adminAlwaysOn;
     if (btn) {
         btn.classList.toggle("hidden", !showButton);
-        btn.classList.toggle("active", adminState.admin);
-        btn.title = available ? "Admin" : "Admin-Funktionen nicht verfügbar";
+        btn.classList.toggle("active", adminState.admin || adminAlwaysOn);
+        btn.title = adminAlwaysOn
+            ? "Admin dauerhaft aktiv"
+            : available
+              ? "Admin"
+              : "Admin-Funktionen nicht verfügbar";
     }
     if (statusLabel) {
-        statusLabel.textContent = adminState.admin ? "Admin-Modus aktiv" : "Admin-Modus aus";
+        statusLabel.textContent = adminState.admin || adminAlwaysOn ? "Admin-Modus aktiv" : "Admin-Modus aus";
     }
     if (readyListEl) {
         if (!available) {
@@ -658,7 +669,14 @@ function renderAdminUi() {
 }
 
 function updateAdminState(data) {
-    adminState.admin = Boolean(data && data.admin);
+    const fromApi = data && typeof data.admin_always_on !== "undefined" ? data.admin_always_on : adminAlwaysOn;
+    adminAlwaysOn = Boolean(fromApi);
+    try {
+        document.documentElement.setAttribute("data-admin-always-on", adminAlwaysOn ? "true" : "false");
+    } catch (_) {
+        /* ignore */
+    }
+    adminState.admin = Boolean(adminAlwaysOn || (data && data.admin));
     adminState.fileOpsEnabled = Boolean(data && data.file_ops_enabled);
     const readyList = Array.isArray(data && data.quarantine_ready_sources) ? data.quarantine_ready_sources : [];
     adminState.readySources = readyList;
@@ -707,6 +725,22 @@ function setupAdminControls() {
         document.documentElement.setAttribute("data-admin-open", state ? "true" : "false");
     }
 
+    if (adminAlwaysOn) {
+        setAdminOverlayOpen(false);
+        modal.classList.add("hidden");
+        document.body.classList.remove("dialog-open");
+        document.body.style.overflow = "";
+        window.openAdminModal = () => {};
+        btn.addEventListener("click", (e) => {
+            e.preventDefault();
+            renderAdminUi();
+        });
+        loginBtn.disabled = true;
+        logoutBtn.disabled = true;
+        input.disabled = true;
+        return;
+    }
+
     setAdminOverlayOpen(false);
 
     function setStatus(kind, text) {
@@ -731,6 +765,10 @@ function setupAdminControls() {
     }
 
     async function openModal(options = {}) {
+        if (adminAlwaysOn) {
+            renderAdminUi();
+            return;
+        }
         const opts = typeof options === "object" && options !== null ? options : {};
         const forceReauth = opts.forceReauth !== false;
         setStatus("", "");
@@ -760,6 +798,11 @@ function setupAdminControls() {
     }
 
     async function submitLogin() {
+        if (adminAlwaysOn) {
+            setStatus("success", "Admin-Modus dauerhaft aktiv.");
+            setTimeout(() => closeModal(), 200);
+            return;
+        }
         const password = input.value || "";
         setStatus("", "");
         try {
@@ -790,6 +833,11 @@ function setupAdminControls() {
     }
 
     async function submitLogout() {
+        if (adminAlwaysOn) {
+            closeModal();
+            renderAdminUi();
+            return;
+        }
         setStatus("", "");
         await forceLogout("manual");
         closeModal();

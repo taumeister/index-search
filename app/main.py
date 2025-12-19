@@ -45,6 +45,7 @@ _auto_scheduler: Optional[AutoIndexScheduler] = None
 ADMIN_SESSION_COOKIE = "admin_session"
 ADMIN_SESSION_TTL_SEC = 12 * 3600
 _ADMIN_PASSWORD_CACHE: Optional[str] = None
+_ADMIN_ALWAYS_ON_VALUES = {"1", "true", "yes", "on"}
 
 mimetypes.add_type("application/manifest+json", ".webmanifest")
 
@@ -154,6 +155,11 @@ def _admin_token_secret() -> str:
     return f"{ensure_app_secret()}::{get_admin_password()}"
 
 
+def is_admin_always_on() -> bool:
+    val = os.getenv("ADMIN_ALWAYS_ON", "").strip().lower()
+    return val in _ADMIN_ALWAYS_ON_VALUES
+
+
 def issue_admin_token() -> str:
     issued = int(time.time())
     nonce = secrets.token_hex(8)
@@ -185,6 +191,8 @@ def verify_admin_token(token: Optional[str]) -> bool:
 
 
 def is_admin(request: Request) -> bool:
+    if is_admin_always_on():
+        return True
     token = request.cookies.get(ADMIN_SESSION_COOKIE)
     return verify_admin_token(token)
 
@@ -286,6 +294,7 @@ def create_app(config: Optional[CentralConfig] = None) -> FastAPI:
     db.init_db()
     metrics.init_metrics()
     ensure_metrics_background()
+    admin_always_on = is_admin_always_on()
 
     def readiness_error_response(roots: list[tuple[Path, str]]):
         result = check_sources_readiness_for_index(roots)
@@ -358,12 +367,13 @@ def create_app(config: Optional[CentralConfig] = None) -> FastAPI:
                 "search_default_mode": getattr(config.ui, "search_default_mode", "standard"),
                 "search_prefix_minlen": getattr(config.ui, "search_prefix_minlen", 4),
                 "feedback_enabled": feedback_enabled,
+                "admin_always_on": admin_always_on,
             },
         )
 
     @app.get("/dashboard", response_class=HTMLResponse)
     def dashboard(request: Request):
-        return templates.TemplateResponse("dashboard.html", {"request": request, "app_version": app_version})
+        return templates.TemplateResponse("dashboard.html", {"request": request, "app_version": app_version, "admin_always_on": admin_always_on})
 
     @app.get("/viewer", response_class=HTMLResponse)
     def viewer(request: Request, id: int = Query(...)):
@@ -373,12 +383,13 @@ def create_app(config: Optional[CentralConfig] = None) -> FastAPI:
                 "request": request,
                 "doc_id": id,
                 "app_version": app_version,
+                "admin_always_on": admin_always_on,
             },
         )
 
     @app.get("/metrics", response_class=HTMLResponse)
     def metrics_page(request: Request):
-        return templates.TemplateResponse("metrics.html", {"request": request, "app_version": app_version})
+        return templates.TemplateResponse("metrics.html", {"request": request, "app_version": app_version, "admin_always_on": admin_always_on})
 
     def serialize_status(st: Any) -> Dict[str, Any]:
         return {
@@ -863,6 +874,7 @@ def create_app(config: Optional[CentralConfig] = None) -> FastAPI:
                 last_run = dict(status["last_run"]) if status["last_run"] else None
                 return {
                     "admin": admin_flag,
+                    "admin_always_on": admin_always_on,
                     "file_ops_enabled": ops_state["file_ops_enabled"],
                     "quarantine_ready_sources": ops_state["quarantine_ready_sources"],
                     "quarantine_retention_days": ops_state.get("quarantine_retention_days"),
@@ -884,6 +896,7 @@ def create_app(config: Optional[CentralConfig] = None) -> FastAPI:
             logger.error("Admin-Status fehlgeschlagen: %s", exc, exc_info=True)
             fallback = {
                 "admin": admin_flag,
+                "admin_always_on": admin_always_on,
                 "file_ops_enabled": ops_state.get("file_ops_enabled", False),
                 "quarantine_ready_sources": ops_state.get("quarantine_ready_sources", []),
                 "quarantine_retention_days": ops_state.get("quarantine_retention_days"),
@@ -919,12 +932,17 @@ def create_app(config: Optional[CentralConfig] = None) -> FastAPI:
         )
         file_ops.refresh_quarantine_state()
         ops_state = file_ops.get_status()
-        return {"admin": True, "file_ops_enabled": ops_state["file_ops_enabled"], "quarantine_ready_sources": ops_state["quarantine_ready_sources"]}
+        return {
+            "admin": True,
+            "admin_always_on": admin_always_on,
+            "file_ops_enabled": ops_state["file_ops_enabled"],
+            "quarantine_ready_sources": ops_state["quarantine_ready_sources"],
+        }
 
     @app.post("/api/admin/logout")
     def admin_logout(response: Response, _auth: bool = Depends(require_secret)):
         response.delete_cookie(ADMIN_SESSION_COOKIE, path="/")
-        return {"admin": False}
+        return {"admin": admin_always_on, "admin_always_on": admin_always_on}
 
     @app.get("/api/admin/roots")
     def admin_roots(_auth: bool = Depends(require_secret)):

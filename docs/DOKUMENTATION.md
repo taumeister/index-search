@@ -7,6 +7,7 @@
 - Konfiguration: ENV-Variablen für Basis-Settings (Docker/Compose) plus SQLite-basierte Config-DB `config/config.db` für UI/Roots.
 - Auth: Alle API-Endpunkte (Suche, Dokument, Admin) verlangen `APP_SECRET`, das aus `.env` gelesen oder beim ersten Start erzeugt wird.
 - Admin-Passwort: Backend liest `ADMIN_PASSWORD` (Default `admin`), Vorgabe per ENV/Compose setzen; Passwort wird nicht im Frontend gespeichert, erneutes Öffnen des Admin-Overlays erfordert Re-Auth.
+- Admin-Always-On: Optional per `ADMIN_ALWAYS_ON=true` (Default false). Nur in vertrauenswürdigen Setups nutzen; ersetzt nicht das `APP_SECRET`. Siehe `docs/ADMIN_ALWAYS_ON.md`.
 - Feedback: Aktivierbar über `FEEDBACK_ENABLED`/`FEEDBACK_TO` und SMTP-Settings; im UI öffnet der Feedback-Button ein Overlay mit WYSIWYG-Light-Toolbar (Fett/Kursiv/Listen), 5000-Zeichen-Limit, Bestätigung und Versand via `/api/feedback`.
 
 ## Verzeichnisstruktur

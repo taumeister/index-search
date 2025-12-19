@@ -45,6 +45,7 @@
         window.searchPrefixMinLen = {{ search_prefix_minlen }};
         window.feedbackEnabled = {{ "true" if feedback_enabled else "false" }};
         window.appVersion = {{ (app_version or "v?") | tojson }};
+        window.adminAlwaysOn = {{ "true" if admin_always_on else "false" }};
     </script>
 </head>
 <body>

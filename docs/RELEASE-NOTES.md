@@ -1,5 +1,11 @@
 # Release-Notizen
 
+## v0.3.19 - Velvet Admin Eclipse
+- Admin-Always-On per Env `ADMIN_ALWAYS_ON=true` (Default false), Compose-Env + `.env`/`.env.example` ergänzt; Backend-Admin-Checks akzeptieren den Modus ohne Passwort, `admin_always_on` wird über `/api/admin/status` ausgespielt.
+- Frontend erkennt das Flag (Template + Status-API), überspringt das Admin-Overlay und zeigt Admin-UI sofort; Standardverhalten unverändert.
+- Tests: Backend-Cases für Always-On-Admin (File-Op ohne Login, Status-Flag).
+- Doku: Ausgebautes `docs/ADMIN_ALWAYS_ON.md`, Hinweis in `docs/DOKUMENTATION.md`.
+
 ## v0.3.17
 - PWA-Installierbarkeit: Manifest (Root/Scope `/`), Icons (192/512 + maskable), Theme-/Apple-Meta in allen Seitenköpfen.
 - Service Worker minimal (pass-through, skipWaiting/clients.claim, kein Offline-Cache) mit no-cache-Header; Manifest liefert `application/manifest+json`.
