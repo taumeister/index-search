@@ -92,13 +92,20 @@
     --focus-offset: 2px;
 
     /* Controls (Search + Filter) */
-    --control-font-size: 13px;
+    --control-font-size: 12px;
     --control-font-weight: 600;
     --control-padding-y: 6px;
     --control-padding-x: 10px;
     --control-height: 33px;
-    --control-radius: 9px;
+    --control-radius: 8px;
     --control-chip-radius: 8px;
+    /* Input-specific overrides */
+    --input-font-size: 12px;
+    --input-font-weight: 600;
+    --input-padding-y: 5px;
+    --input-padding-x: 10px;
+    --input-height: 25px;
+    --input-radius: 8px;
 
     /* Metrics/Matrix */
     --panel-bg: var(--color-panel);
