@@ -98,13 +98,15 @@
 
 .about-hero {
     display: flex;
-    justify-content: center;
+    justify-content: flex-end;
     margin: 4px 0 8px;
 }
 
 .about-avatar {
     width: 120px;
-    height: 120px;
+    height: auto;
+    max-width: 140px;
+    aspect-ratio: 1 / 1;
     object-fit: cover;
     border-radius: 18px;
     box-shadow: var(--shadow-card);
