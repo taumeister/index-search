@@ -1589,6 +1589,7 @@ setupMoveDialog();
 refreshAdminStatus();
 document.getElementById("search-input").addEventListener("input", debounceSearch);
 setupSearchFavorites();
+setupAboutOverlay();
 const zenToggle = document.getElementById("zen-toggle");
 if (zenToggle) {
     setZenMode(false);
@@ -1718,6 +1719,59 @@ function setupHeaderMenu() {
             if (trigger) trigger.click();
         });
     }
+
+    const aboutBtn = document.getElementById("menu-about");
+    if (aboutBtn) {
+        aboutBtn.addEventListener("click", () => {
+            closeMenu();
+            openAboutOverlay();
+        });
+    }
+}
+
+function setupAboutOverlay() {
+    const overlay = document.getElementById("about-overlay");
+    const closeBtn = document.getElementById("about-close");
+    const okBtn = document.getElementById("about-ok");
+    const titleEl = document.getElementById("about-title");
+    const sloganEl = document.getElementById("about-slogan");
+    const descEl = document.getElementById("about-description");
+    if (!overlay || !closeBtn || !okBtn) {
+        return;
+    }
+    const setOpen = (state) => {
+        overlay.classList.toggle("hidden", !state);
+        document.body.classList.toggle("dialog-open", state);
+        document.body.style.overflow = state ? "hidden" : "";
+    };
+    const fillContent = () => {
+        if (titleEl) {
+            titleEl.textContent = window.appTitle || document.title || "Index-Suche";
+        }
+        if (sloganEl) {
+            sloganEl.textContent = window.appSlogan || "";
+            sloganEl.classList.toggle("hidden", !sloganEl.textContent);
+        }
+        if (descEl && !descEl.textContent) {
+            descEl.textContent = "Index-Suche mit Explorer-UI, Quarantäne-Workflow und Metrics.";
+        }
+    };
+    const open = () => {
+        fillContent();
+        setOpen(true);
+    };
+    const close = () => setOpen(false);
+    closeBtn.addEventListener("click", close);
+    okBtn.addEventListener("click", close);
+    overlay.addEventListener("click", (e) => {
+        if (e.target === overlay) close();
+    });
+    document.addEventListener("keydown", (e) => {
+        if (e.key === "Escape" && !overlay.classList.contains("hidden")) {
+            close();
+        }
+    });
+    window.openAboutOverlay = open;
 }
 
 setupHeaderMenu();

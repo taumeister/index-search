@@ -45,6 +45,8 @@
         window.searchPrefixMinLen = {{ search_prefix_minlen }};
         window.feedbackEnabled = {{ "true" if feedback_enabled else "false" }};
         window.appVersion = {{ (app_version or "v?") | tojson }};
+        window.appTitle = {{ (app_title or "Dokumenten-Volltextsuche") | tojson }};
+        window.appSlogan = {{ (app_slogan or "Kanzlei Schmitt, wir können nur Enterprise...") | tojson }};
         window.adminAlwaysOn = {{ "true" if admin_always_on else "false" }};
     </script>
 </head>
@@ -60,7 +62,9 @@
         {"label":"Feedback","id":"feedback-trigger-menu","action":"feedback"} if feedback_enabled else None,
         {"label":"divider","type":"divider"},
         {"label":"Dashboard","href":"/dashboard","id":"menu-dashboard"},
-        {"label":"Metrics","href":"/metrics","id":"menu-metrics"}
+        {"label":"Metrics","href":"/metrics","id":"menu-metrics"},
+        {"label":"divider","type":"divider"},
+        {"label":"Über","id":"menu-about"}
     ] | select | list %}
 {% set menu_items = base_menu_items %}
 {% set header_actions = [
@@ -175,6 +179,33 @@
             <div id="preview-content"></div>
         </section>
     </main>
+
+    <div id="about-overlay" class="dialog-overlay hidden">
+        <div class="dialog-card">
+            <div class="dialog-title-row">
+                <div>
+                    <div class="dialog-eyebrow">Über</div>
+                    <div class="dialog-title" id="about-title">Velvet Admin Eclipse</div>
+                    <div class="dialog-muted" id="about-slogan"></div>
+                </div>
+                <button type="button" class="btn btn-ghost" id="about-close">Schließen</button>
+            </div>
+            <div class="dialog-body">
+                <div class="dialog-label">Autor</div>
+                <div class="dialog-strong">Thomas Particke</div>
+                <div class="dialog-muted"><a href="mailto:taumeister@gmail.com" class="link">taumeister@gmail.com</a></div>
+                <div class="dialog-divider"></div>
+                <div class="dialog-label">Version</div>
+                <div class="dialog-strong" id="about-version">{{ app_version }}</div>
+                <div class="dialog-divider"></div>
+                <div class="dialog-label">Über die App</div>
+                <div class="dialog-muted" id="about-description">Index-Suche mit Explorer-UI, Quarantäne-Workflow und Metrics – gebaut für schnelle Volltextsuche.</div>
+            </div>
+            <div class="dialog-actions">
+                <button type="button" class="btn btn-primary" id="about-ok">Okay</button>
+            </div>
+        </div>
+    </div>
 
     <div id="preview-popup" class="modal hidden">
         <div class="modal-content">
