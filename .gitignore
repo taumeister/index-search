@@ -8,3 +8,5 @@ logs/
 .vscode/
 .env
 config/*.db
+test-artifacts/
+tmp/

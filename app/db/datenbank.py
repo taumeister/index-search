@@ -1,10 +1,11 @@
+import os
 import sqlite3
 from contextlib import contextmanager
 from dataclasses import dataclass, asdict
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional, Tuple
 
-DB_PATH = Path("data/index.db")
+DB_PATH = Path(os.getenv("DB_PATH", "data/index.db"))
 
 
 @dataclass

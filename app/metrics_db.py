@@ -1,9 +1,10 @@
+import os
 import sqlite3
 import threading
 from contextlib import contextmanager
 from pathlib import Path
 
-METRICS_DB_PATH = Path("data/metrics.db")
+METRICS_DB_PATH = Path(os.getenv("METRICS_DB_PATH", "data/metrics.db"))
 _lock = threading.Lock()
 
 

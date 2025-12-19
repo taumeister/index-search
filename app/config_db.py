@@ -1,9 +1,10 @@
+import os
 import sqlite3
 from contextlib import contextmanager
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
-CONFIG_DB_PATH = Path("config/config.db")
+CONFIG_DB_PATH = Path(os.getenv("CONFIG_DB_PATH", "config/config.db"))
 
 
 def ensure_db() -> None:

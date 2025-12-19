@@ -1,0 +1,2 @@
+Alpha document for search demo.
+Contains keyword zebra and alpha.

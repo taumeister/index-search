@@ -604,58 +604,6 @@ def touch_heartbeat() -> None:
         pass
 
 
-def process_file(real_path: Path, original_path: Path, source: str, config: CentralConfig, run_id: int) -> Dict[str, str]:
-    try:
-        stat = real_path.stat()
-    except FileNotFoundError:
-        return {"status": "error", "path": str(original_path)}
-
-    max_size = config.indexer.max_file_size_mb
-    if max_size and stat.st_size > max_size * 1024 * 1024:
-        logger.info("Übersprungen (zu groß): %s", original_path)
-        return {"status": "skipped", "path": str(original_path)}
-
-    ext = real_path.suffix.lower()
-    meta = DocumentMeta(
-        source=source,
-        path=str(original_path),
-        filename=original_path.name,
-        extension=ext,
-        size_bytes=stat.st_size,
-        ctime=stat.st_ctime,
-        mtime=stat.st_mtime,
-        atime=stat.st_atime if hasattr(stat, "st_atime") else None,
-        owner=get_owner(stat),
-        last_editor=get_owner(stat),
-    )
-
-    try:
-        with db.get_conn() as conn:
-            existing = db.get_document_by_path(conn, str(original_path))
-            if existing and existing["size_bytes"] == stat.st_size and existing["mtime"] == stat.st_mtime:
-                return {"status": "unchanged", "path": str(original_path)}
-
-        fill_content(meta, real_path, ext)
-        status = "added"
-        with db.get_conn() as conn:
-            if existing:
-                status = "updated"
-            db.upsert_document(conn, meta)
-        return {"status": status, "path": str(original_path)}
-    except Exception as exc:  # pragma: no cover - Schutz gegen Einzeldateifehler
-        logger.error("Fehler bei %s: %s", original_path, exc)
-        with db.get_conn() as conn:
-            db.record_file_error(
-                conn,
-                run_id=run_id,
-                path=str(original_path),
-                error_type=type(exc).__name__,
-                message=str(exc),
-                created_at=datetime.now(timezone.utc).isoformat(),
-            )
-        return {"status": "error", "path": str(original_path)}
-
-
 def fill_content(meta: DocumentMeta, path: Path, ext: str) -> None:
     if ext == ".pdf":
         meta.content = extractors.extract_pdf(path)

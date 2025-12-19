@@ -1,4 +1,3 @@
-import configparser
 import dataclasses
 from dataclasses import field
 import os
@@ -112,12 +111,11 @@ class CentralConfig:
     report_enabled: bool = False
     feedback: FeedbackConfig = field(default_factory=FeedbackConfig)
     quarantine: QuarantineConfig = field(default_factory=QuarantineConfig)
-    raw: Optional[configparser.ConfigParser] = None
 
 
 def load_config(path: Path = Path("config/central_config.ini"), use_env: bool = True) -> CentralConfig:
     """
-    ENV-getriebene Konfiguration für Docker-Betrieb.
+    ENV-getriebene Konfiguration (Docker/Compose); path bleibt nur aus Kompatibilitätsgründen erhalten.
     """
     env_roots = os.getenv("INDEX_ROOTS", "") if use_env else ""
     roots_list: list[tuple[Path, str]] = []
@@ -204,7 +202,6 @@ def load_config(path: Path = Path("config/central_config.ini"), use_env: bool = 
         report_enabled=False,  # Dashboard steuert das Flag
         feedback=feedback_cfg,
         quarantine=quarantine_cfg,
-        raw=None,
     )
 
 
