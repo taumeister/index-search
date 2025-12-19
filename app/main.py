@@ -46,6 +46,8 @@ ADMIN_SESSION_COOKIE = "admin_session"
 ADMIN_SESSION_TTL_SEC = 12 * 3600
 _ADMIN_PASSWORD_CACHE: Optional[str] = None
 
+mimetypes.add_type("application/manifest+json", ".webmanifest")
+
 
 def get_config() -> CentralConfig:
     return load_config()
@@ -323,9 +325,26 @@ def create_app(config: Optional[CentralConfig] = None) -> FastAPI:
 
     app = FastAPI(title="Index-Suche")
     base_dir = Path(__file__).resolve().parent
+    pwa_dir = base_dir / "frontend" / "pwa"
     templates = Jinja2Templates(directory=base_dir / "frontend/templates")
     app.mount("/static", StaticFiles(directory=base_dir / "frontend/static"), name="static")
     LOG_PAGE_SIZE = 200
+
+    @app.get("/manifest.webmanifest")
+    def manifest():
+        path = pwa_dir / "manifest.webmanifest"
+        if not path.exists():
+            raise HTTPException(status_code=404, detail="Manifest nicht gefunden")
+        headers = {"Cache-Control": "public, max-age=3600, must-revalidate"}
+        return FileResponse(path, media_type="application/manifest+json", headers=headers)
+
+    @app.get("/service-worker.js")
+    def service_worker():
+        path = pwa_dir / "service-worker.js"
+        if not path.exists():
+            raise HTTPException(status_code=404, detail="Service Worker nicht gefunden")
+        headers = {"Cache-Control": "no-cache, no-store, must-revalidate"}
+        return FileResponse(path, media_type="application/javascript", headers=headers)
 
     @app.get("/", response_class=HTMLResponse)
     def index(request: Request):

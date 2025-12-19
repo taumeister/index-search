@@ -1,6 +1,12 @@
 # Release-Notizen
 
-# Release-Notizen
+## v0.3.17
+- PWA-Installierbarkeit: Manifest (Root/Scope `/`), Icons (192/512 + maskable), Theme-/Apple-Meta in allen Seitenköpfen.
+- Service Worker minimal (pass-through, skipWaiting/clients.claim, kein Offline-Cache) mit no-cache-Header; Manifest liefert `application/manifest+json`.
+- Öffentliche Auslieferung: FastAPI-Routen `/manifest.webmanifest` und `/service-worker.js`, Icons unter `/static/pwa/`, sichere Registrierung via `pwa.js` nur auf HTTPS/localhost.
+- Tests & Tools: HTTP-PWA-Checks, Playwright-PWA-Smokes (Manifest/SW ready), neues `tools/pwa-test.sh --local|--docker` für lokale und Compose-Läufe.
+- Nutzung: In Chromium/Edge „Installieren“ sollte nun angeboten werden; Start erfolgt als Standalone-Fenster mit unserem Farbthema. Manifest/Icons/SW sind öffentlich abrufbar (kein AppSecret nötig), API-Schutz bleibt unverändert. Bei Subpfad-Deployment `start_url`/`scope` im Manifest und SW-Registrierungs-URL anpassen.
+- Schnelle Verifikation: `./tools/pwa-test.sh --local` (venv + Smoke+PWA) bzw. `./tools/pwa-test.sh --docker --skip-install` (Compose, Port via `PWA_TEST_PORT`/`APP_HTTP_PORT` anpassbar). Einzelne HTTP-Checks: `pytest tests/test_pwa_assets.py`.
 
 ## v0.3.16
 - UX: Move/Copy-Explorer vergrößert und stabilisiert (mehr Ebenen gleichzeitig aufklappbar ohne Layout-Sprünge, Zielpfad immer sichtbar, kompakter Header).

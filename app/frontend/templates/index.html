@@ -32,6 +32,12 @@
         })();
     </script>
     <link rel="stylesheet" href="/static/css/app.css">
+    <link rel="manifest" href="/manifest.webmanifest">
+    <meta name="theme-color" content="#3f8f75">
+    <link rel="apple-touch-icon" href="/static/pwa/icon-192.png">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="mobile-web-app-capable" content="yes">
+    <script src="/static/pwa.js" defer></script>
     <script>
         window.defaultPreview = "{{ default_preview }}";
         window.snippetLength = {{ snippet_length }};
