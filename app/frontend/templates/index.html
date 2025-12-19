@@ -45,15 +45,15 @@
         window.searchPrefixMinLen = {{ search_prefix_minlen }};
         window.feedbackEnabled = {{ "true" if feedback_enabled else "false" }};
         window.appVersion = {{ (app_version or "v?") | tojson }};
-        window.appTitle = {{ (app_title or "Dokumenten-Volltextsuche") | tojson }};
-        window.appSlogan = {{ (app_slogan or "Kanzlei Schmitt, wir können nur Enterprise...") | tojson }};
+        window.appTitle = {{ app_title | tojson }};
+        window.appSlogan = {{ app_slogan | tojson }};
         window.adminAlwaysOn = {{ "true" if admin_always_on else "false" }};
     </script>
 </head>
 <body>
-    {% set header_title = app_title or "Dokumenten-Volltextsuche" %}
+    {% set header_title = app_title %}
     {% set header_subtitle = "" %}
-    {% set header_slogan = app_slogan or "Kanzlei Schmitt, wir können nur Enterprise..." %}
+    {% set header_slogan = app_slogan %}
     {% set header_eyebrow = None %}
     {% set version_badge = app_version or 'v?' %}
     {% set theme_switcher = True %}
@@ -181,7 +181,7 @@
     </main>
 
     <div id="about-overlay" class="dialog-overlay hidden">
-        <div class="dialog-card">
+        <div class="dialog-card about-card">
             <div class="dialog-title-row">
                 <div>
                     <div class="dialog-eyebrow">Über</div>
@@ -189,9 +189,9 @@
                     <div class="dialog-muted" id="about-slogan"></div>
                 </div>
             </div>
-            <div class="dialog-body">
+            <div class="dialog-body about-body">
                 <div class="about-hero">
-                    <img src="/static/img/author.jpg" alt="Portrait von Thomas Particke" class="about-avatar" width="140" height="140" />
+                    <img src="/static/img/author.jpg" alt="Portrait von Thomas Particke" class="about-avatar" width="112" height="132" />
                 </div>
                 <div class="dialog-label">Autor</div>
                 <div class="about-author-meta">
@@ -203,7 +203,11 @@
                 <div class="dialog-strong" id="about-version">{{ app_version }}</div>
                 <div class="dialog-divider"></div>
                 <div class="dialog-label">Über die App</div>
-                <div class="dialog-muted" id="about-description">Index-Suche mit Explorer-UI, Quarantäne-Workflow und Metrics – gebaut für schnelle Volltextsuche.</div>
+                <div class="dialog-strong about-description" id="about-description">Volltextsuche mit Explorer-UI für schnelle Dateifunde.</div>
+                <div class="about-disclaimer">
+                    <div class="about-disclaimer-title">Hinweis & Haftung</div>
+                    Bereitgestellt als privates Projekt ohne Gewährleistung. Keine Haftung für Schäden; Autor ist kein gelernter Entwickler. Bitte nur nach eigener Prüfung einsetzen. Entwicklung teils mit Unterstützung aktueller KI-Tools.
+                </div>
             </div>
             <div class="dialog-actions">
                 <button type="button" class="btn btn-primary" id="about-ok">Okay</button>

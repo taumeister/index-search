@@ -7,6 +7,7 @@
 - Doku: Ausgebautes `docs/ADMIN_ALWAYS_ON.md`, Hinweis in `docs/DOKUMENTATION.md`.
 - Branding per Env: `APP_TITLE`/`APP_SLOGAN` steuern Titel/Slogan im Header (Default bleibt wie bisher), Compose/.env(.example) ergänzt.
 - Burger-Menü: Neuer Eintrag „Über“ mit Overlay im Feedback-Stil (Autor, Version, Titel/Slogan, Kurzbeschreibung).
+- Lizenz: Repository steht unter MIT-Lizenz (`LICENSE`), Software wird „as is“ bereitgestellt.
 
 ## v0.3.17
 - PWA-Installierbarkeit: Manifest (Root/Scope `/`), Icons (192/512 + maskable), Theme-/Apple-Meta in allen Seitenköpfen.

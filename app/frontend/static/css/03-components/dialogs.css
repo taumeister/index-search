@@ -70,6 +70,10 @@
     width: min(720px, 96%);
 }
 
+.about-card {
+    position: relative;
+}
+
 .dialog-title-row {
     display: flex;
     align-items: center;
@@ -96,20 +100,30 @@
     gap: 8px;
 }
 
+.about-body {
+    position: relative;
+    padding-right: 160px;
+    min-height: 180px;
+    gap: 6px;
+}
+
 .about-hero {
     display: flex;
     justify-content: flex-end;
     margin: 4px 0 8px;
     width: 100%;
+    position: absolute;
+    top: 0;
+    right: 0;
 }
 
 .about-avatar {
-    width: 140px;
-    height: 140px;
-    max-width: 140px;
+    width: 112px;
+    height: 132px;
+    max-width: 120px;
     max-height: 140px;
     object-fit: cover;
-    border-radius: 18px;
+    border-radius: 14px;
     box-shadow: var(--shadow-card);
     border: 1px solid var(--color-border-strong);
     flex-shrink: 0;
@@ -118,7 +132,7 @@
 .about-author-meta {
     display: flex;
     align-items: baseline;
-    gap: 8px;
+    gap: 4px;
     flex-wrap: wrap;
 }
 
@@ -131,6 +145,23 @@
 .about-email:hover,
 .about-email:focus-visible {
     text-decoration: underline;
+}
+
+.about-description {
+    color: var(--color-text-strong);
+}
+
+.about-disclaimer {
+    font-size: 12px;
+    color: color-mix(in srgb, var(--color-muted) 40%, var(--color-text-strong) 60%);
+    line-height: 1.5;
+    margin-top: 12px;
+}
+
+.about-disclaimer-title {
+    font-weight: 700;
+    margin-bottom: 4px;
+    color: var(--color-text-strong);
 }
 
 .dialog-label {

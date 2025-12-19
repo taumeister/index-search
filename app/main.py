@@ -326,8 +326,8 @@ def create_app(config: Optional[CentralConfig] = None) -> FastAPI:
     feedback_enabled = bool(getattr(config, "feedback", None) and config.feedback.enabled)
     feedback_recipients = list(getattr(config.feedback, "recipients", []))
     app_version = read_version()
-    app_title = os.getenv("APP_TITLE", "Dokumenten-Volltextsuche")
-    app_slogan = os.getenv("APP_SLOGAN", "Kanzlei Schmitt, wir können nur Enterprise...")
+    app_title = os.getenv("APP_TITLE")
+    app_slogan = os.getenv("APP_SLOGAN")
 
     MAX_SEARCH_LIMIT = 500
     MIN_QUERY_LENGTH = 2

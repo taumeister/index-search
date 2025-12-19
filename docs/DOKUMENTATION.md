@@ -9,6 +9,7 @@
 - Admin-Passwort: Backend liest `ADMIN_PASSWORD` (Default `admin`), Vorgabe per ENV/Compose setzen; Passwort wird nicht im Frontend gespeichert, erneutes Öffnen des Admin-Overlays erfordert Re-Auth.
 - Admin-Always-On: Optional per `ADMIN_ALWAYS_ON=true` (Default false). Nur in vertrauenswürdigen Setups nutzen; ersetzt nicht das `APP_SECRET`. Siehe `docs/ADMIN_ALWAYS_ON.md`.
 - Feedback: Aktivierbar über `FEEDBACK_ENABLED`/`FEEDBACK_TO` und SMTP-Settings; im UI öffnet der Feedback-Button ein Overlay mit WYSIWYG-Light-Toolbar (Fett/Kursiv/Listen), 5000-Zeichen-Limit, Bestätigung und Versand via `/api/feedback`.
+- Lizenz: MIT (siehe `LICENSE`), bereitgestellt „as is“ ohne Gewähr.
 
 ## Verzeichnisstruktur
 - `app/config_loader.py`: Laden/Validieren der zentralen Konfiguration.
