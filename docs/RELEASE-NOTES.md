@@ -5,6 +5,7 @@
 - Frontend erkennt das Flag (Template + Status-API), überspringt das Admin-Overlay und zeigt Admin-UI sofort; Standardverhalten unverändert.
 - Tests: Backend-Cases für Always-On-Admin (File-Op ohne Login, Status-Flag).
 - Doku: Ausgebautes `docs/ADMIN_ALWAYS_ON.md`, Hinweis in `docs/DOKUMENTATION.md`.
+- Branding per Env: `APP_TITLE`/`APP_SLOGAN` steuern Titel/Slogan im Header (Default bleibt wie bisher), Compose/.env(.example) ergänzt.
 
 ## v0.3.17
 - PWA-Installierbarkeit: Manifest (Root/Scope `/`), Icons (192/512 + maskable), Theme-/Apple-Meta in allen Seitenköpfen.

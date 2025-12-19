@@ -40,7 +40,7 @@
     <script src="/static/pwa.js" defer></script>
 </head>
 <body class="dashboard-body">
-    {% set header_title = "System & Index" %}
+    {% set header_title = app_title or "System & Index" %}
     {% set header_subtitle = "Live-Übersicht für Laufstatus, Log und Fehler" %}
     {% set header_eyebrow = None %}
     {% set version_badge = None %}

@@ -49,9 +49,9 @@
     </script>
 </head>
 <body>
-    {% set header_title = "Dokumenten-Volltextsuche" %}
+    {% set header_title = app_title or "Dokumenten-Volltextsuche" %}
     {% set header_subtitle = "" %}
-    {% set header_slogan = "Kanzlei Schmitt, wir können nur Enterprise..." %}
+    {% set header_slogan = app_slogan or "Kanzlei Schmitt, wir können nur Enterprise..." %}
     {% set header_eyebrow = None %}
     {% set version_badge = app_version or 'v?' %}
     {% set theme_switcher = True %}

@@ -326,6 +326,8 @@ def create_app(config: Optional[CentralConfig] = None) -> FastAPI:
     feedback_enabled = bool(getattr(config, "feedback", None) and config.feedback.enabled)
     feedback_recipients = list(getattr(config.feedback, "recipients", []))
     app_version = read_version()
+    app_title = os.getenv("APP_TITLE", "Dokumenten-Volltextsuche")
+    app_slogan = os.getenv("APP_SLOGAN", "Kanzlei Schmitt, wir können nur Enterprise...")
 
     MAX_SEARCH_LIMIT = 500
     MIN_QUERY_LENGTH = 2
@@ -364,6 +366,8 @@ def create_app(config: Optional[CentralConfig] = None) -> FastAPI:
                 "default_preview": config.ui.default_preview,
                 "snippet_length": config.ui.snippet_length,
                 "app_version": app_version,
+                "app_title": app_title,
+                "app_slogan": app_slogan,
                 "search_default_mode": getattr(config.ui, "search_default_mode", "standard"),
                 "search_prefix_minlen": getattr(config.ui, "search_prefix_minlen", 4),
                 "feedback_enabled": feedback_enabled,
@@ -373,7 +377,16 @@ def create_app(config: Optional[CentralConfig] = None) -> FastAPI:
 
     @app.get("/dashboard", response_class=HTMLResponse)
     def dashboard(request: Request):
-        return templates.TemplateResponse("dashboard.html", {"request": request, "app_version": app_version, "admin_always_on": admin_always_on})
+        return templates.TemplateResponse(
+            "dashboard.html",
+            {
+                "request": request,
+                "app_version": app_version,
+                "admin_always_on": admin_always_on,
+                "app_title": app_title,
+                "app_slogan": app_slogan,
+            },
+        )
 
     @app.get("/viewer", response_class=HTMLResponse)
     def viewer(request: Request, id: int = Query(...)):
@@ -383,13 +396,24 @@ def create_app(config: Optional[CentralConfig] = None) -> FastAPI:
                 "request": request,
                 "doc_id": id,
                 "app_version": app_version,
+                "app_title": app_title,
+                "app_slogan": app_slogan,
                 "admin_always_on": admin_always_on,
             },
         )
 
     @app.get("/metrics", response_class=HTMLResponse)
     def metrics_page(request: Request):
-        return templates.TemplateResponse("metrics.html", {"request": request, "app_version": app_version, "admin_always_on": admin_always_on})
+        return templates.TemplateResponse(
+            "metrics.html",
+            {
+                "request": request,
+                "app_version": app_version,
+                "admin_always_on": admin_always_on,
+                "app_title": app_title,
+                "app_slogan": app_slogan,
+            },
+        )
 
     def serialize_status(st: Any) -> Dict[str, Any]:
         return {

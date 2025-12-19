@@ -33,4 +33,6 @@ services:
       - SEND_REPORT_ENABLED=${SEND_REPORT_ENABLED}
       - FEEDBACK_ENABLED=${FEEDBACK_ENABLED}
       - FEEDBACK_TO=${FEEDBACK_TO}
+      - APP_TITLE=${APP_TITLE}
+      - APP_SLOGAN=${APP_SLOGAN}
     restart: unless-stopped
