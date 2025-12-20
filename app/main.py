@@ -1314,6 +1314,37 @@ def create_app(config: Optional[CentralConfig] = None) -> FastAPI:
             "live": live,
         }
 
+    @app.get("/api/admin/index/run/{run_id}/events")
+    def admin_index_run_events(
+        run_id: int,
+        limit: int = Query(200, ge=1, le=2000),
+        offset: int = Query(0, ge=0),
+        action: Optional[str] = Query(None, description="added|updated|removed"),
+        _auth: bool = Depends(require_secret),
+    ):
+        with db.get_conn() as conn:
+            events = db.list_index_events(conn, run_id, limit=limit, offset=offset, action=action)
+        return {"run_id": run_id, "events": [dict(ev) for ev in events]}
+
+    @app.get("/api/admin/index/run/{run_id}/errors")
+    def admin_index_run_errors(
+        run_id: int,
+        limit: int = Query(200, ge=1, le=2000),
+        offset: int = Query(0, ge=0),
+        _auth: bool = Depends(require_secret),
+    ):
+        with db.get_conn() as conn:
+            rows = db.list_run_errors(conn, run_id, limit=limit, offset=offset)
+        return {"run_id": run_id, "errors": [dict(r) for r in rows]}
+
+    @app.get("/api/admin/index/run/{run_id}/summary")
+    def admin_index_run_summary(run_id: int, _auth: bool = Depends(require_secret)):
+        with db.get_conn() as conn:
+            data = db.summarize_run(conn, run_id)
+        if not data:
+            raise HTTPException(status_code=404, detail="Run nicht gefunden")
+        return data
+
     @app.get("/api/admin/metrics/summary")
     def admin_metrics_summary(
         window_seconds: int = Query(24 * 3600, ge=60, le=14 * 24 * 3600),

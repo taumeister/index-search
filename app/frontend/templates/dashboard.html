@@ -141,7 +141,7 @@
                 <div style="margin-top: 10px;">
                     <div class="eyebrow">Letzte Läufe</div>
                     <table class="status-table">
-                        <thead><tr><th>Start</th><th>Status</th><th>Gescannt</th><th>Added</th><th>Errors</th></tr></thead>
+                        <thead><tr><th>Start</th><th>Status</th><th>Gescannt</th><th>Added</th><th>Errors</th><th>Details</th></tr></thead>
                         <tbody id="runs-body"></tbody>
                     </table>
                 </div>
@@ -303,9 +303,48 @@
             </section>
         </div>
     </div>
+    <div class="dialog-overlay hidden" id="run-modal">
+        <div class="dialog-card wide">
+            <div class="dialog-title-row">
+                <div>
+                    <div class="dialog-eyebrow">Index-Lauf</div>
+                    <div class="dialog-title" id="run-modal-title">Details</div>
+                    <div class="muted" id="run-modal-sub">–</div>
+                </div>
+                <button class="btn btn-ghost" id="run-modal-close">Schließen</button>
+            </div>
+            <div class="chip-row" style="margin-top:10px;">
+                <button class="chip" data-run-tab="added">Hinzugefügt</button>
+                <button class="chip" data-run-tab="updated">Aktualisiert</button>
+                <button class="chip" data-run-tab="removed">Entfernt/Verwaist</button>
+                <button class="chip" data-run-tab="errors">Fehler</button>
+            </div>
+            <div class="muted" id="run-modal-summary" style="margin-top:6px;">–</div>
+            <div class="list" id="run-modal-list" style="max-height: 360px; overflow: auto; margin-top: 10px;"></div>
+        </div>
+    </div>
     </div>
     <script>
-        const state = { errorOffset: 0, errorLimit: 50, logOffset: 0, logPointer: 0, logTail: 400, logTotal: 0, autoScrollLog: true, autoMode: "daily", autoRunning: false };
+        const state = {
+            errorOffset: 0,
+            errorLimit: 50,
+            logOffset: 0,
+            logPointer: 0,
+            logTail: 400,
+            logTotal: 0,
+            autoScrollLog: true,
+            autoMode: "daily",
+            autoRunning: false,
+            lastRunId: null,
+            runDetails: {
+                runId: null,
+                summary: null,
+                events: { added: [], updated: [], removed: [] },
+                errors: [],
+                activeTab: "added",
+                loading: false,
+            },
+        };
         const POLL_STATUS_MS = 2000;
         const POLL_LOG_MS = 2000;
         const POLL_ERRORS_MS = 15000;
@@ -684,6 +723,7 @@
             const activeId = live.run_id || idxData.run_id;
             const statusCode = live.status || (activeId ? "running" : "idle");
             const statusText = statusLabel(statusCode);
+            state.lastRunId = (statusData.last_run && statusData.last_run.id) || null;
             updateStatusPill(statusText, statusCode);
             setText("metric-status", statusText);
             if (statusData && statusData.sources_ready === false) {
@@ -751,9 +791,97 @@
                     <td>${r.status || ""}</td>
                     <td>${fmtNumber(r.scanned_files || 0)}</td>
                     <td>${fmtNumber(r.added || 0)}</td>
-                    <td>${fmtNumber(r.errors || 0)}</td>`;
+                    <td>${fmtNumber(r.errors || 0)}</td>
+                    <td><button class="btn btn-ghost" data-run-id="${r.id}">Details</button></td>`;
                 body.appendChild(tr);
             });
+        }
+
+        async function loadRunSummary(runId) {
+            const data = await fetchJSON(`/api/admin/index/run/${runId}/summary`);
+            return data;
+        }
+
+        async function loadRunEvents(runId, action, limit = 200) {
+            const data = await fetchJSON(`/api/admin/index/run/${runId}/events?action=${encodeURIComponent(action || "")}&limit=${limit}`);
+            return data.events || [];
+        }
+
+        async function loadRunErrors(runId, limit = 200) {
+            const data = await fetchJSON(`/api/admin/index/run/${runId}/errors?limit=${limit}`);
+            return data.errors || [];
+        }
+
+        function setRunTab(tab) {
+            state.runDetails.activeTab = tab;
+            document.querySelectorAll("[data-run-tab]").forEach((btn) => {
+                btn.classList.toggle("chip-primary", btn.dataset.runTab === tab);
+            });
+            renderRunModalList();
+        }
+
+        function renderRunModalList() {
+            const list = document.getElementById("run-modal-list");
+            const summaryEl = document.getElementById("run-modal-summary");
+            if (!list || !summaryEl) return;
+            const details = state.runDetails;
+            let rows = [];
+            if (details.activeTab === "errors") {
+                rows = details.errors || [];
+                summaryEl.textContent = `${rows.length} Fehler geladen (max 200). Ignorierte sind gekennzeichnet.`;
+                list.innerHTML = rows.length
+                    ? rows
+                          .map((r) => {
+                              const badge = r.ignored ? '<span class="chip chip-muted">Ignoriert</span> ' : "";
+                              return `<div class="list-item"><div>${badge}${escapeHtml(r.path || "")}</div><div class="muted">${escapeHtml(r.error_type || "")}: ${escapeHtml(r.message || "")}</div></div>`;
+                          })
+                          .join("")
+                    : `<div class="muted">Keine Fehler.</div>`;
+            } else {
+                rows = details.events[details.activeTab] || [];
+                summaryEl.textContent = `${rows.length} Einträge (${details.activeTab}) geladen (max 200).`;
+                list.innerHTML = rows.length
+                    ? rows
+                          .map(
+                              (r) =>
+                                  `<div class="list-item"><div>${escapeHtml(r.path || "")}</div><div class="muted">${escapeHtml(r.source || "")} • ${fmtDateTime(r.ts)}</div></div>`
+                          )
+                          .join("")
+                    : `<div class="muted">Keine Einträge.</div>`;
+            }
+        }
+
+        async function openRunDetails(runId, tab = "added") {
+            state.runDetails.runId = runId;
+            state.runDetails.loading = true;
+            setText("run-modal-title", `Lauf #${runId}`);
+            setText("run-modal-sub", "Lade Details…");
+            document.getElementById("run-modal").classList.remove("hidden");
+            try {
+                const [summary, added, updated, removed, errors] = await Promise.all([
+                    loadRunSummary(runId),
+                    loadRunEvents(runId, "added"),
+                    loadRunEvents(runId, "updated"),
+                    loadRunEvents(runId, "removed"),
+                    loadRunErrors(runId),
+                ]);
+                state.runDetails.summary = summary;
+                state.runDetails.events = { added, updated, removed };
+                state.runDetails.errors = errors;
+                setText(
+                    "run-modal-sub",
+                    `${fmtDateTime(summary.run.started_at)} → ${fmtDateTime(summary.run.finished_at)} • Status ${summary.run.status} • Added ${summary.actions.added || 0} • Updated ${summary.actions.updated || 0} • Removed ${summary.actions.removed || 0} • Errors ${summary.error_count}`
+                );
+                setRunTab(tab);
+            } catch (err) {
+                document.getElementById("run-modal-list").innerHTML = `<div class="muted">Fehler beim Laden: ${escapeHtml(err.message || err)}</div>`;
+            } finally {
+                state.runDetails.loading = false;
+            }
+        }
+
+        function closeRunDetails() {
+            document.getElementById("run-modal").classList.add("hidden");
         }
 
         async function loadErrors() {
@@ -1011,6 +1139,40 @@
                 console.error("Auto-Index-Run fehlgeschlagen", err);
             }
         });
+
+        const runsBody = document.getElementById("runs-body");
+        if (runsBody) {
+            runsBody.addEventListener("click", (ev) => {
+                const btn = ev.target.closest("button[data-run-id]");
+                if (!btn) return;
+                const runId = btn.dataset.runId;
+                if (runId) openRunDetails(runId);
+            });
+        }
+
+        ["metric-added", "metric-updated", "metric-removed", "metric-errors"].forEach((id) => {
+            const el = document.getElementById(id);
+            if (el) {
+                el.style.cursor = "pointer";
+                el.addEventListener("click", () => {
+                    if (!state.lastRunId) return;
+                    const tab = id === "metric-added" ? "added" : id === "metric-updated" ? "updated" : id === "metric-removed" ? "removed" : "errors";
+                    openRunDetails(state.lastRunId, tab);
+                });
+            }
+        });
+
+        const runModal = document.getElementById("run-modal");
+        if (runModal) {
+            const closeBtn = document.getElementById("run-modal-close");
+            if (closeBtn) closeBtn.addEventListener("click", closeRunDetails);
+            runModal.addEventListener("click", (ev) => {
+                if (ev.target === runModal) closeRunDetails();
+            });
+            runModal.querySelectorAll("[data-run-tab]").forEach((btn) => {
+                btn.addEventListener("click", () => setRunTab(btn.dataset.runTab));
+            });
+        }
 
         async function triggerRun(fullReset = false) {
             const res = await fetch(`/api/admin/index/run?full_reset=${fullReset}`, { method: "POST" });

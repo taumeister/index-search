@@ -1,5 +1,6 @@
 import os
 import sqlite3
+import datetime
 from contextlib import contextmanager
 from dataclasses import dataclass, asdict
 from pathlib import Path
@@ -57,6 +58,14 @@ def connect() -> sqlite3.Connection:
     conn.execute("PRAGMA busy_timeout=10000;")
     conn.execute("PRAGMA foreign_keys=ON;")
     return conn
+
+
+def _ensure_column(conn: sqlite3.Connection, table: str, column: str, col_type: str, default: Optional[Any] = None) -> None:
+    cols = {row[1] for row in conn.execute(f"PRAGMA table_info({table})").fetchall()}
+    if column not in cols:
+        conn.execute(f"ALTER TABLE {table} ADD COLUMN {column} {col_type}")
+        if default is not None:
+            conn.execute(f"UPDATE {table} SET {column} = ?", (default,))
 
 
 @contextmanager
@@ -120,6 +129,7 @@ def init_db() -> None:
                 error_type TEXT NOT NULL,
                 message TEXT NOT NULL,
                 created_at TEXT NOT NULL,
+                ignored INTEGER NOT NULL DEFAULT 0,
                 FOREIGN KEY(run_id) REFERENCES index_runs(id) ON DELETE CASCADE
             );
 
@@ -128,6 +138,19 @@ def init_db() -> None:
                 path TEXT NOT NULL,
                 PRIMARY KEY(run_id, path)
             );
+
+            CREATE TABLE IF NOT EXISTS index_run_events (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                run_id INTEGER NOT NULL,
+                action TEXT NOT NULL,
+                path TEXT NOT NULL,
+                source TEXT,
+                ts TEXT NOT NULL,
+                actor TEXT NOT NULL DEFAULT 'indexer',
+                message TEXT,
+                FOREIGN KEY(run_id) REFERENCES index_runs(id) ON DELETE CASCADE
+            );
+            CREATE INDEX IF NOT EXISTS idx_index_run_events_run_id ON index_run_events(run_id);
 
             CREATE TABLE IF NOT EXISTS quarantine_entries (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -151,6 +174,7 @@ def init_db() -> None:
             CREATE INDEX IF NOT EXISTS idx_quarantine_moved_at ON quarantine_entries(moved_at);
         """
         )
+        _ensure_column(conn, "file_errors", "ignored", "INTEGER NOT NULL DEFAULT 0", default=0)
 
 
 def upsert_document(conn: sqlite3.Connection, meta: DocumentMeta) -> int:
@@ -504,14 +528,14 @@ def record_index_run_finish(
 
 
 def record_file_error(
-    conn: sqlite3.Connection, run_id: int, path: str, error_type: str, message: str, created_at: str
+    conn: sqlite3.Connection, run_id: int, path: str, error_type: str, message: str, created_at: str, ignored: bool = False
 ) -> None:
     conn.execute(
         """
-        INSERT INTO file_errors (run_id, path, error_type, message, created_at)
-        VALUES (?, ?, ?, ?, ?)
+        INSERT INTO file_errors (run_id, path, error_type, message, created_at, ignored)
+        VALUES (?, ?, ?, ?, ?, ?)
         """,
-        (run_id, path, error_type, message, created_at),
+        (run_id, path, error_type, message, created_at, 1 if ignored else 0),
     )
 
 
@@ -571,23 +595,33 @@ def reset_scanned_paths(conn: sqlite3.Connection, run_id: int) -> None:
     conn.execute("DELETE FROM scanned_paths WHERE run_id = ?", (run_id,))
 
 
-def remove_documents_not_scanned(conn: sqlite3.Connection, run_id: int, sources: List[str]) -> int:
+def remove_documents_not_scanned(conn: sqlite3.Connection, run_id: int, sources: List[str]) -> List[Dict[str, Any]]:
     if not sources:
-        return 0
+        return []
     placeholders = ",".join("?" * len(sources))
     cursor = conn.execute(
         f"""
-        SELECT id FROM documents
+        SELECT id, path, source FROM documents
         WHERE source IN ({placeholders})
         AND path NOT IN (SELECT path FROM scanned_paths WHERE run_id = ?)
         """,
         [*sources, run_id],
     )
-    ids = [row[0] for row in cursor.fetchall()]
+    rows = cursor.fetchall()
+    ids = [row["id"] for row in rows]
     if ids:
         conn.execute(f"DELETE FROM documents WHERE id IN ({','.join('?' * len(ids))})", ids)
         conn.execute(f"DELETE FROM documents_fts WHERE doc_id IN ({','.join('?' * len(ids))})", ids)
-    return len(ids)
+        now_iso = datetime.datetime.now(datetime.timezone.utc).isoformat()
+        for row in rows:
+            conn.execute(
+                """
+                INSERT INTO index_run_events (run_id, action, path, source, ts, actor, message)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+                """,
+                (run_id, "removed", row["path"], row["source"], now_iso, "indexer", None),
+            )
+    return [dict(row) for row in rows]
 
 
 def cleanup_scanned_paths(conn: sqlite3.Connection, run_id: int) -> None:
@@ -616,7 +650,7 @@ def get_last_run(conn: sqlite3.Connection) -> Optional[sqlite3.Row]:
 
 
 def error_count(conn: sqlite3.Connection) -> int:
-    return conn.execute("SELECT COUNT(*) FROM file_errors").fetchone()[0]
+    return conn.execute("SELECT COUNT(*) FROM file_errors WHERE ignored = 0").fetchone()[0]
 
 
 def list_existing_meta(conn: sqlite3.Connection) -> Dict[str, Tuple[float, float]]:
@@ -634,3 +668,83 @@ def delete_documents_by_source(conn: sqlite3.Connection, sources: List[str]) -> 
         conn.execute(f"DELETE FROM documents WHERE id IN ({','.join('?' * len(ids))})", ids)
         conn.execute(f"DELETE FROM documents_fts WHERE doc_id IN ({','.join('?' * len(ids))})", ids)
     return len(ids)
+
+
+def record_index_event(
+    conn: sqlite3.Connection,
+    run_id: int,
+    action: str,
+    path: str,
+    source: Optional[str],
+    actor: str = "indexer",
+    message: Optional[str] = None,
+    ts: Optional[str] = None,
+) -> None:
+    ts_val = ts or datetime.datetime.now(datetime.timezone.utc).isoformat()
+    conn.execute(
+        """
+        INSERT INTO index_run_events (run_id, action, path, source, ts, actor, message)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
+        """,
+        (run_id, action, path, source, ts_val, actor, message),
+    )
+
+
+def list_index_events(
+    conn: sqlite3.Connection,
+    run_id: int,
+    limit: int = 200,
+    offset: int = 0,
+    action: Optional[str] = None,
+) -> List[sqlite3.Row]:
+    limit = max(1, min(limit, 2000))
+    offset = max(0, offset)
+    clauses = ["run_id = ?"]
+    params: List[Any] = [run_id]
+    if action:
+        clauses.append("action = ?")
+        params.append(action)
+    where_sql = " AND ".join(clauses)
+    sql = f"""
+        SELECT id, run_id, action, path, source, ts, actor, message
+        FROM index_run_events
+        WHERE {where_sql}
+        ORDER BY id DESC
+        LIMIT ? OFFSET ?
+    """
+    params.extend([limit, offset])
+    cur = conn.execute(sql, params)
+    return cur.fetchall()
+
+
+def list_run_errors(conn: sqlite3.Connection, run_id: int, limit: int = 200, offset: int = 0) -> List[sqlite3.Row]:
+    limit = max(1, min(limit, 2000))
+    offset = max(0, offset)
+    cur = conn.execute(
+        """
+        SELECT path, error_type, message, created_at, ignored
+        FROM file_errors
+        WHERE run_id = ?
+        ORDER BY created_at DESC
+        LIMIT ? OFFSET ?
+        """,
+        (run_id, limit, offset),
+    )
+    return cur.fetchall()
+
+
+def summarize_run(conn: sqlite3.Connection, run_id: int) -> Dict[str, Any]:
+    run = conn.execute("SELECT * FROM index_runs WHERE id = ?", (run_id,)).fetchone()
+    if not run:
+        return {}
+    action_counts: Dict[str, int] = {}
+    for row in conn.execute(
+        "SELECT action, COUNT(*) as c FROM index_run_events WHERE run_id = ? GROUP BY action", (run_id,)
+    ):
+        action_counts[row["action"]] = row["c"]
+    error_count = conn.execute("SELECT COUNT(*) FROM file_errors WHERE run_id = ? AND ignored = 0", (run_id,)).fetchone()[0]
+    return {
+        "run": dict(run),
+        "actions": action_counts,
+        "error_count": error_count,
+    }

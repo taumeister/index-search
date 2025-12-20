@@ -25,6 +25,8 @@
 - Tabelle `documents`: Metadaten (Quelle, Pfad, Größe, Zeiten, Besitzer, MSG-Felder, Tags).
 - FTS5 `documents_fts`: `doc_id`, `content`, `title_or_subject`.
 - Logging: `index_runs` (Laufstatus) und `file_errors`.
+- Lauf-Events: `index_run_events` protokolliert pro Lauf alle Pfad-Aktionen (`added|updated|removed`) mit Zeitstempel, Quelle, Actor (indexer) und optionaler Message; abrufbar über Admin-API/Report.
+- Fehler-Handling: `file_errors.ignored` markiert erwartbare PDF-Fehler (z. B. verschlüsselt/kaputte Streams). Ignorierte Fehler zählen nicht mehr in den Error-Kacheln/Mails, bleiben aber in der Detail-Ansicht markiert.
 - Quarantäne-Registry: `quarantine_entries` speichert pro Move `doc_id`, Quelle, Original-/Quarantänepfad, Filename, Actor, Größe, Zeitstempel, Status (`quarantined|restored|hard_deleted|cleanup_deleted`), optionale Restore-/Delete-Zeitpunkte.
 - WAL-Mode aktiviert.
 
@@ -57,6 +59,7 @@
 - `GET /api/document/{id}/file`: Originaldatei (Download/Inline).
 - `GET /api/sources`: Deduplizierte aktive Quellen-Labels (Basis für Quellen-Filter im UI).
 - `GET /api/admin/status`: Gesamtanzahl, letzter Lauf, Historie, Admin-/File-Op-Status, `index_exclude_dirs`.
+- Index-Läufe (Details): `GET /api/admin/index/run/{id}/summary` (Counts + Fehler), `GET /api/admin/index/run/{id}/events` (Pfad-Events, filterbar per `action=added|updated|removed`), `GET /api/admin/index/run/{id}/errors` (Fehlereinträge inkl. ignored-Flag).
 - Admin/Explorer/Quarantäne: `POST /api/admin/login`/`logout` (Passwort via `ADMIN_PASSWORD`, Session-Cookie), `/api/admin/status` liefert `file_ops_enabled`, Quarantäne-Ready-Liste und Cleanup-Konfig; `POST /api/files/{doc_id}/quarantine-delete` verschiebt Treffer in `<root>/.quarantine/<YYYY-MM-DD>/docid__name`, schreibt Metadaten in `quarantine_entries` und entfernt ihn aus dem Index; `GET /api/quarantine/list` listet Registry-Einträge (Filter Quelle/Alter/Text), `POST /api/quarantine/{id}/restore` stellt Dateien wieder her (bei Konflikt Suffix `_restored_<timestamp>`), `POST /api/quarantine/{id}/hard-delete` entfernt Quarantäne-Datei + Registry-Eintrag. Alle File-Ops: Admin-Pflicht, Pfad-Guard (realpath innerhalb Quelle/.quarantine), Locking pro Datei.
 - `GET/POST/DELETE /api/admin/roots`: Roots verwalten (aktiv, Pfad, Label). Add-Root validiert: Pfad muss existieren, unter `base_data_root` liegen, kein Fallback auf `/data`.
 - `POST /api/admin/index/run`: Indexlauf starten, optional Reset.
@@ -81,7 +84,7 @@
 - Download-Link öffnet Originaldatei.
 - Pop-up/Viewer: kleinere Fenstergröße (ca. 60%/70% des Bildschirms), Druck-Button, minimierte Toolbar; Print öffnet den Dialog ohne neues Browser-Tab.
 - Feedback-Overlay: öffnet bei Klick auf den Header-Button, dimmt Hintergrund, Editor mit Toolbar und Zeichenzähler, Abbruch/Senden-Buttons plus zweistufige Bestätigung; ESC oder Klick außerhalb schließt.
-- Dashboard: Auto-Index-Zeitplaner (Toggle, Modus-Buttons täglich/wöchentlich/intervall, Uhrzeit, Wochentags-/Intervall-Buttons, Plan speichern, Jetzt ausführen, Plan-/Status-Anzeige), Index-Live-Status, Roots/Explorer, Live-Log, Fehlerliste, Quarantäne-Panel (Liste der Registry-Einträge mit Filter Quelle/Alter/Suche, Aktionen Restore/Hard-Delete mit Bestätigung, Anzeige Retention/Cleanup-Konfig, Auto-Refresh).
+- Dashboard: Auto-Index-Zeitplaner (Toggle, Modus-Buttons täglich/wöchentlich/intervall, Uhrzeit, Wochentags-/Intervall-Buttons, Plan speichern, Jetzt ausführen, Plan-/Status-Anzeige), Index-Live-Status, Roots/Explorer, Live-Log, Fehlerliste, Quarantäne-Panel (Liste der Registry-Einträge mit Filter Quelle/Alter/Suche, Aktionen Restore/Hard-Delete mit Bestätigung, Anzeige Retention/Cleanup-Konfig, Auto-Refresh). Lauf-Details: „Details“-Button und klickbare Kacheln öffnen ein Modal mit Tabs für Added/Updated/Removed/Errors; Fehler zeigen Ignored-Badge für erwartbare PDF-Probleme; Daten aus `index_run_events`/`file_errors`.
 
 ### Kontextmenü erweitern
 - Zentrale Definition in `app/frontend/static/main.js`: Gruppen stehen in `CONTEXT_MENU_SECTIONS`, Einträge in `CONTEXT_MENU_ITEMS`.
@@ -96,6 +99,7 @@
 - `pytest` deckt Config-Validierung, DB/FTS-Funktion, Indexlauf und API-Suche ab.
 - E2E (Playwright): `tests/test_feedback_ui.py` simuliert den Feedback-Flow (Overlay öffnen, Text/Toolbar, Confirm, Erfolg) mit gemocktem `/api/feedback`; `tests/test_source_filter_ui.py` prüft Quellen-Filter (Chips laden, Request-Parameter). Start mit laufendem Container auf `http://localhost:8010` und optional `APP_BASE_URL` zum Überschreiben. Playwright-Assets via `pip install -r requirements-dev.txt` und `playwright install chromium`.
 - Scheduler-Tests: `tests/test_auto_index_scheduler.py` validiert Next-Run-Berechnung, Busy-Handling und Auto-Index-Endpunkte.
+- DB-Reports: `scripts/db_report.sh` liefert Lauf-Statistik, Events/Errors/Missing; siehe `docs/db_checks.txt`.
 
 ## Betrieb
 - Start (lokal): `uvicorn app.main:app --reload`.

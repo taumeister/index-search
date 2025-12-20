@@ -1,5 +1,11 @@
 # Release-Notizen
 
+## v0.3.20 - Event Audit Prism
+- Index-Läufe protokollieren jetzt Pfad-Events (`added`, `updated`, `removed`) in `index_run_events`; Admin-APIs `/api/admin/index/run/{id}/summary|events|errors` liefern Counts, Pfade und Fehlereinträge pro Lauf.
+- Dashboard: Lauf-Details-Modal (Klick auf Kachel oder „Details“) mit Tabs für Added/Updated/Removed/Errors; ignorierte PDF-Lesefehler werden markiert.
+- Fehlerzählung: Erwartbare PDF-Fehler (verschlüsselt/kaputte xref/Streams) werden automatisch ignoriert und erhöhen die Error-Kacheln/Mails nicht mehr; bleiben aber im Lauf als markierte Einträge sichtbar.
+- Reports: `scripts/db_report.sh` greift die neuen Events/Errors auf; `docs/db_checks.txt` beschreibt den Aufruf.
+
 ## v0.3.19 - Velvet Admin Eclipse
 - Admin-Always-On per Env `ADMIN_ALWAYS_ON=true` (Default false), Compose-Env + `.env`/`.env.example` ergänzt; Backend-Admin-Checks akzeptieren den Modus ohne Passwort, `admin_always_on` wird über `/api/admin/status` ausgespielt.
 - Frontend erkennt das Flag (Template + Status-API), überspringt das Admin-Overlay und zeigt Admin-UI sofort; Standardverhalten unverändert.

@@ -39,6 +39,16 @@ LOG_BUFFER: Deque[Tuple[int, str]] = deque()
 LOG_SEQ = 0
 
 
+def _should_ignore_error(error_type: str, message: str) -> bool:
+    msg = (message or "").lower()
+    if error_type in {"PdfReadError", "PdfStreamError"}:
+        if any(kw in msg for kw in ["password", "encrypted", "decrypt", "verschlüsselt"]):
+            return True
+        if "xref table read error" in msg or "stream has ended unexpectedly" in msg:
+            return True
+    return False
+
+
 def _get_base_root(env_default: str = "/data") -> Path:
     raw = os.getenv("DATA_CONTAINER_PATH")
     if raw:
@@ -356,6 +366,7 @@ def run_index_lauf(config: CentralConfig) -> Dict[str, int]:
                     counters["skipped"] += 1
                     if path_str:
                         db.add_scanned_path(conn, run_id, path_str)
+                    ignored = _should_ignore_error(item.get("error_type") or "", item.get("message") or "")
                     try:
                         db.record_file_error(
                             conn,
@@ -364,9 +375,11 @@ def run_index_lauf(config: CentralConfig) -> Dict[str, int]:
                             error_type=item["error_type"],
                             message=item["message"],
                             created_at=datetime.now(timezone.utc).isoformat(),
+                            ignored=ignored,
                         )
                     finally:
-                        counters["errors"] += 1
+                        if not ignored:
+                            counters["errors"] += 1
                 elif kind == "unchanged":
                     counters["scanned"] += 1
                     counters["skipped"] += 1
@@ -381,9 +394,12 @@ def run_index_lauf(config: CentralConfig) -> Dict[str, int]:
                         db.upsert_document(conn, meta)
                         if item.get("existing"):
                             counters["updated"] += 1
+                            db.record_index_event(conn, run_id, "updated", meta.path, meta.source, actor="indexer")
                         else:
                             counters["added"] += 1
+                            db.record_index_event(conn, run_id, "added", meta.path, meta.source, actor="indexer")
                     except Exception as exc:
+                        ignored = _should_ignore_error(type(exc).__name__, str(exc))
                         try:
                             db.record_file_error(
                                 conn,
@@ -392,9 +408,11 @@ def run_index_lauf(config: CentralConfig) -> Dict[str, int]:
                                 error_type=type(exc).__name__,
                                 message=str(exc),
                                 created_at=datetime.now(timezone.utc).isoformat(),
+                                ignored=ignored,
                             )
                         finally:
-                            counters["errors"] += 1
+                            if not ignored:
+                                counters["errors"] += 1
                         # Attempt to reopen connection if broken
                         try:
                             conn.close()
@@ -539,8 +557,8 @@ def run_index_lauf(config: CentralConfig) -> Dict[str, int]:
             status_override = status_override or "error"
             db.cleanup_scanned_paths(conn, run_id)
         else:
-            removed_count = db.remove_documents_not_scanned(conn, run_id, [src for _, src in root_entries])
-            counters["removed"] = removed_count
+            removed_entries = db.remove_documents_not_scanned(conn, run_id, [src for _, src in root_entries])
+            counters["removed"] = len(removed_entries)
             db.cleanup_scanned_paths(conn, run_id)
 
     end_time = datetime.now(timezone.utc).isoformat()
