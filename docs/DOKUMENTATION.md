@@ -26,7 +26,7 @@
 - FTS5 `documents_fts`: `doc_id`, `content`, `title_or_subject`.
 - Logging: `index_runs` (Laufstatus) und `file_errors`.
 - Lauf-Events: `index_run_events` protokolliert pro Lauf alle Pfad-Aktionen (`added|updated|removed`) mit Zeitstempel, Quelle, Actor (indexer) und optionaler Message; abrufbar über Admin-API/Report.
-- Fehler-Handling: `file_errors.ignored` markiert erwartbare PDF-Fehler (z. B. verschlüsselt/kaputte Streams). Ignorierte Fehler zählen nicht mehr in den Error-Kacheln/Mails, bleiben aber in der Detail-Ansicht markiert.
+- Fehler-Handling: `file_errors.ignored` markiert erwartbare Parsing-Fehler (z. B. verschlüsselte/defekte PDFs, kaputtes Encoding, leere Dateien). Ignorierte Fehler zählen nicht mehr in den Error-Kacheln/Mails, bleiben aber in der Detail-Ansicht markiert.
 - Quarantäne-Registry: `quarantine_entries` speichert pro Move `doc_id`, Quelle, Original-/Quarantänepfad, Filename, Actor, Größe, Zeitstempel, Status (`quarantined|restored|hard_deleted|cleanup_deleted`), optionale Restore-/Delete-Zeitpunkte.
 - WAL-Mode aktiviert.
 

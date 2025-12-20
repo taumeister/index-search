@@ -1,5 +1,9 @@
 # Release-Notizen
 
+## v0.3.21 - Error Whisper
+- Fehler-Whitelist erweitert: verschlüsselte PDFs (`FileNotDecryptedError`), kaputte Encodings (UnicodeDecodeError cp950), leere Dateien, RecursionErrors und weitere PDF-Lesefehler (EI stream) werden automatisch ignoriert und zählen nicht mehr in Error-Kacheln/Mails; bleiben in der Detail-Ansicht markiert.
+- Kein Schema-Update nötig, bestehende `ignored`-Logik wird genutzt.
+
 ## v0.3.20 - Event Audit Prism
 - Index-Läufe protokollieren jetzt Pfad-Events (`added`, `updated`, `removed`) in `index_run_events`; Admin-APIs `/api/admin/index/run/{id}/summary|events|errors` liefern Counts, Pfade und Fehlereinträge pro Lauf.
 - Dashboard: Lauf-Details-Modal (Klick auf Kachel oder „Details“) mit Tabs für Added/Updated/Removed/Errors; ignorierte PDF-Lesefehler werden markiert.

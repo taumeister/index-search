@@ -46,6 +46,17 @@ def _should_ignore_error(error_type: str, message: str) -> bool:
             return True
         if "xref table read error" in msg or "stream has ended unexpectedly" in msg:
             return True
+        if "ei stream not found" in msg:
+            return True
+    if error_type == "FileNotDecryptedError":
+        return True
+    if error_type == "UnicodeDecodeError":
+        if "cp950" in msg or "illegal multibyte" in msg:
+            return True
+    if error_type == "EmptyFileError" or "cannot read an empty file" in msg:
+        return True
+    if error_type == "RecursionError":
+        return True
     return False
 
 
