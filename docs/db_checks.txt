@@ -1,0 +1,58 @@
+Index-Suche DB-Checks (Docker + SQLite)
+
+Voraussetzungen
+- Container-Name: index-search-web
+- DB-Pfad im Container: /app/data/index.db
+- Daten liegen im Container-Mount; der Container muss auf die gleichen Pfade zugreifen können wie der Indexer.
+
+Basis: SQLite-Shell öffnen
+- docker compose exec web sh -c "sqlite3 /app/data/index.db"
+
+Letzte Läufe und Status
+- Letzte 5 Läufe: SELECT id, started_at, finished_at, status, scanned_files, added, updated, removed, errors, message FROM index_runs ORDER BY started_at DESC LIMIT 5;
+- Fehler im letzten Lauf: SELECT path, error_type, message FROM file_errors WHERE run_id = (SELECT id FROM index_runs ORDER BY started_at DESC LIMIT 1);
+
+Aktueller Bestand
+- Anzahl Dokumente: SELECT COUNT(*) FROM documents;
+- Dokumente pro Quelle: SELECT source, COUNT(*) FROM documents GROUP BY source;
+
+Verwaiste Dateien ermitteln (Datei fehlt im Filesystem)
+Hinweis: SQLite kann nicht selbst file_exists prüfen; darum Python im Container verwenden.
+
+Alle fehlenden Dateien auflisten und zählen:
+- docker compose exec web python - <<'PY'
+import os, sqlite3
+con = sqlite3.connect("/app/data/index.db")
+con.row_factory = sqlite3.Row
+missing = []
+for row in con.execute("SELECT id, source, path FROM documents"):
+    if not os.path.exists(row["path"]):
+        missing.append(row)
+for row in missing:
+    print(f'{row["id"]}\t{row["source"]}\t{row["path"]}')
+print("Missing total:", len(missing))
+PY
+
+Optional: Ergebnis in Datei im Container speichern und auf den Host holen:
+- docker compose exec web sh -c "python - <<'PY' > /tmp/missing.txt
+import os, sqlite3
+con = sqlite3.connect('/app/data/index.db')
+con.row_factory = sqlite3.Row
+missing = []
+for row in con.execute('SELECT id, source, path FROM documents'):
+    if not os.path.exists(row['path']):
+        missing.append(row)
+for row in missing:
+    print(f\"{row['id']}\t{row['source']}\t{row['path']}\")
+print('Missing total:', len(missing))
+PY"
+- docker cp index-search-web:/tmp/missing.txt ./missing.txt
+
+Letzter Lauf: welche Pfade wurden entfernt (entspricht removed)
+- docker compose exec web sqlite3 /app/data/index.db "SELECT path FROM scanned_paths WHERE run_id = (SELECT id FROM index_runs ORDER BY started_at DESC LIMIT 1);"
+Hinweis: removed im Dashboard kommt aus remove_documents_not_scanned; das sind Pfade, die im letzten Lauf nicht gescannt wurden und daher gelöscht wurden. Die oben stehende Python-Abfrage zeigt den aktuellen Bestand der fehlenden Dateien; die Anzahl sollte mit removed korrelieren, sobald ein neuer Lauf durch ist.
+
+Quarantäne-Registry prüfen (falls Dateien dorthin verschoben wurden)
+- Offene Quarantäne-Einträge: SELECT id, source, original_path, quarantine_path, status, moved_at FROM quarantine_entries WHERE status = 'quarantined';
+- Wiederhergestellte: SELECT id, source, original_path, restored_path, restored_at FROM quarantine_entries WHERE status = 'restored' ORDER BY restored_at DESC LIMIT 20;
+- Endgültig gelöscht: SELECT id, source, quarantine_path, hard_deleted_at, cleanup_deleted_at FROM quarantine_entries WHERE status IN ('hard_deleted','cleanup_deleted') ORDER BY hard_deleted_at DESC LIMIT 20;
