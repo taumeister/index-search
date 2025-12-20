@@ -151,31 +151,17 @@
     color: var(--color-text-strong);
 }
 
-.about-footer {
-    display: flex;
-    align-items: flex-end;
-    gap: 12px;
-    margin-top: 10px;
-}
-
 .about-disclaimer {
     font-size: 12px;
     color: color-mix(in srgb, var(--color-muted) 40%, var(--color-text-strong) 60%);
     line-height: 1.5;
-    margin-top: 0;
-    flex: 1 1 auto;
+    margin-top: 12px;
 }
 
 .about-disclaimer-title {
     font-weight: 700;
     margin-bottom: 4px;
     color: var(--color-text-strong);
-}
-
-.about-footer .btn {
-    align-self: flex-end;
-    margin-bottom: 2px;
-    margin-left: auto;
 }
 
 .dialog-label {
