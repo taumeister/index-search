@@ -97,16 +97,20 @@
 .dialog-body {
     display: flex;
     flex-direction: column;
-    gap: 8px;
+    gap: 6px;
 }
 
 .about-body {
     display: grid;
     grid-template-columns: 1fr 140px;
     grid-auto-rows: auto;
-    gap: 10px 16px;
+    gap: 4px 16px;
     align-items: start;
     min-height: 180px;
+}
+
+.about-body > *:not(.about-hero) {
+    grid-column: 1;
 }
 
 .about-hero {
@@ -115,7 +119,7 @@
     margin: 4px 0 8px;
     width: 100%;
     grid-column: 2;
-    grid-row: 1 / span 3;
+    grid-row: 1 / span 5;
 }
 
 .about-avatar {
@@ -151,6 +155,15 @@
 .about-description {
     color: var(--color-text-strong);
     grid-column: 1;
+}
+
+.about-body .dialog-label {
+    margin-bottom: 0;
+    line-height: 1.2;
+}
+
+.about-body .dialog-strong {
+    margin-top: 0;
 }
 
 .about-footer {
