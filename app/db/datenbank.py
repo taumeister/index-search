@@ -717,6 +717,23 @@ def list_index_events(
     return cur.fetchall()
 
 
+def list_all_index_events(conn: sqlite3.Connection, run_id: int, action: Optional[str] = None) -> List[sqlite3.Row]:
+    clauses = ["run_id = ?"]
+    params: List[Any] = [run_id]
+    if action:
+        clauses.append("action = ?")
+        params.append(action)
+    where_sql = " AND ".join(clauses)
+    sql = f"""
+        SELECT id, run_id, action, path, source, ts, actor, message
+        FROM index_run_events
+        WHERE {where_sql}
+        ORDER BY id ASC
+    """
+    cur = conn.execute(sql, params)
+    return cur.fetchall()
+
+
 def list_run_errors(conn: sqlite3.Connection, run_id: int, limit: int = 200, offset: int = 0) -> List[sqlite3.Row]:
     limit = max(1, min(limit, 2000))
     offset = max(0, offset)
@@ -730,6 +747,20 @@ def list_run_errors(conn: sqlite3.Connection, run_id: int, limit: int = 200, off
         """,
         (run_id, limit, offset),
     )
+    return cur.fetchall()
+
+
+def list_all_run_errors(conn: sqlite3.Connection, run_id: int, include_ignored: bool = False) -> List[sqlite3.Row]:
+    sql = """
+        SELECT path, error_type, message, created_at, ignored
+        FROM file_errors
+        WHERE run_id = ?
+    """
+    params: List[Any] = [run_id]
+    if not include_ignored:
+        sql += " AND ignored = 0"
+    sql += " ORDER BY created_at ASC"
+    cur = conn.execute(sql, params)
     return cur.fetchall()
 
 

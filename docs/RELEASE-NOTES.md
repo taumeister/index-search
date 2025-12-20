@@ -1,5 +1,11 @@
 # Release-Notizen
 
+## v0.3.22 - Themed Report Mailer
+- Index-Report jetzt als themenkompatible HTML-Mail (Inline-Body) plus vollständiger HTML-Anhang; Farben/Typo aus den bestehenden Design-Tokens übernommen.
+- Ausklappbare Abschnitte für Added/Updated/Removed/Fehler; Inline-Body begrenzt auf Top-N, vollständige Listen im Anhang.
+- Plaintext-Fallback beibehalten; Versand weiter über SMTP und Dashboard-Toggle.
+- Tests für Renderer und MIME-Struktur ergänzt.
+
 ## v0.3.21 - Error Whisper
 - Fehler-Whitelist erweitert: verschlüsselte PDFs (`FileNotDecryptedError`), kaputte Encodings (UnicodeDecodeError cp950), leere Dateien, RecursionErrors und weitere PDF-Lesefehler (EI stream) werden automatisch ignoriert und zählen nicht mehr in Error-Kacheln/Mails; bleiben in der Detail-Ansicht markiert.
 - Kein Schema-Update nötig, bestehende `ignored`-Logik wird genutzt.

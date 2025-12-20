@@ -2,12 +2,10 @@ import concurrent.futures
 import json
 import logging
 import os
-import smtplib
 import time
 import warnings
 from collections import deque
 from dataclasses import dataclass, asdict
-from email.message import EmailMessage
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Deque, Dict, Iterable, List, Optional, Tuple
@@ -21,6 +19,7 @@ from app.db import datenbank as db
 from app.db.datenbank import DocumentMeta
 from app.indexer import extractors
 from app.services import readiness
+from app import reporting
 
 logger = logging.getLogger("indexer")
 
@@ -674,43 +673,9 @@ def send_report_if_configured(
     started_at: str,
     finished_at: str,
 ) -> None:
-    smtp = config.smtp
-    if not smtp:
-        logger.info("Kein SMTP konfiguriert, überspringe Report")
-        return
-    # Report-Flag wird über DB/UI gesteuert (nicht ENV)
-    from app import config_db  # lazy import to avoid cycles
-    if config_db.get_setting("send_report_enabled", "0") != "1":
-        logger.info("Report Versand deaktiviert")
-        return
-    subject = f"Indexlauf #{run_id} {status}"
-    body = (
-        f"Indexlauf #{run_id}\n"
-        f"Status: {status}\n"
-        f"Start: {started_at}\n"
-        f"Ende: {finished_at}\n"
-        f"Dauer: {max(0, int(datetime.fromisoformat(finished_at).timestamp() - datetime.fromisoformat(started_at).timestamp()))}s\n"
-        f"Gescannt: {counters['scanned']}\n"
-        f"Hinzugefügt: {counters['added']}\n"
-        f"Aktualisiert: {counters['updated']}\n"
-        f"Entfernt: {counters['removed']}\n"
-        f"Fehler: {counters['errors']}\n"
-    )
-    msg = EmailMessage()
-    msg["Subject"] = subject
-    msg["From"] = smtp.sender
-    msg["To"] = ", ".join([str(r) for r in smtp.recipients])
-    msg.set_content(body)
-
     try:
-        with smtplib.SMTP(smtp.host, smtp.port, timeout=10) as server:
-            if smtp.use_tls:
-                server.starttls()
-            if smtp.username:
-                server.login(smtp.username, smtp.password or "")
-            server.send_message(msg)
-        logger.info("Report gesendet an %s", smtp.recipients)
-    except Exception as exc:  # pragma: no cover
+        reporting.send_run_report_email(config, run_id)
+    except Exception as exc:
         logger.error("Report-Versand fehlgeschlagen: %s", exc)
 
 
