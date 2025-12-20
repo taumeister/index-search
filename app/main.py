@@ -11,6 +11,9 @@ from fastapi import Cookie, Depends, FastAPI, HTTPException, Header, Query, Requ
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
+from markdown_it import MarkdownIt
+import bleach
+from bs4 import BeautifulSoup
 import mimetypes
 import threading
 import os
@@ -46,6 +49,17 @@ ADMIN_SESSION_COOKIE = "admin_session"
 ADMIN_SESSION_TTL_SEC = 12 * 3600
 _ADMIN_PASSWORD_CACHE: Optional[str] = None
 _ADMIN_ALWAYS_ON_VALUES = {"1", "true", "yes", "on"}
+_md_renderer = MarkdownIt("commonmark", {"linkify": True, "typographer": True})
+_ALLOWED_TAGS = set(bleach.sanitizer.ALLOWED_TAGS).union(
+    {"h1", "h2", "h3", "h4", "h5", "h6", "pre", "code", "table", "thead", "tbody", "tr", "th", "td", "hr", "blockquote"}
+)
+_ALLOWED_ATTRS: Dict[str, list[str]] = {
+    **bleach.sanitizer.ALLOWED_ATTRIBUTES,
+    "a": ["href", "title", "rel", "target"],
+    "code": ["class"],
+    "th": ["align"],
+    "td": ["align"],
+}
 
 mimetypes.add_type("application/manifest+json", ".webmanifest")
 
@@ -197,6 +211,62 @@ def is_admin(request: Request) -> bool:
     return verify_admin_token(token)
 
 
+def _sanitize_markdown(md_text: str) -> str:
+    html = _md_renderer.render(md_text)
+    cleaned = bleach.clean(html, tags=_ALLOWED_TAGS, attributes=_ALLOWED_ATTRS, strip=True)
+    try:
+        soup = BeautifulSoup(cleaned, "html.parser")
+        for a in soup.find_all("a"):
+            href = a.get("href", "")
+            if href and not href.startswith("#"):
+                if href.startswith("http"):
+                    a["rel"] = "noreferrer noopener"
+                    a["target"] = "_blank"
+        return str(soup)
+    except Exception:
+        return cleaned
+
+
+def render_markdown_file(path: Path) -> str:
+    try:
+        text = path.read_text(encoding="utf-8")
+    except FileNotFoundError:
+        return "<p class=\"doc-missing\">Dokument nicht gefunden.</p>"
+    except Exception as exc:
+        return f"<p class=\"doc-missing\">Dokument konnte nicht geladen werden: {exc}</p>"
+    return _sanitize_markdown(text)
+
+
+def parse_release_notes(path: Path) -> list[Dict[str, str]]:
+    if not path.exists():
+        return []
+    sections: list[Dict[str, Any]] = []
+    current: Optional[Dict[str, Any]] = None
+    for raw_line in path.read_text(encoding="utf-8").splitlines():
+        line = raw_line.rstrip()
+        if line.startswith("## "):
+            if current:
+                sections.append(current)
+            current = {"title": line.lstrip("#").strip(), "lines": []}
+            continue
+        if current is None:
+            continue
+        current["lines"].append(line)
+    if current:
+        sections.append(current)
+    parsed: list[Dict[str, str]] = []
+    for idx, sec in enumerate(sections):
+        content = "\n".join(sec.get("lines", [])).strip()
+        parsed.append(
+            {
+                "id": f"release-{idx}",
+                "title": sec.get("title", f"Version {idx + 1}"),
+                "html": _sanitize_markdown(content),
+            }
+        )
+    return parsed
+
+
 def init_quarantine_state(config: CentralConfig) -> None:
     try:
         file_ops.apply_settings(getattr(config, "quarantine", None))
@@ -334,7 +404,12 @@ def create_app(config: Optional[CentralConfig] = None) -> FastAPI:
     DEFAULT_SEARCH_MODE = normalize_mode(getattr(config.ui, "search_default_mode", None), SearchMode.STANDARD)
     PREFIX_MINLEN = max(1, int(getattr(config.ui, "search_prefix_minlen", 4) or 4))
 
-    app = FastAPI(title="Index-Suche")
+    app = FastAPI(
+        title="Index-Suche",
+        docs_url="/api/docs",
+        redoc_url=None,
+        openapi_url="/api/openapi.json",
+    )
     base_dir = Path(__file__).resolve().parent
     pwa_dir = base_dir / "frontend" / "pwa"
     templates = Jinja2Templates(directory=base_dir / "frontend/templates")
@@ -412,6 +487,82 @@ def create_app(config: Optional[CentralConfig] = None) -> FastAPI:
                 "admin_always_on": admin_always_on,
                 "app_title": app_title,
                 "app_slogan": app_slogan,
+            },
+        )
+
+    @app.get("/docs", response_class=HTMLResponse)
+    def docs_page(request: Request):
+        docs_dir = base_dir.parent / "docs"
+        primary_docs = [
+            {
+                "id": "user-manual",
+                "title": "Benutzerhandbuch",
+                "summary": "Suche, Filter, Zen-Modus, Preview und Quarantäne im Alltag nutzen.",
+                "html": render_markdown_file(docs_dir / "user-manual.md"),
+            },
+            {
+                "id": "admin-manual",
+                "title": "Admin-Handbuch",
+                "summary": "Betrieb, Compose, Admin-Login, File-Ops und Logs für den sicheren Betrieb.",
+                "html": render_markdown_file(docs_dir / "admin-manual.md"),
+            },
+            {
+                "id": "config-reference",
+                "title": "Konfigurations-Referenz",
+                "summary": "ENV/Compose-Variablen mit Defaults und Hinweisen.",
+                "html": render_markdown_file(docs_dir / "config-reference.md"),
+            },
+        ]
+        supporting_docs = [
+            {
+                "id": "overview",
+                "title": "Architektur & Überblick",
+                "summary": "Technik-Überblick und Komponenten der Index-Suche.",
+                "html": render_markdown_file(docs_dir / "DOKUMENTATION.md"),
+            },
+            {
+                "id": "quarantine",
+                "title": "Quarantäne",
+                "summary": "Ablauf, Cleanup, Restore/Hard-Delete und Safety-Guards.",
+                "html": render_markdown_file(docs_dir / "QUARANTAENE.md"),
+            },
+            {
+                "id": "reindex",
+                "title": "Re-Index & Scheduler",
+                "summary": "Indexlauf, Reset und Auto-Index-Scheduler.",
+                "html": render_markdown_file(docs_dir / "REINDEX.md"),
+            },
+            {
+                "id": "metrics",
+                "title": "Metrics-Dashboard",
+                "summary": "Performance-Diagnose und Messwerte interpretieren.",
+                "html": render_markdown_file(docs_dir / "metrics_dashboard.md"),
+            },
+            {
+                "id": "admin-always-on",
+                "title": "Admin Always On",
+                "summary": "Admin-Always-On-Modus und Sicherheitsimplikationen.",
+                "html": render_markdown_file(docs_dir / "ADMIN_ALWAYS_ON.md"),
+            },
+            {
+                "id": "security",
+                "title": "Sicherheit & Readiness",
+                "summary": "Readiness-Gates, Path-Guards und Purge-Sicherheit.",
+                "html": render_markdown_file(docs_dir / "SECURITY.md"),
+            },
+        ]
+        release_notes = parse_release_notes(docs_dir / "RELEASE-NOTES.md")
+        return templates.TemplateResponse(
+            "docs.html",
+            {
+                "request": request,
+                "app_version": app_version,
+                "app_title": app_title,
+                "app_slogan": app_slogan,
+                "feedback_enabled": feedback_enabled,
+                "primary_docs": primary_docs,
+                "supporting_docs": supporting_docs,
+                "release_notes": release_notes,
             },
         )
 

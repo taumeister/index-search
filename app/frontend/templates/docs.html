@@ -1,0 +1,157 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <title>Dokumentation</title>
+    <script>
+        (function enforceDefaultZoom() {
+            const KEY = "appZoom";
+            const DEFAULT_ZOOM = 1;
+            try {
+                localStorage.removeItem(KEY);
+            } catch (_) {
+                /* ignore */
+            }
+            document.documentElement.style.setProperty("--app-zoom", DEFAULT_ZOOM);
+        })();
+    </script>
+    <script>
+        (function applyStoredTheme() {
+            const KEY = "theme";
+            const DEFAULT_THEME = "lumen-atelier";
+            let theme = DEFAULT_THEME;
+            try {
+                const stored = localStorage.getItem(KEY);
+                if (stored && typeof stored === "string") {
+                    theme = stored;
+                }
+            } catch (_) {
+                /* ignore */
+            }
+            document.documentElement.setAttribute("data-theme", theme);
+        })();
+    </script>
+    <link rel="stylesheet" href="/static/css/app.css">
+    <link rel="manifest" href="/manifest.webmanifest">
+    <meta name="theme-color" content="#3f8f75">
+    <link rel="apple-touch-icon" href="/static/pwa/icon-192.png">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="mobile-web-app-capable" content="yes">
+    <script src="/static/pwa.js" defer></script>
+</head>
+<body class="docs-body">
+    {% set header_title = "Dokumentation" %}
+    {% set header_subtitle = "Guides, Betrieb & Release Notes" %}
+    {% set header_eyebrow = app_title or "Index-Suche" %}
+    {% set version_badge = app_version or 'v?' %}
+    {% set theme_switcher = True %}
+    {% set header_actions = [
+        {"type":"button","label":"Zur Suche","id":"nav-home","class":"btn btn-secondary","href":"/"},
+        {"type":"button","label":"Theme","id":"theme-toggle-header","class":"btn btn-secondary theme-toggle-btn"}
+    ] %}
+    <header class="app-header docs-header">
+        {% include "partials/header_top.html" with context %}
+    </header>
+
+    <main class="docs-main">
+        <aside class="docs-nav">
+            <div class="nav-title">Inhalt</div>
+            <nav>
+                {% for doc in primary_docs %}
+                    <a href="#{{ doc.id }}" class="nav-link">{{ doc.title }}</a>
+                {% endfor %}
+                {% if supporting_docs %}
+                    <div class="nav-section-label">Weitere Themen</div>
+                    {% for doc in supporting_docs %}
+                        <a href="#{{ doc.id }}" class="nav-link">{{ doc.title }}</a>
+                    {% endfor %}
+                {% endif %}
+                <a href="#release-notes" class="nav-link">Release Notes</a>
+                <a href="/api/docs" class="nav-link nav-api" target="_blank" rel="noreferrer noopener">API Docs</a>
+                <a href="/api/openapi.json" class="nav-link nav-api" target="_blank" rel="noreferrer noopener">OpenAPI JSON</a>
+            </nav>
+            <div class="nav-meta">
+                <div class="nav-pill">Aktuelle Version: {{ app_version or "v?" }}</div>
+                <div class="nav-hint">Swagger UI bleibt unter <code>/api/docs</code> erreichbar.</div>
+            </div>
+        </aside>
+
+        <section class="docs-content">
+            <section class="doc-section" id="guides">
+                <div class="section-head">
+                    <div>
+                        <div class="eyebrow">Guides</div>
+                        <h3>Benutzer- und Admin-Handbuch</h3>
+                        <div class="section-sub">Praktische Anleitungen für Suche, Explorer/Quarantäne und Betrieb.</div>
+                    </div>
+                </div>
+                <div class="doc-grid">
+                    {% for doc in primary_docs %}
+                        <article class="doc-card" id="{{ doc.id }}">
+                            <div class="doc-card-head">
+                                <div>
+                                    <div class="doc-pill">Guide</div>
+                                    <h4>{{ doc.title }}</h4>
+                                    {% if doc.summary %}<div class="doc-summary">{{ doc.summary }}</div>{% endif %}
+                                </div>
+                            </div>
+                            <div class="doc-content" aria-label="{{ doc.title }}">{{ doc.html | safe }}</div>
+                        </article>
+                    {% endfor %}
+                </div>
+            </section>
+
+            {% if supporting_docs %}
+            <section class="doc-section" id="reference">
+                <div class="section-head">
+                    <div>
+                        <div class="eyebrow">Betrieb & Themen</div>
+                        <h3>Referenzen & Detailkapitel</h3>
+                        <div class="section-sub">Ausgewählte Kapitel aus der bestehenden Dokumentation.</div>
+                    </div>
+                </div>
+                <div class="doc-grid">
+                    {% for doc in supporting_docs %}
+                        <article class="doc-card muted" id="{{ doc.id }}">
+                            <div class="doc-card-head">
+                                <div>
+                                    <div class="doc-pill ghost">Kapitel</div>
+                                    <h4>{{ doc.title }}</h4>
+                                    {% if doc.summary %}<div class="doc-summary">{{ doc.summary }}</div>{% endif %}
+                                </div>
+                            </div>
+                            <div class="doc-content" aria-label="{{ doc.title }}">{{ doc.html | safe }}</div>
+                        </article>
+                    {% endfor %}
+                </div>
+            </section>
+            {% endif %}
+        </section>
+
+        <aside class="docs-rail" id="release-notes">
+            <div class="rail-head">
+                <div class="eyebrow">Release Notes</div>
+                <h3>Neueste Versionen</h3>
+                <div class="rail-sub">Neueste oben, einklappbar.</div>
+            </div>
+            <div class="release-accordion">
+                {% if release_notes %}
+                    {% for note in release_notes %}
+                        <details class="release-item" {% if loop.index == 1 %}open{% endif %}>
+                            <summary>
+                                <span class="release-title">{{ note.title }}</span>
+                                <span class="release-arrow">▾</span>
+                            </summary>
+                                <div class="release-body">{{ note.html | safe }}</div>
+                        </details>
+                    {% endfor %}
+                {% else %}
+                    <div class="doc-empty">Keine Release Notes gefunden.</div>
+                {% endif %}
+            </div>
+        </aside>
+    </main>
+
+    <script src="/static/docs.js"></script>
+</body>
+</html>

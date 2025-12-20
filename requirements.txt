@@ -13,3 +13,5 @@ httpx==0.28.1
 pytest==9.0.2
 email-validator==2.3.0
 psutil==6.1.0
+markdown-it-py==3.0.0
+bleach==6.1.0
