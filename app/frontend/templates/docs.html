@@ -38,17 +38,14 @@
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="mobile-web-app-capable" content="yes">
     <script src="/static/pwa.js" defer></script>
+    <script src="/static/header.js" defer></script>
 </head>
 <body class="docs-body">
+    {% set is_index_page = False %}
     {% set header_title = "Dokumentation" %}
     {% set header_subtitle = "Guides, Betrieb & Release Notes" %}
     {% set header_eyebrow = app_title or "Index-Suche" %}
     {% set version_badge = app_version or 'v?' %}
-    {% set theme_switcher = True %}
-    {% set header_actions = [
-        {"type":"button","label":"Zur Suche","id":"nav-home","class":"btn btn-secondary","href":"/"},
-        {"type":"button","label":"Theme","id":"theme-toggle-header","class":"btn btn-secondary theme-toggle-btn"}
-    ] %}
     <header class="app-header docs-header">
         {% include "partials/header_top.html" with context %}
     </header>

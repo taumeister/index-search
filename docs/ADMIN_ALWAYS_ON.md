@@ -10,7 +10,7 @@ Zweck: Für abgeschottete, vertrauenswürdige Umgebungen kann der Admin-Modus oh
 ## Verhalten
 - Backend: `require_admin` gibt sofort `True` zurück, wenn `ADMIN_ALWAYS_ON` aktiv ist. Pfad-/Quarantäne-Guards und Dateirechte bleiben unverändert (keine erweiterten Schreibrechte).
 - Admin-Status: `/api/admin/status` liefert `admin=true` und `admin_always_on=true`. Login/Logout sind im Always-On-Modus wirkungslos.
-- Frontend: Admin-Overlay wird übersprungen, Admin-UI ist sofort sichtbar („Admin-Modus aktiv“), Admin-Button bleibt aktiv.
+- Frontend: Admin-UI ist sofort aktiv; das Admin-Overlay zeigt „aktiv“ an und erzwingt kein Reauth, bleibt aber für Status/Logout-Buttons erreichbar.
 
 ## Sicherheit
 - Nur in vertrauenswürdigen Netzen/Deployments nutzen (z. B. isolierte Test-/Intranet-Umgebung).

@@ -38,15 +38,14 @@
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="mobile-web-app-capable" content="yes">
     <script src="/static/pwa.js" defer></script>
+    <script src="/static/header.js" defer></script>
 </head>
 <body class="matrix-body">
+    {% set is_index_page = False %}
     {% set header_title = app_title or "Preview Performance" %}
     {% set header_subtitle = "" %}
     {% set header_eyebrow = None %}
     {% set version_badge = None %}
-    {% set header_actions = [
-        {"type":"button","label":"Zur Suche","id":"nav-home","class":"btn btn-secondary","href":"/"}
-    ] %}
     <header class="app-header matrix-header">
         {% include "partials/header_top.html" with context %}
     </header>

@@ -1,24 +1,30 @@
-{% macro render_icon(name) -%}
-    {%- if name == "metrics" -%}
-        <svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
-            <path d="M4 13h3v7H4zm6-8h3v15h-3zm6 5h3v10h-3z" fill="currentColor"></path>
-        </svg>
-    {%- elif name == "dashboard" -%}
-        <svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
-            <path d="M4 4h7v7H4zm0 9h7v7H4zm9-9h7v4h-7zm0 6h7v10h-7z" fill="currentColor"></path>
-        </svg>
-    {%- elif name == "home" -%}
-        <svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
-            <path d="M12 3l9 8h-3v9h-5v-6H11v6H6v-9H3l9-8z" fill="currentColor"></path>
-        </svg>
-    {%- elif name == "search" -%}
-        <svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
-            <path d="M10 2a8 8 0 105.293 14.293l4.707 4.707 1.414-1.414-4.707-4.707A8 8 0 0010 2zm0 2a6 6 0 110 12 6 6 0 010-12z" fill="currentColor"></path>
-        </svg>
-    {%- else -%}
-        {{ name }}
-    {%- endif -%}
-{%- endmacro %}
+{% set is_index_page = is_index_page if is_index_page is defined else False %}
+{% set feedback_flag = feedback_enabled if feedback_enabled is defined else False %}
+{% set theme_switcher = theme_switcher if theme_switcher is defined else True %}
+{% set base_menu_items = [
+    {"label":"Admin","id":"admin-button-menu","action":"admin"},
+    {"label":"Feedback","id":"feedback-trigger-menu","action":"feedback"} if feedback_flag else None,
+    {"label":"divider","type":"divider"},
+    {"label":"Dashboard","href":"/dashboard","id":"menu-dashboard"},
+    {"label":"Metrics","href":"/metrics","id":"menu-metrics"},
+    {"label":"Docs","href":"/docs","id":"menu-docs"},
+    {"label":"Über","id":"menu-about"}
+] | select | list %}
+{% if header_actions is not defined %}
+    {% if is_index_page %}
+        {% set header_actions = [
+            {"type":"button","label":"ZEN","id":"zen-toggle","class":"btn btn-secondary zen-header-toggle"},
+            {"type":"button","label":"Theme","id":"theme-toggle-header","class":"btn btn-secondary theme-toggle-btn"},
+            {"type":"menu","id":"header-menu","label":"Menü","entries": base_menu_items}
+        ] %}
+    {% else %}
+        {% set header_actions = [
+            {"type":"button","label":"Zur Suche","id":"nav-home","class":"btn btn-secondary","href":"/"},
+            {"type":"button","label":"Theme","id":"theme-toggle-header","class":"btn btn-secondary theme-toggle-btn"},
+            {"type":"menu","id":"header-menu","label":"Menü","entries": base_menu_items}
+        ] %}
+    {% endif %}
+{% endif %}
 
 <div class="header-top">
     <div class="header-title">

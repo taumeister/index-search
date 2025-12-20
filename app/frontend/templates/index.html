@@ -51,27 +51,12 @@
     </script>
 </head>
 <body>
+    {% set is_index_page = True %}
     {% set header_title = app_title %}
     {% set header_subtitle = "" %}
     {% set header_slogan = app_slogan %}
     {% set header_eyebrow = None %}
     {% set version_badge = app_version or 'v?' %}
-    {% set theme_switcher = True %}
-{% set base_menu_items = [
-        {"label":"Admin","id":"admin-button-menu","action":"admin"},
-        {"label":"Feedback","id":"feedback-trigger-menu","action":"feedback"} if feedback_enabled else None,
-        {"label":"divider","type":"divider"},
-        {"label":"Dashboard","href":"/dashboard","id":"menu-dashboard"},
-        {"label":"Metrics","href":"/metrics","id":"menu-metrics"},
-        {"label":"Docs","href":"/docs","id":"menu-docs"},
-        {"label":"Über","id":"menu-about"}
-    ] | select | list %}
-{% set menu_items = base_menu_items %}
-{% set header_actions = [
-        {"type":"button","label":"ZEN","id":"zen-toggle","class":"btn btn-secondary zen-header-toggle"},
-        {"type":"button","label":"Theme","id":"theme-toggle-header","class":"btn btn-secondary theme-toggle-btn"},
-        {"type":"menu","id":"header-menu","label":"Menü","entries": menu_items}
-    ] %}
     <header class="app-header">
         {% include "partials/header_top.html" with context %}
         <div class="search-bar">

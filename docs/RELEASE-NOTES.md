@@ -1,5 +1,11 @@
 # Release-Notizen
 
+## v0.3.23 - Unified Topbar & Admin Always-On
+- Header/Topbar vereinheitlicht: Index behält ZEN + Theme + Burger, alle Unterseiten erhalten Zur Suche + Theme + Burger mit konsistentem Menü (Admin, Feedback, Dashboard, Metrics, Docs, Über).
+- Gemeinsame Header-Skripte stellen Theme-Toggle und Burger-Menü auf allen Seiten bereit; Navigation und Admin/Feedback/Über funktionieren identisch.
+- Admin Always On repariert: UI zeigt Status korrekt, erzwingt kein Reauth und respektiert das Flag beim Admin-Status.
+- E2E-Tests für Topbar/Burger/Admin aktualisiert und grün.
+
 ## v0.3.22 - Themed Report Mailer
 - Index-Report jetzt als themenkompatible HTML-Mail (Inline-Body) plus vollständiger HTML-Anhang; Farben/Typo aus den bestehenden Design-Tokens übernommen.
 - Ausklappbare Abschnitte für Added/Updated/Removed/Fehler; Inline-Body begrenzt auf Top-N, vollständige Listen im Anhang.

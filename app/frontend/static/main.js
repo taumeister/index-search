@@ -43,10 +43,14 @@ let availableSources = [];
 let activeSourceLabels = new Set();
 let adminState = { admin: false, fileOpsEnabled: false, readySources: [] };
 let adminReadySources = new Set();
+let adminLoggedIn = false;
 let adminAlwaysOn = Boolean(
     typeof window !== "undefined" &&
         (window.adminAlwaysOn === true || String(window.adminAlwaysOn || "").toLowerCase() === "true")
 );
+if (adminAlwaysOn) {
+    adminLoggedIn = true;
+}
 if (typeof document !== "undefined") {
     document.documentElement.setAttribute("data-admin-always-on", adminAlwaysOn ? "true" : "false");
 }
@@ -657,7 +661,7 @@ function renderAdminUi() {
               : "Admin-Funktionen nicht verfügbar";
     }
     if (statusLabel) {
-        statusLabel.textContent = adminState.admin || adminAlwaysOn ? "Admin-Modus aktiv" : "Admin-Modus aus";
+        statusLabel.textContent = adminState.admin ? "Admin-Modus aktiv" : "Admin-Modus aus";
     }
     if (readyListEl) {
         if (!available) {
@@ -676,7 +680,11 @@ function updateAdminState(data) {
     } catch (_) {
         /* ignore */
     }
-    adminState.admin = Boolean(adminAlwaysOn || (data && data.admin));
+    const adminFromApi = Boolean(data && data.admin);
+    if (adminFromApi) {
+        adminLoggedIn = true;
+    }
+    adminState.admin = Boolean(adminAlwaysOn || adminLoggedIn || adminFromApi);
     adminState.fileOpsEnabled = Boolean(data && data.file_ops_enabled);
     const readyList = Array.isArray(data && data.quarantine_ready_sources) ? data.quarantine_ready_sources : [];
     adminState.readySources = readyList;
@@ -720,25 +728,8 @@ function setupAdminControls() {
         window.openAdminModal = () => console.error("[admin] Admin-Overlay nicht initialisiert.");
         return;
     }
-
     function setAdminOverlayOpen(state) {
         document.documentElement.setAttribute("data-admin-open", state ? "true" : "false");
-    }
-
-    if (adminAlwaysOn) {
-        setAdminOverlayOpen(false);
-        modal.classList.add("hidden");
-        document.body.classList.remove("dialog-open");
-        document.body.style.overflow = "";
-        window.openAdminModal = () => {};
-        btn.addEventListener("click", (e) => {
-            e.preventDefault();
-            renderAdminUi();
-        });
-        loginBtn.disabled = true;
-        logoutBtn.disabled = true;
-        input.disabled = true;
-        return;
     }
 
     setAdminOverlayOpen(false);
@@ -754,19 +745,30 @@ function setupAdminControls() {
         statusEl.textContent = text;
     }
 
-    async function forceLogout(reason = "reauth") {
-        updateAdminState({ admin: false, file_ops_enabled: adminState.fileOpsEnabled, quarantine_ready_sources: adminState.readySources });
-        try {
-            await fetch("/api/admin/logout", { method: "POST" });
-        } catch (err) {
-            console.error("[admin] Logout fehlgeschlagen (%s)", reason, err);
+async function forceLogout(reason = "reauth") {
+    if (adminAlwaysOn) {
+        return;
+    }
+    adminLoggedIn = false;
+    updateAdminState({ admin: false, file_ops_enabled: adminState.fileOpsEnabled, quarantine_ready_sources: adminState.readySources });
+    try {
+        await fetch("/api/admin/logout", { method: "POST" });
+    } catch (err) {
+        console.error("[admin] Logout fehlgeschlagen (%s)", reason, err);
         }
         await refreshAdminStatus();
     }
 
     async function openModal(options = {}) {
         if (adminAlwaysOn) {
+            setStatus("success", "Admin-Modus dauerhaft aktiv.");
+            adminLoggedIn = true;
+            updateAdminState({ admin: true, admin_always_on: true, file_ops_enabled: adminState.fileOpsEnabled, quarantine_ready_sources: adminState.readySources });
             renderAdminUi();
+            modal.classList.remove("hidden");
+            setAdminOverlayOpen(true);
+            document.body.classList.add("dialog-open");
+            document.body.style.overflow = "hidden";
             return;
         }
         const opts = typeof options === "object" && options !== null ? options : {};
@@ -798,11 +800,6 @@ function setupAdminControls() {
     }
 
     async function submitLogin() {
-        if (adminAlwaysOn) {
-            setStatus("success", "Admin-Modus dauerhaft aktiv.");
-            setTimeout(() => closeModal(), 200);
-            return;
-        }
         const password = input.value || "";
         setStatus("", "");
         try {
@@ -812,10 +809,13 @@ function setupAdminControls() {
                 body: JSON.stringify({ password }),
             });
             if (!res.ok) {
-                let detail = "Login fehlgeschlagen.";
+                let detail = res.status === 401 ? "Ungültiges Passwort." : "Login fehlgeschlagen.";
                 try {
                     const data = await res.json();
                     detail = data.detail || detail;
+                    if (detail.toLowerCase() === "unauthorized") {
+                        detail = "Login fehlgeschlagen.";
+                    }
                 } catch (_) {
                     /* ignore */
                 }
@@ -823,6 +823,7 @@ function setupAdminControls() {
                 return;
             }
             const data = await res.json();
+            adminLoggedIn = true;
             updateAdminState({ ...data, admin: true });
             setStatus("success", "Admin-Modus aktiviert.");
             setTimeout(() => closeModal(), 400);
@@ -839,6 +840,7 @@ function setupAdminControls() {
             return;
         }
         setStatus("", "");
+        adminLoggedIn = false;
         await forceLogout("manual");
         closeModal();
     }
@@ -1772,6 +1774,37 @@ function setupAboutOverlay() {
         }
     });
     window.openAboutOverlay = open;
+}
+
+function handleInitialQueryActions() {
+    const params = new URLSearchParams(window.location.search || "");
+    const pending = {
+        admin: params.has("admin"),
+        feedback: params.has("feedback"),
+        about: params.has("about"),
+    };
+    let handled = false;
+    if (pending.admin && typeof window.openAdminModal === "function") {
+        window.openAdminModal({ forceReauth: true });
+        handled = true;
+    }
+    if (pending.feedback && typeof window.openFeedbackOverlay === "function") {
+        window.openFeedbackOverlay();
+        handled = true;
+    }
+    if (pending.about && typeof window.openAboutOverlay === "function") {
+        window.openAboutOverlay();
+        handled = true;
+    }
+    if (handled) {
+        params.delete("admin");
+        params.delete("feedback");
+        params.delete("about");
+        const next = params.toString();
+        const hash = window.location.hash || "";
+        const target = next ? `${window.location.pathname}?${next}${hash}` : `${window.location.pathname}${hash}`;
+        window.history.replaceState({}, "", target);
+    }
 }
 
 setupHeaderMenu();
@@ -3535,3 +3568,4 @@ function setupFeedback() {
 
 setupFeedback();
 setupToasts();
+handleInitialQueryActions();

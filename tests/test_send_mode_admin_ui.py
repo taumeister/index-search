@@ -7,12 +7,20 @@ def wait_for_modal_open(page):
 @pytest.mark.smoke
 def test_burger_menu_admin_login_reauth(page, base_url, admin_password):
     page.goto(f"{base_url}/", wait_until="domcontentloaded", timeout=20000)
+    always_on = page.evaluate("() => document.documentElement.getAttribute('data-admin-always-on') === 'true'")
 
     page.click("#header-menu", timeout=6000)
     page.wait_for_selector("#header-menu-dropdown:not(.hidden)", timeout=4000)
 
     page.click("#admin-button-menu", timeout=4000)
     wait_for_modal_open(page)
+
+    if always_on:
+        label_text = page.inner_text("#admin-status-label")
+        assert "aktiv" in label_text.lower()
+        page.click("#admin-close")
+        page.wait_for_selector("#admin-modal", state="hidden", timeout=5000)
+        return
 
     page.fill("#admin-password", "wrong-pass")
     page.click("#admin-login")
