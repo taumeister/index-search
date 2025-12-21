@@ -999,7 +999,13 @@ async function pollUploadStatus() {
 }
 
 async function abortUploadSession() {
-    if (!uploadState.sessionId) {
+    const isFinished = uploadState.stage === "done" || uploadState.stage === "imported";
+    const isActive =
+        uploadState.stage === "uploading" ||
+        uploadState.stage === "importing" ||
+        uploadState.stage === "indexing" ||
+        uploadState.stage === "conflict";
+    if (!uploadState.sessionId || isFinished || !isActive) {
         closeUploadOverlay();
         resetUploadState();
         return;
@@ -1064,7 +1070,13 @@ function setupUploadUi() {
     });
     if (closeBtn) {
         closeBtn.addEventListener("click", () => {
-            abortUploadSession();
+            const finished = uploadState.stage === "done";
+            if (finished) {
+                closeUploadOverlay();
+                resetUploadState();
+            } else {
+                abortUploadSession();
+            }
         });
     }
     if (resolveBtn) {
