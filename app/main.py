@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import Optional, Dict, Any
 
 import uvicorn
-from fastapi import Cookie, Depends, FastAPI, HTTPException, Header, Query, Request, Response
+from fastapi import Cookie, Depends, FastAPI, HTTPException, Header, Query, Request, Response, UploadFile, File, Form, Body
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
@@ -20,7 +20,6 @@ import os
 import time
 
 from app import api
-from app import config_db
 from app.config_loader import CentralConfig, ensure_dirs, load_config
 from app.db import datenbank as db
 from app import index_runner
@@ -943,6 +942,127 @@ def create_app(config: Optional[CentralConfig] = None) -> FastAPI:
             logger.error("Copy fehlgeschlagen: %s", exc)
             raise HTTPException(status_code=500, detail="Kopieren fehlgeschlagen")
         return {"status": "ok", **result}
+
+    @app.post("/api/upload/init")
+    def upload_init(payload: Dict[str, Any], _admin: bool = Depends(require_admin)):
+        file_ops.refresh_quarantine_state()
+        target_source = (payload.get("target_source") or "").strip()
+        target_dir = payload.get("target_dir") or ""
+        files = payload.get("files") or []
+        cfg = load_config()
+        max_size = getattr(cfg.indexer, "max_file_size_mb", None)
+        try:
+            result = file_ops.create_upload_session(target_source, target_dir, files, max_file_size_mb=max_size)
+        except file_ops.FileOpError as exc:
+            raise HTTPException(status_code=exc.status_code, detail=str(exc))
+        except Exception as exc:
+            logger.error("Upload-Init fehlgeschlagen: %s", exc)
+            raise HTTPException(status_code=500, detail="Upload-Init fehlgeschlagen")
+        return result
+
+    @app.post("/api/upload/{session_id}/file")
+    async def upload_file(
+        session_id: str,
+        file: UploadFile = File(...),
+        name: Optional[str] = Form(None),
+        _admin: bool = Depends(require_admin),
+    ):
+        file_ops.refresh_quarantine_state()
+        cfg = load_config()
+        max_size = getattr(cfg.indexer, "max_file_size_mb", None)
+        try:
+            result = file_ops.save_upload_file(session_id, file, name=name, max_file_size_mb=max_size)
+        except file_ops.FileOpError as exc:
+            raise HTTPException(status_code=exc.status_code, detail=str(exc))
+        except Exception as exc:
+            logger.error("Upload fehlgeschlagen: %s", exc)
+            raise HTTPException(status_code=500, detail="Upload fehlgeschlagen")
+        return {"status": "ok", **result}
+
+    @app.post("/api/upload/{session_id}/complete")
+    def upload_complete(session_id: str, payload: Optional[Dict[str, Any]] = Body(None), overwrite_mode: str = Query("reject"), _admin: bool = Depends(require_admin)):
+        file_ops.refresh_quarantine_state()
+        mode = overwrite_mode
+        if payload and isinstance(payload, dict):
+            mode = payload.get("overwrite_mode", mode)
+        mode = (mode or "reject").strip().lower()
+        try:
+            result = file_ops.complete_upload_session(session_id, overwrite_mode=mode)
+        except file_ops.FileOpError as exc:
+            if exc.status_code == 409:
+                try:
+                    status = file_ops.get_upload_status(session_id)
+                except Exception:
+                    status = {}
+                return JSONResponse(
+                    {
+                        "status": "conflict",
+                        "detail": str(exc),
+                        "conflicts": status.get("conflicts", []),
+                    },
+                    status_code=409,
+                )
+            raise HTTPException(status_code=exc.status_code, detail=str(exc))
+        except Exception as exc:
+            logger.error("Upload-Import fehlgeschlagen: %s", exc)
+            raise HTTPException(status_code=500, detail="Import fehlgeschlagen")
+
+        index_status = "idle"
+        try:
+            cfg = load_config()
+            roots_override = [(Path(result.get("target_root")), result.get("target_source"))] if result.get("target_root") else None
+            status = start_index_run(cfg_override=cfg, roots_override=roots_override, resolve_roots=resolve_active_roots, reason="upload")
+            if status == "busy":
+                index_status = "busy"
+            elif status == "started":
+                index_status = "indexing"
+            else:
+                index_status = status
+            file_ops.update_upload_index_status(session_id, index_status)
+            try:
+                current = file_ops.get_upload_status(session_id)
+                result["stage"] = current.get("stage", result.get("stage"))
+            except Exception:
+                pass
+        except Exception as exc:
+            logger.error("Index-Trigger nach Upload fehlgeschlagen: %s", exc)
+            file_ops.update_upload_index_status(session_id, "error")
+        return {**result, "index_status": index_status}
+
+    @app.get("/api/upload/{session_id}/status")
+    def upload_status(session_id: str, _admin: bool = Depends(require_admin)):
+        try:
+            status = file_ops.get_upload_status(session_id)
+        except file_ops.FileOpError as exc:
+            raise HTTPException(status_code=exc.status_code, detail=str(exc))
+        except Exception as exc:
+            logger.error("Upload-Status fehlgeschlagen: %s", exc)
+            raise HTTPException(status_code=500, detail="Upload-Status fehlgeschlagen")
+
+        try:
+            live = get_live_status()
+            # Index-Status nur mappen, wenn der Upload bereits importiert/indexing ist
+            if status.get("stage") in {"imported", "indexing"}:
+                if live and live.get("status") == "completed":
+                    file_ops.update_upload_index_status(session_id, "done")
+                    status["index_status"] = "done"
+                    status["stage"] = "done"
+                elif live and status.get("index_status") not in {"done", "error"}:
+                    status["index_status"] = live.get("status") or status.get("index_status")
+        except Exception:
+            pass
+        return status
+
+    @app.post("/api/upload/{session_id}/abort")
+    def upload_abort(session_id: str, _admin: bool = Depends(require_admin)):
+        try:
+            file_ops.abort_upload_session(session_id)
+        except file_ops.FileOpError as exc:
+            raise HTTPException(status_code=exc.status_code, detail=str(exc))
+        except Exception as exc:
+            logger.error("Upload-Abbruch fehlgeschlagen: %s", exc)
+            raise HTTPException(status_code=500, detail="Abbruch fehlgeschlagen")
+        return {"status": "aborted"}
 
     @app.post("/api/files/{doc_id}/quarantine-delete")
     def quarantine_delete(doc_id: int, request: Request, _admin: bool = Depends(require_admin)):

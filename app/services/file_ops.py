@@ -8,7 +8,7 @@ import threading
 import time
 from uuid import uuid4
 from contextlib import contextmanager
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Dict, Iterable, List, Optional, Tuple
@@ -38,6 +38,28 @@ class QuarantineSettings:
     auto_purge_enabled: bool = False
 
 
+@dataclass
+class UploadSession:
+    session_id: str
+    source_label: str
+    target_root: Path
+    target_dir: Path
+    quarantine_dir: Path
+    staging_dir: Path
+    total_files: int
+    total_bytes: int
+    uploaded_files: int = 0
+    uploaded_bytes: int = 0
+    import_count: int = 0
+    import_total: int = 0
+    overwrite_mode: str = "reject"
+    stage: str = "init"
+    error: Optional[str] = None
+    expected_names: set[str] = field(default_factory=set)
+    index_status: str = "idle"
+    conflicts: list[str] = field(default_factory=list)
+
+
 class FileOpError(Exception):
     def __init__(self, message: str, status_code: int = 400):
         super().__init__(message)
@@ -51,6 +73,8 @@ _locks: Dict[str, threading.Lock] = {}
 _locks_guard = threading.Lock()
 _cleanup_thread: Optional[threading.Thread] = None
 _cleanup_stop = threading.Event()
+_upload_sessions: Dict[str, UploadSession] = {}
+_upload_sessions_lock = threading.Lock()
 
 
 def _canonical(path: Path) -> Path:
@@ -103,6 +127,46 @@ def _normalize_rel_path(raw: str) -> Path:
         if part in ("", ".", "..") or "\x00" in part or "/" in part or "\\" in part:
             raise FileOpError("Ungültiger Pfad", status_code=400)
     return Path("/".join(parts)) if parts else Path()
+
+
+def _sanitize_upload_name(name: str) -> str:
+    base = Path(name or "").name
+    if not base or base in {".", ".."}:
+        raise FileOpError("Ungültiger Dateiname", status_code=400)
+    if "/" in base or "\\" in base or "\x00" in base:
+        raise FileOpError("Ungültiger Dateiname", status_code=400)
+    return base
+
+
+def _unique_target_path(candidate: Path, root: Path) -> Path:
+    base = candidate.stem
+    suffix = candidate.suffix
+    parent = candidate.parent
+    idx = 1
+    while True:
+        alt = parent / f"{base}_upload_{idx}{suffix}"
+        alt = _guard_path(alt, root, allow_root=False, must_exist=False)
+        if not alt.exists():
+            return alt
+        idx += 1
+
+
+def _get_upload_session(session_id: str) -> UploadSession:
+    with _upload_sessions_lock:
+        session = _upload_sessions.get(session_id)
+    if not session:
+        raise FileOpError("Upload-Session nicht gefunden", status_code=404)
+    return session
+
+
+def _store_session(session: UploadSession) -> None:
+    with _upload_sessions_lock:
+        _upload_sessions[session.session_id] = session
+
+
+def _remove_session(session_id: str) -> None:
+    with _upload_sessions_lock:
+        _upload_sessions.pop(session_id, None)
 
 
 def _audit(entry: Dict[str, object]) -> None:
@@ -711,6 +775,234 @@ def copy_file(doc_id: int, target_dir: str, target_source: Optional[str] = None,
         "new_path": str(target_path),
         "display_name": target_path.name,
         "display_path": str(target_path),
+    }
+
+
+def create_upload_session(
+    target_source: str,
+    target_dir: str,
+    files: List[Dict[str, object]],
+    max_file_size_mb: Optional[int] = None,
+) -> Dict[str, object]:
+    if not files:
+        raise FileOpError("Keine Dateien angegeben", status_code=400)
+    info = _resolve_source(target_source)
+    _assert_quarantine_ready(info)
+    safe_target_dir = _normalize_rel_path(target_dir or "")
+    target_base = _guard_path(info.root / safe_target_dir, info.root, allow_root=True, must_exist=True)
+    if not target_base.is_dir():
+        raise FileOpError("Zielordner nicht gefunden", status_code=404)
+    if str(target_base).startswith(str(info.quarantine_dir)):
+        raise FileOpError("Quarantäne kann nicht als Ziel genutzt werden", status_code=400)
+
+    staging_root = info.quarantine_dir / "_uploads"
+    try:
+        staging_root.mkdir(parents=True, exist_ok=True)
+    except Exception as exc:
+        raise FileOpError("Staging nicht beschreibbar", status_code=500) from exc
+    session_id = uuid4().hex
+    staging_dir = staging_root / session_id
+    try:
+        staging_dir.mkdir(parents=False, exist_ok=False)
+    except Exception as exc:
+        raise FileOpError("Staging nicht beschreibbar", status_code=500) from exc
+
+    total_bytes = 0
+    expected_names: set[str] = set()
+    for entry in files:
+        name = _sanitize_upload_name(str(entry.get("name", "")))
+        size_val = int(entry.get("size") or 0)
+        if size_val < 0:
+            raise FileOpError("Ungültige Dateigröße", status_code=400)
+        if max_file_size_mb and size_val > max_file_size_mb * 1024 * 1024:
+            raise FileOpError("Datei zu groß", status_code=413)
+        total_bytes += size_val
+        expected_names.add(name)
+
+    session = UploadSession(
+        session_id=session_id,
+        source_label=info.label,
+        target_root=info.root,
+        target_dir=safe_target_dir,
+        quarantine_dir=info.quarantine_dir,
+        staging_dir=staging_dir,
+        total_files=len(files),
+        total_bytes=total_bytes,
+        overwrite_mode="reject",
+        stage="uploading",
+        expected_names=expected_names,
+        index_status="idle",
+    )
+    _store_session(session)
+    return {
+        "session_id": session_id,
+        "total_files": session.total_files,
+        "total_bytes": session.total_bytes,
+        "max_file_size_mb": max_file_size_mb,
+        "target_source": info.label,
+        "target_dir": safe_target_dir.as_posix(),
+        "stage": session.stage,
+    }
+
+
+def save_upload_file(session_id: str, upload_file, name: Optional[str] = None, max_file_size_mb: Optional[int] = None) -> Dict[str, object]:
+    session = _get_upload_session(session_id)
+    if session.stage not in {"uploading", "init", "conflict"}:
+        raise FileOpError("Upload bereits abgeschlossen", status_code=409)
+    safe_name = _sanitize_upload_name(name or getattr(upload_file, "filename", ""))
+    if session.expected_names and safe_name not in session.expected_names:
+        raise FileOpError("Unerwarteter Dateiname", status_code=400)
+    dest_path = session.staging_dir / safe_name
+    if dest_path.exists():
+        raise FileOpError("Datei bereits hochgeladen", status_code=409)
+    size_limit_mb = max_file_size_mb or None
+    written = 0
+    try:
+        with dest_path.open("wb") as fh:
+            while True:
+                chunk = upload_file.file.read(1024 * 1024)
+                if not chunk:
+                    break
+                fh.write(chunk)
+                written += len(chunk)
+                if size_limit_mb and written > size_limit_mb * 1024 * 1024:
+                    raise FileOpError("Datei zu groß", status_code=413)
+        if dest_path.is_symlink():
+            dest_path.unlink(missing_ok=True)
+            raise FileOpError("Symlinks nicht erlaubt", status_code=400)
+    except FileOpError:
+        try:
+            dest_path.unlink(missing_ok=True)
+        except Exception:
+            pass
+        raise
+    except Exception as exc:
+        try:
+            dest_path.unlink(missing_ok=True)
+        except Exception:
+            pass
+        raise FileOpError("Upload fehlgeschlagen", status_code=500) from exc
+
+    session.uploaded_files += 1
+    session.uploaded_bytes += written
+    session.stage = "uploading"
+    _store_session(session)
+    return {"uploaded_files": session.uploaded_files, "total_files": session.total_files, "uploaded_bytes": session.uploaded_bytes}
+
+
+def complete_upload_session(session_id: str, overwrite_mode: str = "reject") -> Dict[str, object]:
+    session = _get_upload_session(session_id)
+    session.overwrite_mode = overwrite_mode if overwrite_mode in {"rename", "reject", "overwrite"} else "reject"
+    session.error = None
+    session.conflicts = []
+    if session.uploaded_files < session.total_files:
+        raise FileOpError("Upload nicht vollständig", status_code=400)
+    info = _resolve_source(session.source_label)
+    _assert_quarantine_ready(info)
+    safe_target_dir = _normalize_rel_path(session.target_dir.as_posix())
+    target_base = _guard_path(info.root / safe_target_dir, info.root, allow_root=True, must_exist=True)
+    if str(target_base).startswith(str(info.quarantine_dir)):
+        raise FileOpError("Quarantäne kann nicht als Ziel genutzt werden", status_code=400)
+    files = [p for p in session.staging_dir.iterdir() if p.is_file()]
+    if not files:
+        raise FileOpError("Keine Dateien hochgeladen", status_code=400)
+    session.import_total = len(files)
+    imported: List[Path] = []
+    conflicts: List[str] = []
+    for staged in files:
+        target_candidate = _guard_path(target_base / staged.name, info.root, allow_root=False, must_exist=False)
+        if target_candidate.exists() and session.overwrite_mode == "reject":
+            conflicts.append(staged.name)
+    if conflicts and session.overwrite_mode == "reject":
+        session.stage = "conflict"
+        session.conflicts = conflicts
+        session.error = "Ziel existiert bereits"
+        session.index_status = "idle"
+        _store_session(session)
+        raise FileOpError("Ziel existiert bereits", status_code=409)
+
+    try:
+        for staged in files:
+            target_candidate = _guard_path(target_base / staged.name, info.root, allow_root=False, must_exist=False)
+            if target_candidate.exists():
+                if session.overwrite_mode == "rename":
+                    target_candidate = _unique_target_path(target_candidate, info.root)
+                elif session.overwrite_mode == "overwrite":
+                    pass
+                else:
+                    raise FileOpError("Ziel existiert bereits", status_code=409)
+            target_candidate.parent.mkdir(parents=True, exist_ok=True)
+            with _locked_paths([target_candidate]):
+                _move_file(staged, target_candidate)
+            session.import_count += 1
+            imported.append(target_candidate)
+        session.stage = "imported"
+        session.conflicts = []
+        _store_session(session)
+    except FileOpError as exc:
+        session.stage = "error"
+        session.error = str(exc)
+        _store_session(session)
+        raise
+    except Exception as exc:
+        session.stage = "error"
+        session.error = "Import fehlgeschlagen"
+        _store_session(session)
+        raise FileOpError("Import fehlgeschlagen", status_code=500) from exc
+    else:
+        try:
+            shutil.rmtree(session.staging_dir, ignore_errors=True)
+        except Exception:
+            pass
+    return {
+        "session_id": session.session_id,
+        "import_count": session.import_count,
+        "import_total": session.import_total,
+        "imported": [str(p) for p in imported],
+        "target_source": session.source_label,
+        "target_root": str(info.root),
+        "stage": session.stage,
+    }
+
+
+def abort_upload_session(session_id: str) -> None:
+    session = _get_upload_session(session_id)
+    try:
+        shutil.rmtree(session.staging_dir, ignore_errors=True)
+    except Exception:
+        pass
+    _remove_session(session_id)
+
+
+def update_upload_index_status(session_id: str, status: str) -> None:
+    try:
+        session = _get_upload_session(session_id)
+    except FileOpError:
+        return
+    session.index_status = status
+    if status == "done" and session.stage != "error":
+        session.stage = "done"
+    elif status and status != "idle":
+        session.stage = "indexing"
+    _store_session(session)
+
+
+def get_upload_status(session_id: str) -> Dict[str, object]:
+    session = _get_upload_session(session_id)
+    return {
+        "session_id": session.session_id,
+        "stage": session.stage,
+        "error": session.error,
+        "uploaded_files": session.uploaded_files,
+        "total_files": session.total_files,
+        "uploaded_bytes": session.uploaded_bytes,
+        "total_bytes": session.total_bytes,
+        "import_count": session.import_count,
+        "import_total": session.import_total,
+        "target_source": session.source_label,
+        "target_dir": session.target_dir.as_posix(),
+        "index_status": session.index_status,
+        "conflicts": session.conflicts,
     }
 
 

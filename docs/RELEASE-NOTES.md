@@ -1,5 +1,11 @@
 # Release-Notizen
 
+## v0.3.24 - Nebula Cascade
+- Globaler Upload-Flow auf der Index-Seite: permanente, dezente Dropzone (Klick + Drag&Drop) mit Zen-kompatibler Positionierung und Upload-Overlay (Fortschritt Upload/Import/Index).
+- Konflikt-Handling: Standard „nicht überschreiben“, bei Konflikt explizite Auswahl „Überschreiben“ oder „Auto-Rename“ (einmalig pro Konflikt), Auto-Rename mit eindeutigen Suffixen; Abbruch über Schließen.
+- Staging+Import: Dateien landen zuerst in `.quarantine/_uploads/<session>`, danach atomar ins Ziel (nur erlaubte Roots), Indexlauf wird für die betroffene Quelle gestartet; Status/Fehler inkl. Konfliktliste.
+- Drag&Drop robuster (aktiviertes Prevent Default), Dropzone-Höhe schlanker und zentriert zum Zen-Button.
+
 ## v0.3.23 - Unified Topbar & Admin Always-On
 - Header/Topbar vereinheitlicht: Index behält ZEN + Theme + Burger, alle Unterseiten erhalten Zur Suche + Theme + Burger mit konsistentem Menü (Admin, Feedback, Dashboard, Metrics, Docs, Über).
 - Gemeinsame Header-Skripte stellen Theme-Toggle und Burger-Menü auf allen Seiten bereit; Navigation und Admin/Feedback/Über funktionieren identisch.

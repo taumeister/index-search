@@ -59,6 +59,9 @@
     {% set version_badge = app_version or 'v?' %}
     <header class="app-header">
         {% include "partials/header_top.html" with context %}
+        <div class="upload-dropzone" id="upload-dropzone" aria-hidden="true">
+            <div class="upload-dropzone-hint">Dateien hier ablegen oder klick</div>
+        </div>
         <div class="search-bar">
             <div class="search-input-wrap">
                 <input id="search-input" type="text" placeholder="Suche wie im Explorer..." />
@@ -299,6 +302,59 @@
             </div>
         </div>
     </div>
+
+    <div id="upload-overlay" class="dialog-overlay hidden">
+        <div class="dialog-card upload-card">
+            <div class="dialog-title-row">
+                <div>
+                    <div class="dialog-eyebrow">Upload</div>
+                    <div class="dialog-title">Dateien verarbeiten</div>
+                    <div class="dialog-muted" id="upload-target-label"></div>
+                </div>
+            </div>
+            <div class="dialog-status hidden" id="upload-status"></div>
+            <div class="upload-meta">
+                <div id="upload-file-count">0 Dateien</div>
+                <div id="upload-size-summary"></div>
+            </div>
+            <div class="upload-overwrite">
+                <span class="dialog-label">Konfliktverhalten</span>
+                <div class="overwrite-options">
+                    <label><input type="radio" name="upload-overwrite" value="overwrite"> Überschreiben</label>
+                    <label><input type="radio" name="upload-overwrite" value="rename"> Auto-Rename</label>
+                </div>
+            </div>
+            <div class="upload-progress">
+                <div class="upload-stage" data-stage="upload">
+                    <div class="stage-head">
+                        <span>Upload</span>
+                        <span class="stage-meta" id="upload-upload-meta"></span>
+                    </div>
+                    <div class="stage-bar"><div class="stage-bar-fill" id="upload-upload-bar"></div></div>
+                </div>
+                <div class="upload-stage" data-stage="import">
+                    <div class="stage-head">
+                        <span>Import</span>
+                        <span class="stage-meta" id="upload-import-meta"></span>
+                    </div>
+                    <div class="stage-bar"><div class="stage-bar-fill" id="upload-import-bar"></div></div>
+                </div>
+                <div class="upload-stage" data-stage="index">
+                    <div class="stage-head">
+                        <span>Index</span>
+                        <span class="stage-meta" id="upload-index-meta"></span>
+                    </div>
+                    <div class="stage-bar"><div class="stage-bar-fill" id="upload-index-bar"></div></div>
+                </div>
+            </div>
+            <div class="upload-actions">
+                <button type="button" class="btn btn-secondary" id="upload-resolve">Ausführen</button>
+                <button type="button" class="btn btn-secondary" id="upload-close">Schließen</button>
+            </div>
+        </div>
+    </div>
+
+    <input type="file" id="upload-input" multiple aria-hidden="true" style="display:none;">
 
     {% if feedback_enabled %}
     <div id="feedback-overlay" class="feedback-overlay hidden" aria-hidden="true">

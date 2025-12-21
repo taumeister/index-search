@@ -1,4 +1,6 @@
 import os
+import io
+from types import SimpleNamespace
 from datetime import date
 from pathlib import Path
 
@@ -45,6 +47,10 @@ def seed_document(path: Path, source: str) -> int:
             title_or_subject=path.stem,
         )
         return db.upsert_document(conn, meta)
+
+
+def make_upload_file(name: str, content: bytes):
+    return SimpleNamespace(filename=name, file=io.BytesIO(content))
 
 
 def create_admin_client(monkeypatch, tmp_path: Path) -> tuple[TestClient, dict, Path]:
@@ -236,6 +242,50 @@ def test_rename_success_with_backup(monkeypatch, tmp_path):
     assert row["path"] == str(new_path)
     assert row["filename"] == "renamed.txt"
     assert row["extension"] == ".txt"
+
+
+def test_upload_session_flow_success(monkeypatch, tmp_path):
+    root = setup_env(monkeypatch, tmp_path)
+    (root / "seed.txt").write_text("seed", encoding="utf-8")
+    file_ops.refresh_quarantine_state()
+    session = file_ops.create_upload_session("Root", "", [{"name": "new.txt", "size": 5}], max_file_size_mb=10)
+    upload = make_upload_file("new.txt", b"hello")
+    file_ops.save_upload_file(session["session_id"], upload, max_file_size_mb=10)
+    result = file_ops.complete_upload_session(session["session_id"], overwrite_mode="reject")
+    target = root / "new.txt"
+    assert target.exists()
+    assert result["import_count"] == 1
+    assert result["stage"] == "imported"
+
+
+def test_upload_conflict_rejected(monkeypatch, tmp_path):
+    root = setup_env(monkeypatch, tmp_path)
+    (root / "seed.txt").write_text("seed", encoding="utf-8")
+    file_ops.refresh_quarantine_state()
+    existing = root / "new.txt"
+    existing.write_text("alt", encoding="utf-8")
+    session = file_ops.create_upload_session("Root", "", [{"name": "new.txt", "size": 5}], max_file_size_mb=10)
+    upload = make_upload_file("new.txt", b"hello")
+    file_ops.save_upload_file(session["session_id"], upload, max_file_size_mb=10)
+    with pytest.raises(file_ops.FileOpError) as exc:
+        file_ops.complete_upload_session(session["session_id"], overwrite_mode="reject")
+    assert exc.value.status_code == 409
+    assert existing.read_text(encoding="utf-8") == "alt"
+
+
+def test_upload_conflict_auto_rename(monkeypatch, tmp_path):
+    root = setup_env(monkeypatch, tmp_path)
+    (root / "seed.txt").write_text("seed", encoding="utf-8")
+    file_ops.refresh_quarantine_state()
+    existing = root / "new.txt"
+    existing.write_text("alt", encoding="utf-8")
+    session = file_ops.create_upload_session("Root", "", [{"name": "new.txt", "size": 5}], max_file_size_mb=10)
+    upload = make_upload_file("new.txt", b"hello")
+    file_ops.save_upload_file(session["session_id"], upload, max_file_size_mb=10)
+    result = file_ops.complete_upload_session(session["session_id"], overwrite_mode="rename")
+    moved = [p for p in root.glob("new_upload_*.txt")]
+    assert moved, "Umbenannte Datei sollte existieren"
+    assert result["import_count"] == 1
 
 
 def test_rename_rollback_keeps_original(monkeypatch, tmp_path):

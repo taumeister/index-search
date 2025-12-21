@@ -127,3 +127,128 @@
     background: color-mix(in srgb, var(--color-danger) 10%, var(--color-surface-muted));
     color: var(--color-danger);
 }
+
+.upload-dropzone {
+    position: absolute;
+    right: 240px;
+    top: 10px;
+    width: 240px;
+    height: 34px;
+    border: 1px dashed transparent;
+    border-radius: 10px;
+    pointer-events: auto;
+    opacity: 0.2;
+    transition: opacity 0.18s ease, border-color 0.18s ease, box-shadow 0.18s ease, background 0.18s ease, transform 0.18s ease;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 900;
+    cursor: pointer;
+}
+
+.upload-dropzone:hover,
+.upload-dropzone.active {
+    opacity: 1;
+    border-color: color-mix(in srgb, var(--color-inverse) 55%, transparent);
+    box-shadow: 0 10px 26px rgba(0, 0, 0, 0.16);
+    background: color-mix(in srgb, var(--color-inverse) 12%, transparent);
+    transform: translateY(-1px);
+}
+
+.upload-dropzone-hint {
+    color: color-mix(in srgb, var(--color-inverse) 90%, transparent);
+    font-size: 12px;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    font-weight: 600;
+    text-align: center;
+    padding: 0 10px;
+    white-space: nowrap;
+}
+
+.upload-card {
+    min-width: min(640px, 92vw);
+}
+
+.upload-meta {
+    display: flex;
+    gap: 12px;
+    align-items: center;
+    margin-bottom: 10px;
+    color: var(--color-muted);
+    font-size: 14px;
+}
+
+.upload-overwrite {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    margin-bottom: 10px;
+}
+
+.overwrite-options {
+    display: flex;
+    gap: 12px;
+    flex-wrap: wrap;
+    font-size: 14px;
+    color: var(--color-text);
+}
+
+.overwrite-options label {
+    display: inline-flex;
+    gap: 6px;
+    align-items: center;
+    cursor: pointer;
+}
+
+.upload-progress {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    margin-bottom: 14px;
+}
+
+.upload-stage {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    padding: 8px 10px;
+    border: 1px solid var(--color-border);
+    border-radius: 10px;
+    background: var(--color-surface);
+}
+
+.upload-stage .stage-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    font-weight: 600;
+    color: var(--color-text-strong);
+}
+
+.upload-stage .stage-meta {
+    color: var(--color-muted);
+    font-weight: 400;
+    font-size: 13px;
+}
+
+.stage-bar {
+    width: 100%;
+    height: 8px;
+    background: color-mix(in srgb, var(--color-surface-muted) 80%, transparent);
+    border-radius: 6px;
+    overflow: hidden;
+}
+
+.stage-bar-fill {
+    height: 100%;
+    width: 0%;
+    background: linear-gradient(90deg, var(--color-accent), var(--color-accent-strong));
+    transition: width 0.2s ease;
+}
+
+.upload-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 10px;
+}

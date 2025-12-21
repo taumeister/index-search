@@ -48,6 +48,13 @@
 - Cleanup-Thread läuft im App-Prozess (nicht unter Pytest), löscht ausschließlich unter `<root>/.quarantine/` anhand `mtime`/Datumsordner und schreibt Audit nach `data/audit/file_ops.jsonl`; Locking schützt vor parallelem Restore/Move.
 - Registry-Status wird nach Cleanup auf `cleanup_deleted`, nach Hard-Delete auf `hard_deleted`, nach Restore auf `restored` gesetzt. Sidecar-Dateien werden nicht genutzt, alles landet in `quarantine_entries`.
 
+## Upload & Staging
+- UI: Permanente, dezente Dropzone im Header (Klick + Drag&Drop), Zen-kompatibel; Overlay zeigt Fortschritt für Upload/Import/Index. Dragover verhindert versehentliches Öffnen im Browser.
+- Konflikte: Standard „nicht überschreiben“. Bei vorhandenen Zieldateien wechselt die Session in den Konflikt-Zustand; Benutzer wählt einmalig „Überschreiben“ oder „Auto-Rename“ (Suffix `_upload_N`), dann wird der Import fortgesetzt. Auswahl gilt nur für den aktuellen Konflikt und setzt danach zurück.
+- Backend-Flow: Upload in Staging unter `<root>/.quarantine/_uploads/<session>` (nur erlaubte Roots, Admin-Pflicht). Import verschiebt atomar ins Ziel (kein `.quarantine` als Ziel), optional Überschreiben oder Auto-Rename. Anschließend wird ein Indexlauf für die betroffene Quelle gestartet.
+- Status/Fehler: `/api/upload/{session}/status` liefert `stage`, `conflicts`, `error`, Fortschrittszähler; 409 mit Konfliktliste, bis eine Entscheidung getroffen wurde.
+- Betrieb: Reverse Proxy (z. B. NGINX) muss ausreichend große Bodies erlauben (`client_max_body_size`), sonst schlagen Uploads vor der App fehl. Größenlimit in der App folgt `INDEX_MAX_FILE_SIZE_MB`.
+
 ## Web-API
 - `GET /`: Hauptseite.
 - `GET /dashboard`: System/Dashboard mit Roots/Status.
