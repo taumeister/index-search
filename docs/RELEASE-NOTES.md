@@ -1,5 +1,8 @@
 # Release-Notizen
 
+## v0.3.25 - Aurora Fade
+- Trefferliste: Name- und Auszug-Spalte zeigen lange Titel voll an, aber blenden beim Verkleinern weich mit Fade-out ab; zusätzliche Puffer verhindern hartes Überlappen, Spaltengrenzen bleiben klar erkennbar. Startbreiten/Resize bleiben erhalten.
+
 ## v0.3.24 - Nebula Cascade
 - Globaler Upload-Flow auf der Index-Seite: permanente, dezente Dropzone (Klick + Drag&Drop) mit Zen-kompatibler Positionierung und Upload-Overlay (Fortschritt Upload/Import/Index).
 - Konflikt-Handling: Standard „nicht überschreiben“, bei Konflikt explizite Auswahl „Überschreiben“ oder „Auto-Rename“ (einmalig pro Konflikt), Auto-Rename mit eindeutigen Suffixen; Abbruch über Schließen.
