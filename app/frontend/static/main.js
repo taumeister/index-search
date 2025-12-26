@@ -3374,17 +3374,12 @@ function setupMoveDialog() {
     if (!modal) return;
     const cancelBtn = document.getElementById("move-cancel");
     const confirmBtn = document.getElementById("move-confirm");
-    const searchInput = document.getElementById("move-search");
     const card = modal.querySelector(".move-dialog-card");
     const conflictOverwrite = document.getElementById("move-conflict-overwrite");
     const conflictRename = document.getElementById("move-conflict-rename");
     const conflictCancel = document.getElementById("move-conflict-cancel");
     cancelBtn?.addEventListener("click", closeMoveDialog);
     confirmBtn?.addEventListener("click", submitMove);
-    searchInput?.addEventListener("input", (e) => {
-        moveState.search = e.target.value || "";
-        renderMoveList();
-    });
     conflictOverwrite?.addEventListener("click", () => submitMove("overwrite"));
     conflictRename?.addEventListener("click", () => submitMove("autorename"));
     conflictCancel?.addEventListener("click", () => {
