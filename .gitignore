@@ -10,3 +10,4 @@ logs/
 config/*.db
 test-artifacts/
 tmp/
+mail_archive
