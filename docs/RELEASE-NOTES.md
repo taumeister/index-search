@@ -1,5 +1,8 @@
 # Release-Notizen
 
+## v0.3.26 - Velvet Compass
+- Ziel-Explorer überarbeitet: ein Panel mit Baum-Ansicht inkl. Spalten Name/Größe/Geändert, kompakteres Suchfeld, Chevrons ohne Rahmen, Resize-Griff frei in beide Richtungen, Startbreite moderat (80vw, max 1300px). Backend liefert child_count/mtime für Ordner.
+
 ## v0.3.25 - Aurora Fade
 - Trefferliste: Name- und Auszug-Spalte zeigen lange Titel voll an, aber blenden beim Verkleinern weich mit Fade-out ab; zusätzliche Puffer verhindern hartes Überlappen, Spaltengrenzen bleiben klar erkennbar. Startbreiten/Resize bleiben erhalten.
 

@@ -273,10 +273,9 @@
         <div class="dialog-card wide move-dialog-card">
             <div class="dialog-title-row">
                 <div>
-                    <div class="dialog-eyebrow">Verschieben</div>
+                    <div class="dialog-eyebrow" id="move-mode-label">Verschieben</div>
                     <div class="dialog-title">Zielordner auswählen</div>
                 </div>
-                <button type="button" class="btn btn-ghost" id="move-close">Schließen</button>
             </div>
             <div class="move-head">
                 <div class="move-head-labels">
@@ -287,12 +286,26 @@
                 <div class="move-head-meta">
                     <div class="dialog-label">Ziel</div>
                     <div class="move-target-path" id="move-target-path">Bitte Ordner wählen</div>
-                    <div class="move-target-hint">Mehrere Ebenen aufklappen und Ziel markieren.</div>
                 </div>
             </div>
             <div class="move-dialog-body">
-                <div class="move-tree-shell">
-                    <div class="move-tree" id="move-tree" role="tree" aria-label="Zielordner"></div>
+                <div class="move-breadcrumb-bar">
+                    <div class="move-breadcrumb" id="move-breadcrumb" aria-label="Pfadnavigation"></div>
+                    <div class="move-breadcrumb-search">
+                        <span class="move-search-icon">🔍</span>
+                        <input type="search" id="move-search" class="dialog-input move-search" placeholder="Ordner suchen…" aria-label="Ordner suchen" />
+                    </div>
+                </div>
+                <div class="move-layout">
+                    <div class="move-pane move-pane-nav">
+                        <div class="pane-head">
+                            <div class="pane-title">Navigation</div>
+                            <div class="pane-subtitle">Ordnerbaum</div>
+                        </div>
+                        <div class="move-tree-shell">
+                            <div class="move-tree move-tree-table" id="move-tree" role="tree" aria-label="Zielordner"></div>
+                        </div>
+                    </div>
                 </div>
                 <div class="dialog-status hidden" id="move-error"></div>
             </div>

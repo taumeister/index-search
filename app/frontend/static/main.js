@@ -2725,11 +2725,16 @@ let moveState = {
     currentPath: "",
     currentName: "",
     selection: null,
+    currentFolder: null,
+    search: "",
+    listSelection: null,
     mode: "move",
     nodes: new Map(),
     loading: false,
     onSelected: null,
 };
+
+const MOVE_DIALOG_SIZE_KEY = "moveDialogSize";
 
 function resetMoveState() {
     moveState = {
@@ -2739,6 +2744,9 @@ function resetMoveState() {
         currentPath: "",
         currentName: "",
         selection: null,
+        currentFolder: null,
+        search: "",
+        listSelection: null,
         mode: "move",
         nodes: new Map(),
         loading: false,
@@ -2803,6 +2811,14 @@ function updateMoveTargetPath() {
     targetEl.textContent = label || "Bitte Ordner wählen";
 }
 
+function updateCurrentFolderLabel() {
+    const currentEl = document.getElementById("move-current-folder-label");
+    if (!currentEl) return;
+    const { source, path } = splitMoveKey(moveState.currentFolder || "");
+    const label = path ? `${source ? source + "/" : ""}${path}` : source || "/";
+    currentEl.textContent = label || "–";
+}
+
 async function fetchMoveChildren(source, path) {
     const params = new URLSearchParams();
     if (source) params.set("source", source);
@@ -2818,6 +2834,8 @@ async function fetchMoveChildren(source, path) {
         name: entry.name || "",
         path: normalizeRelPath(entry.path || ""),
         hasChildren: Boolean(entry.has_children),
+        childCount: typeof entry.child_count === "number" ? entry.child_count : null,
+        modified: typeof entry.modified === "number" ? entry.modified : null,
         source: entry.source || source || moveState.source,
         expanded: false,
         loaded: false,
@@ -2853,6 +2871,7 @@ async function loadMoveNode(path) {
             upsertMoveNode(current);
         }
         renderMoveTree();
+        renderMoveList();
     }
 }
 
@@ -2877,9 +2896,9 @@ function renderMoveTree() {
         row.setAttribute("aria-level", String(depth + 1));
         row.setAttribute("aria-expanded", node.hasChildren ? String(Boolean(node.expanded)) : "false");
         row.style.paddingLeft = `${depth * 16 + 8}px`;
-        const isSelected = pathKey === (moveState.selection || "");
-        if (isSelected) {
-            row.classList.add("is-selected");
+        const isActive = pathKey === (moveState.currentFolder || "");
+        if (isActive) {
+            row.classList.add("is-active");
             row.setAttribute("aria-selected", "true");
         } else {
             row.setAttribute("aria-selected", "false");
@@ -2891,26 +2910,21 @@ function renderMoveTree() {
         toggle.disabled = !node.hasChildren || node.loading;
         toggle.addEventListener("click", () => toggleMoveNode(pathKey));
 
-        const radio = document.createElement("input");
-        radio.type = "radio";
-        radio.name = "move-target";
-        radio.value = pathKey || "";
-        radio.checked = isSelected;
-        radio.addEventListener("change", () => {
-            moveState.selection = pathKey || "";
-            updateMoveTargetPath();
-            renderMoveTree();
-        });
-
         const label = document.createElement("span");
         label.className = "move-node__label";
         label.textContent = node.path ? node.name : node.source || "/";
         label.title = node.path ? `${node.source || ""}/${node.path}` : node.source || "/";
         label.addEventListener("click", () => {
-            moveState.selection = pathKey || "";
-            updateMoveTargetPath();
-            renderMoveTree();
+            setCurrentFolder(pathKey || "");
         });
+
+        const sizeMeta = document.createElement("span");
+        sizeMeta.className = "move-node__meta";
+        sizeMeta.textContent = formatChildCount(node.childCount);
+
+        const modifiedMeta = document.createElement("span");
+        modifiedMeta.className = "move-node__meta";
+        modifiedMeta.textContent = formatModified(node.modified);
 
         const status = document.createElement("span");
         status.className = "move-node__status";
@@ -2926,21 +2940,20 @@ function renderMoveTree() {
 
         row.addEventListener("click", (ev) => {
             if (ev.target === toggle) return;
-            if (ev.target === radio) return;
-            moveState.selection = pathKey || "";
-            updateMoveTargetPath();
-            renderMoveTree();
+            setCurrentFolder(pathKey || "");
         });
 
         row.addEventListener("dblclick", () => {
             if (node.hasChildren) {
                 toggleMoveNode(pathKey);
             }
+            setCurrentFolder(pathKey || "");
         });
 
         row.appendChild(toggle);
-        row.appendChild(radio);
         row.appendChild(label);
+        row.appendChild(sizeMeta);
+        row.appendChild(modifiedMeta);
         if (status.textContent) row.appendChild(status);
 
         branch.appendChild(row);
@@ -2971,6 +2984,8 @@ function renderMoveTree() {
         confirmBtn.disabled = moveState.selection === null || moveState.selection === undefined;
     }
     updateMoveTargetPath();
+    renderMoveList();
+    updateCurrentFolderLabel();
 }
 
 function toggleMoveNode(path) {
@@ -2987,12 +3002,92 @@ function toggleMoveNode(path) {
     renderMoveTree();
 }
 
+function setCurrentFolder(pathKey, opts = {}) {
+    moveState.currentFolder = pathKey || moveState.currentFolder;
+    moveState.listSelection = null;
+    const { source } = splitMoveKey(moveState.currentFolder || "");
+    if (source) moveState.source = source;
+    renderBreadcrumb();
+    renderMoveTree();
+    renderMoveList();
+    const node = getMoveNode(moveState.currentFolder || "");
+    if (node && node.hasChildren && !node.loaded && !node.loading) {
+        loadMoveNode(moveState.currentFolder || "");
+    }
+    moveState.selection = moveState.currentFolder || null;
+    updateMoveTargetPath();
+    const confirmBtn = document.getElementById("move-confirm");
+    if (confirmBtn) {
+        confirmBtn.disabled = moveState.selection === null || moveState.selection === undefined;
+    }
+}
+
+function formatChildCount(count) {
+    if (typeof count !== "number" || count < 0) return "–";
+    if (count === 1) return "1 Objekt";
+    return `${count} Objekte`;
+}
+
+function formatModified(ts) {
+    if (typeof ts !== "number" || ts <= 0) return "–";
+    const d = new Date(ts * 1000);
+    return d.toLocaleString("de-DE", { year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" });
+}
+
+function renderBreadcrumb() {
+    const wrap = document.getElementById("move-breadcrumb");
+    if (!wrap) return;
+    const { source, path } = splitMoveKey(moveState.currentFolder || "");
+    const parts = (path || "").split("/").filter(Boolean);
+    const crumbs = [];
+    const addCrumb = (label, key) => {
+        const btn = document.createElement("button");
+        btn.type = "button";
+        btn.className = "move-crumb";
+        btn.textContent = label || "/";
+        btn.title = key ? `${key.replace("::", "/") || "/"}` : label || "/";
+        btn.addEventListener("click", () => setCurrentFolder(key || `${source || ""}::`));
+        crumbs.push(btn);
+    };
+    const rootKey = `${source || ""}::`;
+    addCrumb(source || "/", rootKey);
+    let accum = [];
+    parts.forEach((p) => {
+        accum.push(p);
+        const key = `${source || ""}::${accum.join("/")}`;
+        const sep = document.createElement("span");
+        sep.className = "move-crumb separator";
+        sep.textContent = ">";
+        const btn = document.createElement("button");
+        btn.type = "button";
+        btn.className = "move-crumb";
+        btn.textContent = p;
+        btn.title = `${source ? source + "/" : ""}${accum.join("/")}`;
+        btn.addEventListener("click", () => setCurrentFolder(key));
+        crumbs.push(sep);
+        crumbs.push(btn);
+    });
+    wrap.replaceChildren(...crumbs);
+}
+
+function renderMoveList() {
+    const list = document.getElementById("move-list");
+    if (!list) return;
+    list.innerHTML = "";
+}
+
+function renderSources() {
+    // sources panel removed
+}
+
 async function showMoveDialog(docId, mode = "move", options = {}) {
     const modal = document.getElementById("move-dialog");
+    const card = modal?.querySelector(".move-dialog-card");
     const nameEl = document.getElementById("move-current-name");
     const pathEl = document.getElementById("move-current-path");
     const errorEl = document.getElementById("move-error");
     const confirmBtn = document.getElementById("move-confirm");
+    const modeLabel = document.getElementById("move-mode-label");
     if (!modal || !nameEl || !pathEl || !errorEl || !confirmBtn) return;
     const row = docId ? document.querySelector(`#results-table tbody tr[data-id="${docId}"]`) : null;
     let sourceLabel = row?.dataset.source || "";
@@ -3000,13 +3095,16 @@ async function showMoveDialog(docId, mode = "move", options = {}) {
         sourceLabel = Array.from(adminReadySources)[0] || "";
     }
     const name = docId ? row?.querySelector(".filename")?.textContent?.trim() || "" : "Upload";
-    const path = docId ? row?.querySelector(".path-cell")?.textContent?.trim() || "" : "";
+    const path = "";
     moveState.open = true;
     moveState.docId = docId;
     moveState.source = sourceLabel;
     moveState.currentName = name;
     moveState.currentPath = path;
     moveState.selection = null;
+    moveState.currentFolder = null;
+    moveState.search = "";
+    moveState.listSelection = null;
     moveState.mode = mode === "copy" ? "copy" : mode === "upload" ? "upload" : "move";
     moveState.nodes = new Map();
     moveState.onSelected = typeof options.onSelected === "function" ? options.onSelected : null;
@@ -3014,9 +3112,12 @@ async function showMoveDialog(docId, mode = "move", options = {}) {
     errorEl.textContent = "";
     errorEl.classList.add("hidden");
     confirmBtn.disabled = true;
-    confirmBtn.textContent = mode === "copy" ? "Kopieren" : mode === "upload" ? "Ziel wählen" : "Verschieben";
+    confirmBtn.textContent = moveState.mode === "copy" ? "Hierher kopieren" : moveState.mode === "upload" ? "Ziel wählen" : "Hierher verschieben";
+    if (modeLabel) {
+        modeLabel.textContent = moveState.mode === "copy" ? "Kopieren" : moveState.mode === "upload" ? "Upload" : "Verschieben";
+    }
     nameEl.textContent = name || "Datei";
-    pathEl.textContent = path || "";
+    pathEl.textContent = "";
     // Roots: alle bereitgestellten Quellen laden
     const rootEntries = await fetchMoveChildren(null, "");
     rootEntries.forEach((entry) => {
@@ -3034,16 +3135,57 @@ async function showMoveDialog(docId, mode = "move", options = {}) {
     });
     modal.classList.remove("hidden");
     // Auto-expand aktuelle Quelle
-    if (sourceLabel) {
-        await loadMoveNode(`${sourceLabel}::`);
+    const initialKey = sourceLabel ? `${sourceLabel}::` : rootEntries.length ? `${rootEntries[0].source || rootEntries[0].name || ""}::` : null;
+    if (initialKey) {
+        const { source: initSource } = splitMoveKey(initialKey);
+        moveState.source = initSource || moveState.source;
+        moveState.currentFolder = initialKey;
+        await loadMoveNode(initialKey);
+        moveState.selection = initialKey;
     }
+    updateCurrentFolderLabel();
+    renderBreadcrumb();
     renderMoveTree();
+    updateMoveTargetPath();
+    if (confirmBtn && moveState.selection) {
+        confirmBtn.disabled = false;
+    }
+    loadMoveDialogSize(card);
 }
 
 function closeMoveDialog() {
     const modal = document.getElementById("move-dialog");
     if (modal) modal.classList.add("hidden");
     resetMoveState();
+}
+
+function loadMoveDialogSize(card) {
+    if (!card) return;
+    try {
+        const raw = localStorage.getItem(MOVE_DIALOG_SIZE_KEY);
+        if (!raw) return;
+        const parsed = JSON.parse(raw);
+        const w = parsed?.width;
+        const h = parsed?.height;
+        if (typeof w === "number" && w > 400) {
+            card.style.width = `${w}px`;
+        }
+        if (typeof h === "number" && h > 400) {
+            card.style.height = `${h}px`;
+        }
+    } catch (_) {
+        /* ignore */
+    }
+}
+
+function saveMoveDialogSize(card) {
+    if (!card) return;
+    try {
+        const rect = card.getBoundingClientRect();
+        localStorage.setItem(MOVE_DIALOG_SIZE_KEY, JSON.stringify({ width: Math.round(rect.width), height: Math.round(rect.height) }));
+    } catch (_) {
+        /* ignore */
+    }
 }
 
 function applyMoveResult(data) {
@@ -3169,12 +3311,20 @@ function handleMoveDialogKeydown(e) {
 function setupMoveDialog() {
     const modal = document.getElementById("move-dialog");
     if (!modal) return;
-    const closeBtn = document.getElementById("move-close");
     const cancelBtn = document.getElementById("move-cancel");
     const confirmBtn = document.getElementById("move-confirm");
-    closeBtn?.addEventListener("click", closeMoveDialog);
+    const searchInput = document.getElementById("move-search");
+    const card = modal.querySelector(".move-dialog-card");
     cancelBtn?.addEventListener("click", closeMoveDialog);
     confirmBtn?.addEventListener("click", submitMove);
+    searchInput?.addEventListener("input", (e) => {
+        moveState.search = e.target.value || "";
+        renderMoveList();
+    });
+    window.addEventListener("mouseup", () => {
+        if (!moveState.open) return;
+        saveMoveDialogSize(card);
+    });
     document.addEventListener("keydown", handleMoveDialogKeydown, true);
     modal.addEventListener("click", (e) => {
         if (e.target === modal) closeMoveDialog();

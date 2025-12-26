@@ -360,15 +360,33 @@ def list_directories(source_label: str, rel_path: str = "", limit: int = 500) ->
                         continue
                     rel_child = (safe_rel / entry.name).as_posix()
                     has_children = False
+                    child_count: Optional[int] = None
                     try:
+                        child_count_val = 0
                         with os.scandir(entry.path) as sub_it:
                             for sub in sub_it:
+                                child_count_val += 1
                                 if sub.is_dir():
                                     has_children = True
-                                    break
+                        child_count = child_count_val
                     except Exception:
                         has_children = False
-                    entries.append({"name": entry.name, "path": rel_child, "has_children": has_children, "source": info.label})
+                        child_count = None
+                    modified: Optional[float] = None
+                    try:
+                        modified = entry.stat(follow_symlinks=False).st_mtime
+                    except Exception:
+                        modified = None
+                    entries.append(
+                        {
+                            "name": entry.name,
+                            "path": rel_child,
+                            "has_children": has_children,
+                            "source": info.label,
+                            "child_count": child_count,
+                            "modified": modified,
+                        }
+                    )
                 except Exception:
                     continue
     except FileNotFoundError:
