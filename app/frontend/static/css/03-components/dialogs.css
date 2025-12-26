@@ -260,6 +260,8 @@
 }
 
 .move-dialog-card {
+    display: flex;
+    flex-direction: column;
     gap: 14px;
     width: 80vw;
     max-width: 1300px;
@@ -293,6 +295,8 @@
 .move-target-path {
     font-weight: var(--font-weight-bold);
     color: var(--color-text-strong);
+    font-family: var(--font-mono);
+    letter-spacing: 0.01em;
     margin-top: 2px;
     max-width: 100%;
     white-space: nowrap;
@@ -311,6 +315,8 @@
     gap: 10px;
     min-height: 520px;
     flex: 1 1 auto;
+    position: relative;
+    padding: 2px 2px 10px;
 }
 
 .move-breadcrumb-bar {
@@ -318,6 +324,12 @@
     grid-template-columns: minmax(0, 1fr);
     gap: 10px;
     align-items: center;
+    position: sticky;
+    top: 0;
+    z-index: 5;
+    padding: 10px 2px 6px;
+    background: linear-gradient(180deg, color-mix(in srgb, var(--color-surface) 94%, var(--color-surface-muted)), color-mix(in srgb, var(--color-surface) 88%, transparent));
+    border-bottom: 1px solid var(--color-border);
 }
 
 .move-breadcrumb-bar.single {
@@ -543,22 +555,47 @@
     flex-direction: column;
     border: 1px solid var(--color-border);
     border-radius: var(--radius-md);
-    background: var(--color-surface);
+    background: linear-gradient(180deg, color-mix(in srgb, var(--color-surface) 94%, var(--color-surface-muted)), var(--color-surface));
     overflow: hidden;
     min-height: 280px;
     height: 100%;
+    position: relative;
+    box-shadow: var(--shadow-soft);
 }
 
 .move-tree {
     flex: 1;
-    padding: 6px 6px 10px;
+    padding: 6px 6px 12px;
     overflow: auto;
     background: var(--color-surface);
     scrollbar-color: var(--color-scrollbar-thumb) var(--color-scrollbar-track);
+    background-image: linear-gradient(
+        to right,
+        color-mix(in srgb, var(--color-border) 28%, transparent) 0,
+        color-mix(in srgb, var(--color-border) 28%, transparent) 1px,
+        transparent 1px,
+        transparent 16px
+    );
+    background-size: 16px 100%;
 }
 
 .move-branch {
     width: 100%;
+    position: relative;
+    --move-indent-step: 16px;
+    --move-indent-base: 12px;
+}
+
+.move-branch::before {
+    content: "";
+    position: absolute;
+    left: calc(var(--move-indent-base) + (var(--depth, 0) * var(--move-indent-step)));
+    top: 10px;
+    bottom: 8px;
+    width: 1px;
+    background: color-mix(in srgb, var(--color-border) 32%, transparent);
+    opacity: 0.6;
+    pointer-events: none;
 }
 
 .move-node {
@@ -566,26 +603,91 @@
     grid-template-columns: 24px 1fr 0.5fr 0.6fr;
     align-items: center;
     gap: 6px;
-    padding: 6px 8px;
-    border-radius: 8px;
+    padding: 8px 10px;
+    border-radius: 10px;
     line-height: 1.2;
     min-height: 30px;
     width: 100%;
-    transition: background 0.14s ease, border-color 0.14s ease, box-shadow 0.14s ease;
+    transition: background 0.16s ease, border-color 0.16s ease, box-shadow 0.16s ease, transform 0.16s ease;
+    position: relative;
+    border: 1px solid transparent;
+    box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--color-surface) 90%, transparent);
 }
 
 .move-node:hover {
-    background: color-mix(in srgb, var(--color-surface) 82%, var(--color-accent) 12%);
+    background: color-mix(in srgb, var(--color-surface-muted) 70%, var(--color-accent) 12%);
+    border-color: color-mix(in srgb, var(--color-border) 70%, var(--color-accent) 24%);
+    box-shadow: var(--shadow-soft);
+    transform: translateY(-1px);
 }
 
 .move-node.is-active {
-    background: color-mix(in srgb, var(--color-surface) 70%, var(--color-accent) 20%);
-    border: 1px solid color-mix(in srgb, var(--color-accent) 40%, var(--color-border));
-    box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--color-accent) 35%, transparent);
+    background: color-mix(in srgb, var(--color-selection) 58%, var(--color-surface));
+    border: 1px solid color-mix(in srgb, var(--color-accent) 38%, var(--color-border));
+    box-shadow: var(--shadow-card), inset 0 0 0 1px color-mix(in srgb, var(--color-accent) 40%, transparent);
+}
+
+.move-node:focus-visible {
+    outline: var(--focus-ring);
+    outline-offset: 2px;
+}
+
+.move-node::before {
+    content: "";
+    position: absolute;
+    left: 4px;
+    top: 6px;
+    bottom: 6px;
+    width: 3px;
+    border-radius: 999px;
+    background: transparent;
+    transition: background 0.16s ease, box-shadow 0.16s ease;
+}
+
+.move-node:hover::before {
+    background: color-mix(in srgb, var(--color-accent) 35%, transparent);
+}
+
+.move-node.is-active::before {
+    background: var(--color-accent);
+    box-shadow: 0 0 0 1px color-mix(in srgb, var(--color-accent) 40%, transparent);
 }
 
 .move-children {
-    margin-left: 16px;
+    margin-left: 4px;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    animation: move-expand 140ms ease-out;
+}
+
+.move-children--loading {
+    gap: 6px;
+    padding: 4px 0 6px;
+}
+
+.move-node--skeleton {
+    grid-template-columns: 1fr;
+    padding: 6px 10px;
+    border-radius: 10px;
+    background: color-mix(in srgb, var(--color-surface-muted) 85%, var(--color-surface));
+    border: 1px dashed color-mix(in srgb, var(--color-border) 65%, transparent);
+    box-shadow: none;
+    pointer-events: none;
+}
+
+.move-node--skeleton::before,
+.move-node--skeleton .move-node__toggle {
+    display: none;
+}
+
+.move-skeleton-bar {
+    width: 72%;
+    height: 8px;
+    border-radius: 999px;
+    background: linear-gradient(90deg, color-mix(in srgb, var(--color-surface-muted) 60%, transparent), color-mix(in srgb, var(--color-surface-muted) 90%, var(--color-border)), color-mix(in srgb, var(--color-surface-muted) 60%, transparent));
+    background-size: 200% 100%;
+    animation: skeleton-shimmer 1.2s ease-in-out infinite;
 }
 
 .move-node__toggle {
@@ -602,12 +704,15 @@
     align-items: center;
     justify-content: center;
     color: var(--color-muted);
-    transition: background 0.14s ease, border-color 0.14s ease, color 0.14s ease;
+    transition: background 0.14s ease, border-color 0.14s ease, color 0.14s ease, transform 0.14s ease;
+    box-shadow: inset 0 0 0 1px transparent;
 }
 
 .move-node__toggle:hover:not(:disabled) {
     background: color-mix(in srgb, var(--color-accent) 12%, var(--color-surface-muted));
     color: var(--color-accent-strong);
+    transform: scale(1.02);
+    box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--color-accent) 28%, transparent);
 }
 
 .move-node__toggle:disabled {
@@ -654,6 +759,16 @@
     overflow: hidden;
     text-overflow: ellipsis;
     padding-left: 6px;
+}
+
+.move-dialog-card .dialog-actions {
+    justify-content: flex-end;
+    align-items: center;
+    padding-top: 4px;
+}
+
+.move-dialog-card .dialog-actions .btn {
+    min-width: 120px;
 }
 
 .move-target-actions {
@@ -725,6 +840,42 @@
 .btn-compact {
     padding: 6px 10px;
     font-size: 12px;
+}
+
+@keyframes move-expand {
+    from {
+        opacity: 0;
+        transform: translateY(-2px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+@keyframes skeleton-shimmer {
+    0% {
+        background-position: -80% 0;
+    }
+    50% {
+        background-position: 120% 0;
+    }
+    100% {
+        background-position: 200% 0;
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .move-node,
+    .move-node__toggle,
+    .move-children {
+        transition: none;
+        animation: none;
+    }
+
+    .move-skeleton-bar {
+        animation: none;
+    }
 }
 
 @media (min-width: 960px) {

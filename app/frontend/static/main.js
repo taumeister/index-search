@@ -2895,12 +2895,15 @@ function renderMoveTree() {
         const branch = document.createElement("div");
         branch.className = "move-branch";
         branch.dataset.depth = String(depth);
+        branch.style.setProperty("--depth", String(depth));
         const row = document.createElement("div");
         row.className = "move-node";
         row.dataset.pathKey = pathKey || "";
+        row.dataset.depth = String(depth);
         row.setAttribute("role", "treeitem");
         row.setAttribute("aria-level", String(depth + 1));
         row.setAttribute("aria-expanded", node.hasChildren ? String(Boolean(node.expanded)) : "false");
+        row.setAttribute("tabindex", "0");
         row.style.paddingLeft = `${depth * 16 + 8}px`;
         const isActive = pathKey === (moveState.currentFolder || "");
         if (isActive) {
@@ -2914,6 +2917,8 @@ function renderMoveTree() {
         toggle.className = "move-node__toggle";
         toggle.textContent = node.loading ? "…" : node.hasChildren ? (node.expanded ? "▾" : "▸") : "•";
         toggle.disabled = !node.hasChildren || node.loading;
+        toggle.title = node.hasChildren ? (node.expanded ? "Einklappen" : "Aufklappen") : "Keine Unterordner";
+        toggle.setAttribute("aria-label", node.hasChildren ? (node.expanded ? "Ordner zuklappen" : "Ordner aufklappen") : "Keine Unterordner");
         toggle.addEventListener("click", () => toggleMoveNode(pathKey));
 
         const label = document.createElement("span");
@@ -2972,6 +2977,20 @@ function renderMoveTree() {
                 if (childBranch) childrenWrap.appendChild(childBranch);
             });
             branch.appendChild(childrenWrap);
+        } else if (node.expanded && node.loading && (!node.children || !node.children.length)) {
+            const skeletonWrap = document.createElement("div");
+            skeletonWrap.className = "move-children move-children--loading";
+            skeletonWrap.setAttribute("aria-hidden", "true");
+            for (let i = 0; i < 3; i += 1) {
+                const skeletonRow = document.createElement("div");
+                skeletonRow.className = "move-node move-node--skeleton";
+                skeletonRow.style.paddingLeft = `${(depth + 1) * 16 + 8}px`;
+                const bar = document.createElement("div");
+                bar.className = "move-skeleton-bar";
+                skeletonRow.appendChild(bar);
+                skeletonWrap.appendChild(skeletonRow);
+            }
+            branch.appendChild(skeletonWrap);
         }
         return branch;
     }

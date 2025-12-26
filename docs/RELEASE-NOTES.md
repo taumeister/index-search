@@ -1,5 +1,10 @@
 # Release-Notizen
 
+## v0.3.30 - Luminous Grove
+- Zielordner-Explorer deutlich modernisiert: Row-Karten mit Accent-Bar, klaren Hover/Focus/Selection-States und dezenten Indent-Guides; Breadcrumb-Leiste im Dialog bleibt beim Scrollen sichtbar.
+- Mikro-Interaktionen: sanfte Expand/Collapse-Animation respektiert prefers-reduced-motion; Toggle-Tooltips und Fokusfähigkeit ergänzen A11y.
+- Ladezustand verbessert: Skeleton-Platzhalter für nachgeladene Children; Sticky-Layout/Buttons aufgeräumt, Footer-Buttons rechtsbündig.
+
 ## v0.3.26 - Velvet Compass
 - Ziel-Explorer überarbeitet: ein Panel mit Baum-Ansicht inkl. Spalten Name/Größe/Geändert, kompakteres Suchfeld, Chevrons ohne Rahmen, Resize-Griff frei in beide Richtungen, Startbreite moderat (80vw, max 1300px). Backend liefert child_count/mtime für Ordner.
 
