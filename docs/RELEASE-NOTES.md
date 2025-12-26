@@ -105,6 +105,11 @@
 - Suche akzeptiert `source_labels` (mehrere) und filtert entsprechend; `/api/sources` liefert deduplizierte Labels.
 - Frontend/Backend-Tests ergänzt (Playwright + API) für Quellen-Filter.
 
+## v0.3.29
+- Themes ausbalanciert: Light-Hintergründe/Paneele abgedunkelt und ins Graue gezogen; Dark-Neutrals deutlich aufgehellt (charcoal statt schwarz) für angenehmeren Kontrast.
+- Overlays/Schatten abgeschwächt, Scrollbars/Tabellenflächen an neue Neutral-Paletten angepasst; Akzentfarben unverändert.
+- Version angehoben.
+
 ## v0.3.4
 - Feedback-UI wieder funktionsfähig: Overlay/Toolbar/Zähler/Bestätigung verdrahtet, Versand gegen `/api/feedback` inkl. Cookie-Secret-Fallback und Statusmeldungen.
 - E2E-Absicherung via Playwright (`tests/test_feedback_ui.py`) mit gemocktem Feedback-Endpunkt; Dev-Dependencies ausgelagert in `requirements-dev.txt`.
