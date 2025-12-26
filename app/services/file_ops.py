@@ -590,7 +590,45 @@ def rename_file(doc_id: int, new_name: str, actor: str = "admin") -> Dict[str, o
     }
 
 
-def move_file(doc_id: int, target_dir: str, target_source: Optional[str] = None, actor: str = "admin") -> Dict[str, object]:
+def _build_conflict_entry(src: Path, dest: Path, reason: str, source_label: str, dest_source_label: str) -> Dict[str, str]:
+    return {
+        "src": str(src),
+        "dest": str(dest),
+        "name": dest.name,
+        "reason": reason,
+        "source": source_label,
+        "dest_source": dest_source_label,
+    }
+
+
+def _autorename_path(target_path: Path, root: Path, strategy: str = "timestamp") -> Path:
+    base = target_path.stem
+    suffix = target_path.suffix
+    parent = target_path.parent
+    if strategy not in {"timestamp", "increment"}:
+        strategy = "timestamp"
+    ts = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S")
+    idx = 1
+    while True:
+        if strategy == "timestamp":
+            candidate = parent / f"{base}__updated_{ts}{suffix}"
+        else:
+            candidate = parent / f"{base} ({idx}){suffix}"
+        candidate = _guard_path(candidate, root, allow_root=False, must_exist=False)
+        if not candidate.exists():
+            return candidate
+        idx += 1
+        if idx > 1000:
+            raise FileOpError("Kein eindeutiger Name gefunden", status_code=500)
+
+
+class ConflictError(FileOpError):
+    def __init__(self, message: str, conflicts: Optional[List[Dict[str, str]]] = None, status_code: int = 409):
+        super().__init__(message, status_code=status_code)
+        self.conflicts = conflicts or []
+
+
+def move_file(doc_id: int, target_dir: str, target_source: Optional[str] = None, actor: str = "admin", conflict_mode: str = "abort") -> Dict[str, object]:
     doc = resolve_doc(doc_id)
     if not doc:
         raise FileOpError("Dokument nicht gefunden", status_code=404)
@@ -617,8 +655,14 @@ def move_file(doc_id: int, target_dir: str, target_source: Optional[str] = None,
     target_path = _guard_path(target_base / abs_path.name, dest_info.root, allow_root=False, must_exist=False)
     if target_path == abs_path and dest_source_label == source_label:
         raise FileOpError("Ziel entspricht dem aktuellen Ort", status_code=400)
+    conflict_mode = (conflict_mode or "abort").strip().lower()
+    conflicts: List[Dict[str, str]] = []
     if target_path.exists():
-        raise FileOpError("Ziel existiert bereits", status_code=409)
+        conflicts.append(_build_conflict_entry(abs_path, target_path, "exists", source_label, dest_source_label))
+        if conflict_mode not in {"overwrite", "autorename"}:
+            raise ConflictError("Ziel existiert bereits", conflicts=conflicts, status_code=409)
+        if conflict_mode == "autorename":
+            target_path = _autorename_path(target_path, dest_info.root)
 
     audit_base = {
         "action": "move",
@@ -633,9 +677,23 @@ def move_file(doc_id: int, target_dir: str, target_source: Optional[str] = None,
     }
 
     moved = False
+    replaced_doc_id: Optional[int] = None
     with _locked_paths([abs_path, target_path]):
         try:
             target_base.mkdir(parents=True, exist_ok=True)
+            if conflict_mode == "overwrite" and target_path.exists():
+                try:
+                    with db.get_conn() as conn:
+                        existing = db.get_document_by_path(conn, str(target_path))
+                        if existing:
+                            db.remove_document_by_id(conn, existing["id"])
+                            replaced_doc_id = existing["id"]
+                except Exception:
+                    pass
+                try:
+                    target_path.unlink(missing_ok=True)
+                except Exception:
+                    pass
             _move_file(abs_path, target_path)
             moved = True
             stat_result = target_path.stat()
@@ -680,10 +738,11 @@ def move_file(doc_id: int, target_dir: str, target_source: Optional[str] = None,
         "new_path": str(target_path),
         "display_name": target_path.name,
         "display_path": str(target_path),
+        "replaced_doc_id": replaced_doc_id,
     }
 
 
-def copy_file(doc_id: int, target_dir: str, target_source: Optional[str] = None, actor: str = "admin") -> Dict[str, object]:
+def copy_file(doc_id: int, target_dir: str, target_source: Optional[str] = None, actor: str = "admin", conflict_mode: str = "abort") -> Dict[str, object]:
     doc = resolve_doc(doc_id)
     if not doc:
         raise FileOpError("Dokument nicht gefunden", status_code=404)
@@ -708,8 +767,14 @@ def copy_file(doc_id: int, target_dir: str, target_source: Optional[str] = None,
         raise FileOpError("Quarantäne kann nicht als Ziel genutzt werden", status_code=400)
 
     target_path = _guard_path(target_base / abs_path.name, dest_info.root, allow_root=False, must_exist=False)
+    conflict_mode = (conflict_mode or "abort").strip().lower()
+    conflicts: List[Dict[str, str]] = []
     if target_path.exists():
-        raise FileOpError("Ziel existiert bereits", status_code=409)
+        conflicts.append(_build_conflict_entry(abs_path, target_path, "exists", source_label, dest_source_label))
+        if conflict_mode not in {"overwrite", "autorename"}:
+            raise ConflictError("Ziel existiert bereits", conflicts=conflicts, status_code=409)
+        if conflict_mode == "autorename":
+            target_path = _autorename_path(target_path, dest_info.root)
 
     audit_base = {
         "action": "copy",
@@ -735,8 +800,22 @@ def copy_file(doc_id: int, target_dir: str, target_source: Optional[str] = None,
 
     copied = False
     new_doc_id: Optional[int] = None
+    replaced_doc_id: Optional[int] = None
     with _locked_paths([target_path]):
         try:
+            if conflict_mode == "overwrite" and target_path.exists():
+                try:
+                    with db.get_conn() as conn:
+                        existing = db.get_document_by_path(conn, str(target_path))
+                        if existing:
+                            db.remove_document_by_id(conn, existing["id"])
+                            replaced_doc_id = existing["id"]
+                except Exception:
+                    pass
+                try:
+                    target_path.unlink(missing_ok=True)
+                except Exception:
+                    pass
             _copy_file_with_fsync(abs_path, target_path)
             try:
                 shutil.copystat(abs_path, target_path, follow_symlinks=True)
@@ -793,6 +872,7 @@ def copy_file(doc_id: int, target_dir: str, target_source: Optional[str] = None,
         "new_path": str(target_path),
         "display_name": target_path.name,
         "display_path": str(target_path),
+        "replaced_doc_id": replaced_doc_id,
     }
 
 

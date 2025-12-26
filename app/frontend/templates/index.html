@@ -307,6 +307,19 @@
                         </div>
                     </div>
                 </div>
+                <div class="move-conflict hidden" id="move-conflict-panel" aria-live="polite">
+                    <div class="move-conflict-head">
+                        <div class="dialog-eyebrow">Konflikt</div>
+                        <div class="move-conflict-title">Ziel existiert bereits</div>
+                        <div class="move-conflict-sub" id="move-conflict-count"></div>
+                    </div>
+                    <div class="move-conflict-list" id="move-conflict-list"></div>
+                    <div class="move-conflict-actions">
+                        <button type="button" class="btn btn-danger" id="move-conflict-overwrite">Alle überschreiben</button>
+                        <button type="button" class="btn btn-secondary" id="move-conflict-rename">Alle umbenennen</button>
+                        <button type="button" class="btn btn-ghost" id="move-conflict-cancel">Abbrechen</button>
+                    </div>
+                </div>
                 <div class="dialog-status hidden" id="move-error"></div>
             </div>
             <div class="dialog-actions">

@@ -258,6 +258,97 @@ def test_upload_session_flow_success(monkeypatch, tmp_path):
     assert result["stage"] == "imported"
 
 
+def test_copy_conflict_modes(monkeypatch, tmp_path):
+    client, headers, root = create_admin_client(monkeypatch, tmp_path)
+    src_dir = root / "src"
+    src_dir.mkdir()
+    src_file = src_dir / "one.txt"
+    src_file.write_text("source", encoding="utf-8")
+    dest_file = root / "one.txt"
+    dest_file.write_text("target", encoding="utf-8")
+    doc_id = seed_document(src_file, "Root")
+    seed_document(dest_file, "Root")
+    login = client.post("/api/admin/login", json={"password": "admin"}, headers=headers)
+    assert login.status_code == 200
+
+    resp_conflict = client.post(f"/api/files/{doc_id}/copy", json={"target_dir": "", "target_source": "Root"}, headers=headers)
+    assert resp_conflict.status_code == 409
+    data_conflict = resp_conflict.json()
+    assert data_conflict.get("code") == "CONFLICT"
+    assert data_conflict.get("conflicts")
+    assert data_conflict["conflicts"][0]["name"] == "one.txt"
+
+    resp_overwrite = client.post(
+        f"/api/files/{doc_id}/copy",
+        json={"target_dir": "", "target_source": "Root", "conflict_mode": "overwrite"},
+        headers=headers,
+    )
+    assert resp_overwrite.status_code == 200
+    assert dest_file.read_text(encoding="utf-8") == "source"
+
+    dest_file.write_text("again", encoding="utf-8")
+    resp_autorename = client.post(
+        f"/api/files/{doc_id}/copy",
+        json={"target_dir": "", "target_source": "Root", "conflict_mode": "autorename"},
+        headers=headers,
+    )
+    assert resp_autorename.status_code == 200
+    data_auto = resp_autorename.json()
+    new_path = Path(data_auto.get("new_path"))
+    assert new_path.exists()
+    assert new_path.name != "one.txt"
+    assert new_path.read_text(encoding="utf-8") == "source"
+
+
+def test_move_conflict_modes(monkeypatch, tmp_path):
+    client, headers, root = create_admin_client(monkeypatch, tmp_path)
+    src_dir = root / "src"
+    src_dir.mkdir()
+    src_file = src_dir / "one.txt"
+    src_file.write_text("source", encoding="utf-8")
+    dest_file = root / "one.txt"
+    dest_file.write_text("target", encoding="utf-8")
+    doc_id = seed_document(src_file, "Root")
+    seed_document(dest_file, "Root")
+    login = client.post("/api/admin/login", json={"password": "admin"}, headers=headers)
+    assert login.status_code == 200
+
+    resp_conflict = client.post(f"/api/files/{doc_id}/move", json={"target_dir": "", "target_source": "Root"}, headers=headers)
+    assert resp_conflict.status_code == 409
+    data_conflict = resp_conflict.json()
+    assert data_conflict.get("code") == "CONFLICT"
+    assert data_conflict.get("conflicts")
+    assert src_file.exists()
+    assert dest_file.exists()
+
+    resp_overwrite = client.post(
+        f"/api/files/{doc_id}/move",
+        json={"target_dir": "", "target_source": "Root", "conflict_mode": "overwrite"},
+        headers=headers,
+    )
+    assert resp_overwrite.status_code == 200
+    assert not src_file.exists()
+    assert dest_file.exists()
+    assert dest_file.read_text(encoding="utf-8") == "source"
+
+    # prepare autorename: move back source and create conflict again
+    new_src = src_dir / "one.txt"
+    new_src.write_text("source-2", encoding="utf-8")
+    doc_id_new = seed_document(new_src, "Root")
+    dest_file.write_text("conflict", encoding="utf-8")
+    resp_autorename = client.post(
+        f"/api/files/{doc_id_new}/move",
+        json={"target_dir": "", "target_source": "Root", "conflict_mode": "autorename"},
+        headers=headers,
+    )
+    assert resp_autorename.status_code == 200
+    data_auto = resp_autorename.json()
+    moved_path = Path(data_auto.get("new_path"))
+    assert moved_path.exists()
+    assert moved_path.name != "one.txt"
+    assert moved_path.read_text(encoding="utf-8") == "source-2"
+
+
 def test_upload_conflict_rejected(monkeypatch, tmp_path):
     root = setup_env(monkeypatch, tmp_path)
     (root / "seed.txt").write_text("seed", encoding="utf-8")

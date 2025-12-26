@@ -2732,6 +2732,9 @@ let moveState = {
     nodes: new Map(),
     loading: false,
     onSelected: null,
+    conflicts: [],
+    pendingConflict: false,
+    lastTarget: null,
 };
 
 const MOVE_DIALOG_SIZE_KEY = "moveDialogSize";
@@ -2751,6 +2754,9 @@ function resetMoveState() {
         nodes: new Map(),
         loading: false,
         onSelected: null,
+        conflicts: [],
+        pendingConflict: false,
+        lastTarget: null,
     };
     updateMoveTargetPath();
 }
@@ -3076,6 +3082,42 @@ function renderMoveList() {
     list.innerHTML = "";
 }
 
+function hideMoveConflicts() {
+    const panel = document.getElementById("move-conflict-panel");
+    const list = document.getElementById("move-conflict-list");
+    const countEl = document.getElementById("move-conflict-count");
+    if (panel) panel.classList.add("hidden");
+    if (list) list.innerHTML = "";
+    if (countEl) countEl.textContent = "";
+    moveState.conflicts = [];
+    moveState.pendingConflict = false;
+}
+
+function renderMoveConflicts(detail = "") {
+    const panel = document.getElementById("move-conflict-panel");
+    const list = document.getElementById("move-conflict-list");
+    const countEl = document.getElementById("move-conflict-count");
+    if (!panel || !list || !countEl) return;
+    list.innerHTML = "";
+    const conflicts = moveState.conflicts || [];
+    conflicts.forEach((c) => {
+        const row = document.createElement("div");
+        row.className = "move-conflict-item";
+        const name = document.createElement("div");
+        name.className = "move-conflict-name";
+        name.textContent = c?.name || "Datei";
+        const dest = document.createElement("div");
+        dest.className = "move-conflict-path";
+        dest.textContent = c?.dest || c?.path || "";
+        row.appendChild(name);
+        row.appendChild(dest);
+        list.appendChild(row);
+    });
+    const count = conflicts.length || 1;
+    countEl.textContent = `${count} Konflikt${count === 1 ? "" : "e"} – ${detail || "Ziel existiert bereits"}`;
+    panel.classList.remove("hidden");
+}
+
 function renderSources() {
     // sources panel removed
 }
@@ -3089,6 +3131,7 @@ async function showMoveDialog(docId, mode = "move", options = {}) {
     const confirmBtn = document.getElementById("move-confirm");
     const modeLabel = document.getElementById("move-mode-label");
     if (!modal || !nameEl || !pathEl || !errorEl || !confirmBtn) return;
+    hideMoveConflicts();
     const row = docId ? document.querySelector(`#results-table tbody tr[data-id="${docId}"]`) : null;
     let sourceLabel = row?.dataset.source || "";
     if (!sourceLabel && adminReadySources.size > 0) {
@@ -3108,6 +3151,9 @@ async function showMoveDialog(docId, mode = "move", options = {}) {
     moveState.mode = mode === "copy" ? "copy" : mode === "upload" ? "upload" : "move";
     moveState.nodes = new Map();
     moveState.onSelected = typeof options.onSelected === "function" ? options.onSelected : null;
+    moveState.conflicts = [];
+    moveState.pendingConflict = false;
+    moveState.lastTarget = null;
     updateMoveTargetPath();
     errorEl.textContent = "";
     errorEl.classList.add("hidden");
@@ -3156,6 +3202,7 @@ async function showMoveDialog(docId, mode = "move", options = {}) {
 function closeMoveDialog() {
     const modal = document.getElementById("move-dialog");
     if (modal) modal.classList.add("hidden");
+    hideMoveConflicts();
     resetMoveState();
 }
 
@@ -3210,7 +3257,7 @@ function applyMoveResult(data) {
     }
 }
 
-async function submitMove() {
+async function submitMove(conflictMode = null) {
     if (moveState.mode !== "upload" && !moveState.docId) return;
     if (!moveState.selection && moveState.mode !== "upload") return;
     const errorEl = document.getElementById("move-error");
@@ -3221,6 +3268,7 @@ async function submitMove() {
     }
     confirmBtn.disabled = true;
     const { source: targetSource, path: targetDir } = splitMoveKey(moveState.selection || "");
+    moveState.lastTarget = { targetSource, targetDir };
     if (moveState.mode === "upload") {
         try {
             if (typeof moveState.onSelected === "function") {
@@ -3241,22 +3289,35 @@ async function submitMove() {
     }
     try {
         const endpoint = moveState.mode === "copy" ? "copy" : "move";
+        const payload = { target_dir: targetDir, target_source: targetSource };
+        if (conflictMode) {
+            payload.conflict_mode = conflictMode;
+        }
         const res = await fetch(`/api/files/${moveState.docId}/${endpoint}`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ target_dir: targetDir, target_source: targetSource }),
+            body: JSON.stringify(payload),
         });
         if (!res.ok) {
             let detail = moveState.mode === "copy" ? "Kopieren fehlgeschlagen." : "Verschieben fehlgeschlagen.";
+            let data = null;
             try {
-                const data = await res.json();
+                data = await res.json();
                 detail = data.detail || detail;
             } catch (_) {
                 /* ignore */
             }
+            if (res.status === 409 && data && (data.code === "CONFLICT" || data.status === "conflict")) {
+                moveState.conflicts = data.conflicts || [];
+                moveState.pendingConflict = true;
+                renderMoveConflicts(detail);
+                confirmBtn.disabled = false;
+                return;
+            }
             throw new Error(detail);
         }
         const data = await res.json();
+        hideMoveConflicts();
         if (moveState.mode === "copy") {
             closeMoveDialog();
             search({ append: false });
@@ -3315,11 +3376,21 @@ function setupMoveDialog() {
     const confirmBtn = document.getElementById("move-confirm");
     const searchInput = document.getElementById("move-search");
     const card = modal.querySelector(".move-dialog-card");
+    const conflictOverwrite = document.getElementById("move-conflict-overwrite");
+    const conflictRename = document.getElementById("move-conflict-rename");
+    const conflictCancel = document.getElementById("move-conflict-cancel");
     cancelBtn?.addEventListener("click", closeMoveDialog);
     confirmBtn?.addEventListener("click", submitMove);
     searchInput?.addEventListener("input", (e) => {
         moveState.search = e.target.value || "";
         renderMoveList();
+    });
+    conflictOverwrite?.addEventListener("click", () => submitMove("overwrite"));
+    conflictRename?.addEventListener("click", () => submitMove("autorename"));
+    conflictCancel?.addEventListener("click", () => {
+        hideMoveConflicts();
+        const errorEl = document.getElementById("move-error");
+        if (errorEl) errorEl.classList.add("hidden");
     });
     window.addEventListener("mouseup", () => {
         if (!moveState.open) return;

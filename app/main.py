@@ -37,6 +37,7 @@ from app.feedback import MAX_FEEDBACK_CHARS, check_rate_limit, send_feedback_ema
 from app.index_runner import start_index_run, check_sources_readiness_for_index
 from app.auto_index_scheduler import AutoIndexScheduler, AutoIndexConfig, load_config_from_db, load_status_from_db, persist_config
 from app.services import file_ops
+from app.services.file_ops import ConflictError
 from app.services import readiness
 
 logging.basicConfig(level=logging.INFO)
@@ -920,8 +921,15 @@ def create_app(config: Optional[CentralConfig] = None) -> FastAPI:
         file_ops.refresh_quarantine_state()
         target_dir = (payload.get("target_dir") or "").strip()
         target_source = (payload.get("target_source") or "").strip() or None
+        raw_conflict = payload.get("conflict_mode")
+        conflict_mode = raw_conflict.strip().lower() if isinstance(raw_conflict, str) else "abort"
         try:
-            result = file_ops.move_file(doc_id, target_dir, target_source=target_source, actor="admin")
+            result = file_ops.move_file(doc_id, target_dir, target_source=target_source, actor="admin", conflict_mode=conflict_mode)
+        except ConflictError as exc:
+            return JSONResponse(
+                {"status": "conflict", "code": "CONFLICT", "detail": str(exc), "conflicts": getattr(exc, "conflicts", [])},
+                status_code=exc.status_code,
+            )
         except file_ops.FileOpError as exc:
             raise HTTPException(status_code=exc.status_code, detail=str(exc))
         except Exception as exc:
@@ -934,8 +942,15 @@ def create_app(config: Optional[CentralConfig] = None) -> FastAPI:
         file_ops.refresh_quarantine_state()
         target_dir = (payload.get("target_dir") or "").strip()
         target_source = (payload.get("target_source") or "").strip() or None
+        raw_conflict = payload.get("conflict_mode")
+        conflict_mode = raw_conflict.strip().lower() if isinstance(raw_conflict, str) else "abort"
         try:
-            result = file_ops.copy_file(doc_id, target_dir, target_source=target_source, actor="admin")
+            result = file_ops.copy_file(doc_id, target_dir, target_source=target_source, actor="admin", conflict_mode=conflict_mode)
+        except ConflictError as exc:
+            return JSONResponse(
+                {"status": "conflict", "code": "CONFLICT", "detail": str(exc), "conflicts": getattr(exc, "conflicts", [])},
+                status_code=exc.status_code,
+            )
         except file_ops.FileOpError as exc:
             raise HTTPException(status_code=exc.status_code, detail=str(exc))
         except Exception as exc:
