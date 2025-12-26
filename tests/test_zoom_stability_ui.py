@@ -9,7 +9,6 @@ def read_zoom_state(page):
         "  const csBody = getComputedStyle(document.body);"
         "  const parse = (v) => { const n = parseFloat(v); return Number.isFinite(n) ? n : null; };"
         "  return {"
-        "    varZoom: parse(doc.style.getPropertyValue('--app-zoom') || csHtml.getPropertyValue('--app-zoom')),"
         "    htmlZoom: parse(csHtml.zoom),"
         "    bodyZoom: parse(csBody.zoom)"
         "  };"
@@ -45,8 +44,10 @@ def test_zoom_stays_consistent_across_pages_and_preview(page, base_url):
     states.append(("back_to_index", read_zoom_state(page)))
 
     base = states[0][1]
-    assert base["bodyZoom"] is not None
+    base_body = base["bodyZoom"] or 1
+    base_html = base["htmlZoom"] or 1
     for label, state in states[1:]:
-        assert state["bodyZoom"] == pytest.approx(base["bodyZoom"], rel=1e-3), f"body zoom drift at {label}"
-        assert state["htmlZoom"] == pytest.approx(base["htmlZoom"], rel=1e-3), f"html zoom drift at {label}"
-        assert state["varZoom"] == pytest.approx(base["varZoom"], rel=1e-3), f"css var drift at {label}"
+        body = state["bodyZoom"] or 1
+        html = state["htmlZoom"] or 1
+        assert body == pytest.approx(base_body, rel=1e-3), f"body zoom drift at {label}"
+        assert html == pytest.approx(base_html, rel=1e-3), f"html zoom drift at {label}"

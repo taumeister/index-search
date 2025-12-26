@@ -105,6 +105,10 @@
 - Suche akzeptiert `source_labels` (mehrere) und filtert entsprechend; `/api/sources` liefert deduplizierte Labels.
 - Frontend/Backend-Tests ergänzt (Playwright + API) für Quellen-Filter.
 
+## v0.3.30
+- App-Zoom vollständig entfernt: keine CSS-Zoom-Skalierung mehr, keine LocalStorage-Reste; Layout bleibt stabil nach Preview/Explorer-Interaktionen und nach Reloads.
+- Templates, Viewer und Dialoge bereinigt (keine Zoom-Init-Skripte/-Variablen mehr).
+
 ## v0.3.29
 - Themes ausbalanciert: Light-Hintergründe/Paneele abgedunkelt und ins Graue gezogen; Dark-Neutrals deutlich aufgehellt (charcoal statt schwarz) für angenehmeren Kontrast.
 - Overlays/Schatten abgeschwächt, Scrollbars/Tabellenflächen an neue Neutral-Paletten angepasst; Akzentfarben unverändert.

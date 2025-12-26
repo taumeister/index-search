@@ -5,11 +5,6 @@ let sortState = { key: null, dir: "asc" };
 let resizingColumn = false;
 let resizingPreview = false;
 const PANEL_WIDTH_KEY = "previewWidth";
-const APP_ZOOM_KEY = "appZoom";
-const DEFAULT_ZOOM = 1;
-const MIN_ZOOM = 0.6;
-const MAX_ZOOM = 1.6;
-const ZOOM_STEP = 0.1;
 const ZEN_STEPS = [15, 30, 45, Infinity];
 const DEFAULT_ZEN_STEP_IDX = 0;
 const SEARCH_LIMIT = 200;
@@ -1382,7 +1377,6 @@ function setupTypeFilterSwitch() {
 }
 
 applySavedPreviewWidth();
-bootstrapZoom();
 
 async function search({ append = false } = {}) {
     const q = document.getElementById("search-input").value || "";
@@ -3882,7 +3876,6 @@ function openFeedbackFromMenu() {
 }
 
 window.addEventListener("load", setupResizableColumns);
-initZoomControls();
 
 // Sorting
 const sortableKeys = new Set(["filename", "extension", "size_bytes", "mtime"]);
@@ -3959,55 +3952,6 @@ document.addEventListener("keydown", (e) => {
 });
 
 window.addEventListener("resize", positionPreview);
-
-function clampZoom(value) {
-    return Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, value));
-}
-
-function readSavedZoom() {
-    try {
-        localStorage.removeItem(APP_ZOOM_KEY);
-    } catch (_) {
-        /* ignore */
-    }
-    return DEFAULT_ZOOM;
-}
-
-function getActiveZoom() {
-    const raw = getComputedStyle(document.documentElement).getPropertyValue("--app-zoom");
-    const parsed = parseFloat(raw);
-    if (Number.isFinite(parsed)) return clampZoom(parsed);
-    return readSavedZoom();
-}
-
-function applyZoom(value, { persist = true } = {}) {
-    const clamped = clampZoom(value);
-    document.documentElement.style.setProperty("--app-zoom", clamped);
-    updateZoomDisplay(clamped);
-    positionPreview();
-    return clamped;
-}
-
-function updateZoomDisplay(value) {
-    const label = document.getElementById("zoom-display");
-    if (!label) return;
-    label.textContent = `${Math.round(value * 100)}%`;
-}
-
-function initZoomControls() {
-    const initialZoom = readSavedZoom();
-    applyZoom(initialZoom, { persist: false });
-
-    window.addEventListener("storage", (e) => {
-        if (e.key === APP_ZOOM_KEY) {
-            applyZoom(readSavedZoom(), { persist: false });
-        }
-    });
-}
-
-function bootstrapZoom() {
-    applyZoom(readSavedZoom(), { persist: false });
-}
 
 function setupToasts() {
     const stack = document.getElementById("toast-stack");

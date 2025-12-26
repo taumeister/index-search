@@ -8,7 +8,6 @@ body {
     font-size: var(--font-size-md);
     background: var(--color-bg);
     color: var(--color-text);
-    zoom: var(--app-zoom);
     overflow: hidden;
     display: flex;
     flex-direction: column;
@@ -27,16 +26,6 @@ h1 {
 
 .dragging-columns {
     user-select: none;
-}
-
-@supports not (zoom: 1) {
-    body {
-        transform: scale(var(--app-zoom));
-        transform-origin: top left;
-        width: calc(100% / var(--app-zoom));
-        min-height: calc(100vh / var(--app-zoom));
-        overflow-x: hidden;
-    }
 }
 
 ::selection {

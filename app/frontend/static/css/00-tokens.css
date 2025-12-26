@@ -43,7 +43,6 @@
     --table-row-active-bg: #cfc6b2;
 
     /* Layout */
-    --app-zoom: 1;
     --panel-width: clamp(320px, 32vw, 520px);
     --zen-transition-duration: 380ms;
     --zen-transition-fade: 300ms;

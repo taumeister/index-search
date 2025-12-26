@@ -4,18 +4,6 @@
     <meta charset="UTF-8">
     <title>Viewer</title>
     <script>
-        (function enforceDefaultZoom() {
-            const KEY = "appZoom";
-            const DEFAULT_ZOOM = 1;
-            try {
-                localStorage.removeItem(KEY);
-            } catch (_) {
-                /* ignore */
-            }
-            document.documentElement.style.setProperty("--app-zoom", DEFAULT_ZOOM);
-        })();
-    </script>
-    <script>
         (function applyStoredTheme() {
             const KEY = "theme";
             const DEFAULT_THEME = "lumen-atelier";

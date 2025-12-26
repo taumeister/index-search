@@ -44,8 +44,6 @@
     -webkit-backdrop-filter: blur(3px);
     z-index: 20000;
     padding: 12px;
-    --app-zoom: 1;
-    zoom: 1;
 }
 
 .dialog-overlay.hidden {
