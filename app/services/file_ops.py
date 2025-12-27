@@ -75,6 +75,7 @@ _cleanup_thread: Optional[threading.Thread] = None
 _cleanup_stop = threading.Event()
 _upload_sessions: Dict[str, UploadSession] = {}
 _upload_sessions_lock = threading.Lock()
+READ_ONLY_SOURCES = {"maildir"}
 
 
 def _canonical(path: Path) -> Path:
@@ -136,6 +137,11 @@ def _sanitize_upload_name(name: str) -> str:
     if "/" in base or "\\" in base or "\x00" in base:
         raise FileOpError("Ungültiger Dateiname", status_code=400)
     return base
+
+
+def _assert_writable_source(label: str) -> None:
+    if (label or "").strip().lower() in READ_ONLY_SOURCES:
+        raise FileOpError("Schreiboperationen für diese Quelle sind nicht erlaubt", status_code=403)
 
 
 def _unique_target_path(candidate: Path, root: Path) -> Path:
@@ -214,7 +220,11 @@ def ensure_quarantine(root: Path, label: str = "") -> Tuple[Path, bool, Optional
 def init_sources(root_entries: List[Tuple[Path, str]]) -> None:
     global _sources
     _sources = {}
-    for root, label in root_entries:
+    for entry in root_entries:
+        try:
+            root, label, *_rest = entry
+        except Exception:
+            root, label = entry
         canonical_root = _canonical(root)
         quarantine_dir, ready, issue = ensure_quarantine(canonical_root, label)
         _sources[label] = SourceInfo(label=label, root=canonical_root, quarantine_dir=quarantine_dir, ready=ready, issue=issue)
@@ -225,7 +235,7 @@ def refresh_quarantine_state() -> None:
     try:
         base_raw = config_db.get_setting("base_data_root", "/data") or "/data"
         base = Path(base_raw).resolve()
-        for path, label, _rid, active in config_db.list_roots(active_only=False):
+        for path, label, _rid, active, _type in config_db.list_roots(active_only=False):
             if not active:
                 continue
             p = Path(path).resolve()
@@ -262,7 +272,7 @@ def get_status() -> Dict[str, object]:
     ready_sources = [
         {"label": info.label, "root": str(info.root), "quarantine_dir": str(info.quarantine_dir), "ready": info.ready}
         for info in _sources.values()
-        if info.ready
+        if info.ready and info.label.lower() not in READ_ONLY_SOURCES
     ]
     issues = [
         {"label": info.label, "root": str(info.root), "issue": info.issue or "Netzlaufwerk nicht bereit"}
@@ -461,6 +471,7 @@ def rename_file(doc_id: int, new_name: str, actor: str = "admin") -> Dict[str, o
         raise FileOpError("Dokument nicht gefunden", status_code=404)
 
     source_label = doc.get("source") or ""
+    _assert_writable_source(source_label)
     info = _resolve_source(source_label)
     _assert_quarantine_ready(info)
 
@@ -634,9 +645,11 @@ def move_file(doc_id: int, target_dir: str, target_source: Optional[str] = None,
         raise FileOpError("Dokument nicht gefunden", status_code=404)
 
     source_label = doc.get("source") or ""
+    _assert_writable_source(source_label)
     src_info = _resolve_source(source_label)
     _assert_quarantine_ready(src_info)
     dest_source_label = (target_source or source_label) or ""
+    _assert_writable_source(dest_source_label)
     dest_info = _resolve_source(dest_source_label)
     _assert_quarantine_ready(dest_info)
 
@@ -748,9 +761,11 @@ def copy_file(doc_id: int, target_dir: str, target_source: Optional[str] = None,
         raise FileOpError("Dokument nicht gefunden", status_code=404)
 
     source_label = doc.get("source") or ""
+    _assert_writable_source(source_label)
     src_info = _resolve_source(source_label)
     _assert_quarantine_ready(src_info)
     dest_source_label = (target_source or source_label) or ""
+    _assert_writable_source(dest_source_label)
     dest_info = _resolve_source(dest_source_label)
     _assert_quarantine_ready(dest_info)
 
@@ -882,6 +897,7 @@ def create_upload_session(
     files: List[Dict[str, object]],
     max_file_size_mb: Optional[int] = None,
 ) -> Dict[str, object]:
+    _assert_writable_source(target_source or "")
     if not files:
         raise FileOpError("Keine Dateien angegeben", status_code=400)
     info = _resolve_source(target_source)

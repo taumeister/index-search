@@ -68,7 +68,7 @@ def get_config() -> CentralConfig:
     return load_config()
 
 
-def resolve_active_roots(config: CentralConfig) -> list[tuple[Path, str]]:
+def resolve_active_roots(config: CentralConfig) -> list[tuple[Path, str, str]]:
     """
     Liefert aktive Roots aus der Config-DB, andernfalls die env/INI-Roots.
     Validiert Basis-Pfad und Existenz, fällt aber nicht stillschweigend auf /data zurück.
@@ -85,11 +85,11 @@ def resolve_active_roots(config: CentralConfig) -> list[tuple[Path, str]]:
 
     db_roots = config_db.list_roots(active_only=False)
     if db_roots:
-        active = [(path, label, rid, active) for path, label, rid, active in db_roots if active]
+        active = [(path, label, rid, active, type_) for path, label, rid, active, type_ in db_roots if active]
         if not active:
             raise ValueError("Keine aktiven Quellen konfiguriert")
-        resolved: list[tuple[Path, str]] = []
-        for path, label, _rid, _active in active:
+        resolved: list[tuple[Path, str, str]] = []
+        for path, label, _rid, _active, type_ in active:
             p = Path(path).resolve()
             try:
                 p.relative_to(base_root)
@@ -98,14 +98,22 @@ def resolve_active_roots(config: CentralConfig) -> list[tuple[Path, str]]:
             if not p.exists() or not p.is_dir():
                 logger.warning("Aktiver Root nicht gefunden: %s", p)
                 continue
-            resolved.append((p, label or p.name))
+            resolved.append((p, label or p.name, type_ or "file"))
         if resolved:
             return resolved
         raise ValueError("Keine aktiven Quellen verfügbar")
 
     # Fallback: env/INI-Roots
     if config.paths.roots:
-        return config.paths.roots
+        fallback: list[tuple[Path, str, str]] = []
+        for entry in config.paths.roots:
+            try:
+                p, lbl, type_val = entry
+            except Exception:
+                p, lbl = entry
+                type_val = "file"
+            fallback.append((Path(p), lbl, type_val or "file"))
+        return fallback
 
     raise ValueError("Keine aktiven Quellen konfiguriert")
 
@@ -734,9 +742,16 @@ def create_app(config: Optional[CentralConfig] = None) -> FastAPI:
     def list_sources(_auth: bool = Depends(require_secret)):
         labels: list[str] = []
         try:
-            labels = [lab for _path, lab, _rid, _active in config_db.list_roots(active_only=True)]
+            labels = [lab for _path, lab, _rid, _active, _type in config_db.list_roots(active_only=True)]
         except Exception:
             labels = []
+        try:
+            cfg = load_config()
+            maildir_cfg = getattr(cfg, "maildir", None)
+            if maildir_cfg and getattr(maildir_cfg, "enabled", False) and getattr(maildir_cfg, "label", None):
+                labels.append(maildir_cfg.label)
+        except Exception:
+            pass
         cleaned = sorted({(lbl or "").strip() for lbl in labels if (lbl or "").strip()})
         return {"labels": cleaned}
 
@@ -787,6 +802,8 @@ def create_app(config: Optional[CentralConfig] = None) -> FastAPI:
         if not row:
             raise HTTPException(status_code=404, detail="Dokument nicht gefunden")
         row_dict = dict(row)
+        if (row_dict.get("source") or "").strip().lower() in file_ops.READ_ONLY_SOURCES:
+            raise HTTPException(status_code=403, detail="Download für diese Quelle deaktiviert")
         path = Path(row_dict["path"])
         if not path.exists():
             try:
@@ -1259,13 +1276,19 @@ def create_app(config: Optional[CentralConfig] = None) -> FastAPI:
     @app.get("/api/admin/roots")
     def admin_roots(_auth: bool = Depends(require_secret)):
         roots = [
-            {"id": rid, "path": path, "label": label, "active": active}
-            for path, label, rid, active in config_db.list_roots(active_only=False)
+            {"id": rid, "path": path, "label": label, "active": active, "type": type_}
+            for path, label, rid, active, type_ in config_db.list_roots(active_only=False)
         ]
         return {"roots": roots, "base_data_root": config_db.get_setting("base_data_root", "/data")}
 
     @app.post("/api/admin/roots")
-    def add_root(path: str = Query(...), label: Optional[str] = Query(None), active: bool = Query(True), _auth: bool = Depends(require_secret)):
+    def add_root(
+        path: str = Query(...),
+        label: Optional[str] = Query(None),
+        active: bool = Query(True),
+        type: Optional[str] = Query("file"),
+        _auth: bool = Depends(require_secret),
+    ):
         base = config_db.get_setting("base_data_root", "/data")
         base_path = Path(base).resolve()
         resolved = Path(path).resolve()
@@ -1275,15 +1298,18 @@ def create_app(config: Optional[CentralConfig] = None) -> FastAPI:
             raise HTTPException(status_code=400, detail=f"Pfad muss unter {base_path} liegen")
         if not resolved.exists() or not resolved.is_dir():
             raise HTTPException(status_code=400, detail=f"Pfad nicht gefunden: {resolved}")
-        rid = config_db.add_root(str(resolved), label, active)
-        return {"id": rid}
+        type_safe = (type or "file").strip().lower()
+        if type_safe not in {"file", "maildir"}:
+            type_safe = "file"
+        rid = config_db.add_root(str(resolved), label, active, type_safe)
+        return {"id": rid, "type": type_safe}
 
     @app.delete("/api/admin/roots/{root_id}")
     def delete_root(root_id: int, _auth: bool = Depends(require_secret)):
         root = config_db.get_root(root_id)
         if not root:
             raise HTTPException(status_code=404, detail="Root nicht gefunden")
-        _path, label, _rid, _active = root
+        _path, label, _rid, _active, _type = root
         config_db.delete_root(root_id)
         try:
             with db.get_conn() as conn:
@@ -1370,8 +1396,10 @@ def create_app(config: Optional[CentralConfig] = None) -> FastAPI:
             roots = resolve_active_roots(cfg)
         except ValueError as exc:
             raise HTTPException(status_code=400, detail=str(exc))
-        exts = {".pdf": 0, ".rtf": 0, ".msg": 0, ".txt": 0}
-        for root, _label in roots:
+        exts = {".pdf": 0, ".rtf": 0, ".msg": 0, ".eml": 0, ".txt": 0}
+        for root, _label, type_ in roots:
+            if (type_ or "file") != "file":
+                continue
             for dirpath, _, filenames in os.walk(root):
                 for name in filenames:
                     s = Path(name).suffix.lower()

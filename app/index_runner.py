@@ -14,17 +14,19 @@ logger = logging.getLogger(__name__)
 index_lock = threading.Lock()
 
 
-def check_sources_readiness_for_index(roots: Iterable[tuple[Path, str]]):
+def check_sources_readiness_for_index(roots: Iterable[tuple[Path, str, str]]):
     roots_list = list(roots)
     try:
         with db.get_conn() as conn:
-            labels = [label for _, label in roots_list]
+            labels = [label for _, label, _type in roots_list]
             counts = db.count_documents_by_source(conn, labels)
             samples = db.get_sample_paths_by_source(conn, labels)
     except Exception:
         counts = {}
         samples = {}
-    return readiness.check_sources_ready(roots_list, counts, samples)
+    file_roots = [(p, lbl) for p, lbl, type_ in roots_list if (type_ or "file") == "file"]
+    maildir_roots = [(p, lbl) for p, lbl, type_ in roots_list if (type_ or "file") == "maildir"]
+    return readiness.check_sources_ready(file_roots + maildir_roots, counts, samples)
 
 
 def clear_index_files() -> None:
@@ -49,10 +51,10 @@ def clear_index_files() -> None:
 def start_index_run(
     full_reset: bool = False,
     cfg_override: Optional[CentralConfig] = None,
-    roots_override: Optional[Iterable[tuple[Path, str]]] = None,
+    roots_override: Optional[Iterable[tuple[Path, str, str]]] = None,
     reason: str = "manual",
     on_finish: Optional[Callable[[str, datetime, datetime, Optional[str]], None]] = None,
-    resolve_roots: Optional[Callable[[CentralConfig], Iterable[tuple[Path, str]]]] = None,
+    resolve_roots: Optional[Callable[[CentralConfig], Iterable[tuple[Path, str, str]]]] = None,
 ) -> str:
     """
     Startet einen Indexlauf in einem eigenen Thread und verhindert parallele Läufe.

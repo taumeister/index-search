@@ -9,6 +9,7 @@ from pydantic import BaseModel, field_validator
 from app import config_db
 
 
+
 class PathsConfig(BaseModel):
     roots: list[tuple[Path, str]] = []
 
@@ -93,6 +94,12 @@ class FeedbackConfig(BaseModel):
     recipients: list[str] = []
 
 
+class MaildirConfig(BaseModel):
+    root: Optional[Path] = None
+    label: str = "maildir"
+    enabled: bool = False
+
+
 @dataclasses.dataclass
 class QuarantineConfig:
     retention_days: int = 30
@@ -108,6 +115,7 @@ class CentralConfig:
     smtp: Optional[SMTPConfig]
     ui: UIConfig
     logging: LoggingConfig
+    maildir: MaildirConfig
     report_enabled: bool = False
     feedback: FeedbackConfig = field(default_factory=FeedbackConfig)
     quarantine: QuarantineConfig = field(default_factory=QuarantineConfig)
@@ -173,6 +181,22 @@ def load_config(path: Path = Path("config/central_config.ini"), use_env: bool = 
         rotation_mb=int(os.getenv("LOG_ROTATION_MB", "10")) if use_env else 10,
     )
 
+    maildir_root_env = os.getenv("MAILDIR_ROOT", "") if use_env else ""
+    maildir_root: Optional[Path] = None
+    if maildir_root_env:
+        maildir_root = Path(maildir_root_env).expanduser()
+    else:
+        default_candidates = [Path("mail_archive/.INBOX"), Path("mail_archive/.inbox")]
+        for candidate in default_candidates:
+            if candidate.exists():
+                maildir_root = candidate
+                break
+    maildir_cfg = MaildirConfig(
+        root=maildir_root,
+        label=os.getenv("MAILDIR_LABEL", "maildir") if use_env else "maildir",
+        enabled=bool(maildir_root),
+    )
+
     feedback_cfg = FeedbackConfig(
         enabled=os.getenv("FEEDBACK_ENABLED", "false").lower() == "true" if use_env else False,
         recipients=[r.strip() for r in (os.getenv("FEEDBACK_TO", "") if use_env else "").split(",") if r.strip()],
@@ -199,6 +223,7 @@ def load_config(path: Path = Path("config/central_config.ini"), use_env: bool = 
         smtp=smtp_cfg,
         ui=ui_cfg,
         logging=logging_cfg,
+        maildir=maildir_cfg,
         report_enabled=False,  # Dashboard steuert das Flag
         feedback=feedback_cfg,
         quarantine=quarantine_cfg,

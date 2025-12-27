@@ -163,6 +163,10 @@
                 <div class="add-root-row">
                     <input type="text" id="new-path" placeholder="Pfad aus Explorer wählen oder tippen" style="flex:2;">
                     <input type="text" id="new-label" placeholder="Label" style="flex:1;">
+                    <label class="checkbox-inline">
+                        <input type="checkbox" id="new-maildir">
+                        <span>Mail-Quelle</span>
+                    </label>
                     <button id="add-root" class="btn btn-primary">Hinzufügen</button>
                 </div>
             </section>
@@ -1024,7 +1028,8 @@
             data.roots.forEach((r) => {
                 const div = document.createElement("div");
                 div.className = "root-item";
-                div.innerHTML = `<span>${r.label || ""} — ${r.path}</span>
+                const typeLabel = r.type === "maildir" ? "Mail-Quelle" : "Datei-Quelle";
+                div.innerHTML = `<span>${r.label || ""} — ${r.path} <span class="chip">${typeLabel}</span></span>
                 <span class="root-actions chips">
                     <button class="btn btn-secondary" data-act="${r.id}" data-active="${!r.active}">${r.active ? "Deaktivieren" : "Aktivieren"}</button>
                     <button class="btn btn-ghost" data-del="${r.id}">Löschen</button>
@@ -1064,7 +1069,8 @@
         document.getElementById("preflight").addEventListener("click", async () => {
             const data = await fetchJSON("/api/admin/preflight");
             const box = document.getElementById("preflight-result");
-            box.textContent = `PDF ${data.counts[".pdf"]} | RTF ${data.counts[".rtf"]} | MSG ${data.counts[".msg"]} | TXT ${data.counts[".txt"]}`;
+            const counts = data.counts || {};
+            box.textContent = `PDF ${counts[".pdf"] || 0} | RTF ${counts[".rtf"] || 0} | MSG ${counts[".msg"] || 0} | EML ${counts[".eml"] || 0} | TXT ${counts[".txt"] || 0}`;
         });
         document.getElementById("reset-run-start").addEventListener("click", async () => {
             if (confirm("Index leeren und direkt neu starten?") && confirm("Sicher? Alle Indexdaten werden gelöscht.")) {
@@ -1077,8 +1083,12 @@
         document.getElementById("add-root").addEventListener("click", async () => {
             const path = document.getElementById("new-path").value.trim();
             const label = document.getElementById("new-label").value.trim();
+            const maildir = document.getElementById("new-maildir").checked;
             if (!path) return;
-            await fetchJSON(`/api/admin/roots?path=${encodeURIComponent(path)}&label=${encodeURIComponent(label)}`, { method: "POST" });
+            await fetchJSON(
+                `/api/admin/roots?path=${encodeURIComponent(path)}&label=${encodeURIComponent(label)}&type=${maildir ? "maildir" : "file"}`,
+                { method: "POST" }
+            );
             loadRoots();
         });
 

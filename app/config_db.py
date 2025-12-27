@@ -20,6 +20,7 @@ def ensure_db() -> None:
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 path TEXT NOT NULL,
                 label TEXT NOT NULL,
+                type TEXT NOT NULL DEFAULT 'file',
                 active INTEGER NOT NULL DEFAULT 1,
                 created_at TEXT DEFAULT (datetime('now')),
                 updated_at TEXT DEFAULT (datetime('now'))
@@ -57,6 +58,10 @@ def seed_defaults(conn: sqlite3.Connection) -> None:
             "INSERT OR IGNORE INTO settings(key, value) VALUES (?, ?)",
             (key, value),
         )
+    # ensure type column exists on existing DBs
+    cols = {row[1] for row in conn.execute("PRAGMA table_info(roots)").fetchall()}
+    if "type" not in cols:
+        conn.execute("ALTER TABLE roots ADD COLUMN type TEXT NOT NULL DEFAULT 'file'")
 
 
 @contextmanager
@@ -131,29 +136,47 @@ def set_auto_index_status(values: Dict[str, str]) -> None:
 
 def list_roots(active_only: bool = True) -> List[Tuple[str, str, int, bool]]:
     with get_conn() as conn:
-        sql = "SELECT path, label, id, active FROM roots"
+        sql = "SELECT path, label, id, active, type FROM roots"
         params: List = []
         if active_only:
             sql += " WHERE active = 1"
         sql += " ORDER BY id ASC"
         rows = conn.execute(sql, params).fetchall()
-        return [(row[0], row[1], row[2], bool(row[3]) if len(row) > 3 else True) for row in rows]
+        return [
+            (
+                row[0],
+                row[1],
+                row[2],
+                bool(row[3]) if len(row) > 3 else True,
+                row[4] if len(row) > 4 else "file",
+            )
+            for row in rows
+        ]
 
 
-def get_root(root_id: int) -> Optional[Tuple[str, str, int, bool]]:
+def get_root(root_id: int) -> Optional[Tuple[str, str, int, bool, str]]:
     with get_conn() as conn:
-        row = conn.execute("SELECT path, label, id, active FROM roots WHERE id = ?", (root_id,)).fetchone()
+        row = conn.execute("SELECT path, label, id, active, type FROM roots WHERE id = ?", (root_id,)).fetchone()
         if not row:
             return None
-        return (row[0], row[1], row[2], bool(row[3]) if len(row) > 3 else True)
+        return (
+            row[0],
+            row[1],
+            row[2],
+            bool(row[3]) if len(row) > 3 else True,
+            row[4] if len(row) > 4 else "file",
+        )
 
 
-def add_root(path: str, label: Optional[str] = None, active: bool = True) -> int:
+def add_root(path: str, label: Optional[str] = None, active: bool = True, type_: str = "file") -> int:
     label = label or Path(path).name
+    type_safe = (type_ or "file").strip().lower()
+    if type_safe not in {"file", "maildir"}:
+        type_safe = "file"
     with get_conn() as conn:
         cur = conn.execute(
-            "INSERT INTO roots(path, label, active) VALUES (?, ?, ?)",
-            (path, label, 1 if active else 0),
+            "INSERT INTO roots(path, label, active, type) VALUES (?, ?, ?, ?)",
+            (path, label, 1 if active else 0, type_safe),
         )
         return cur.lastrowid
 

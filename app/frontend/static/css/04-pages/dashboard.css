@@ -191,6 +191,7 @@
 
 .dashboard-body .add-root-row { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 8px; }
 .dashboard-body .add-root-row input { padding: 6px 8px; border-radius: 6px; border: 1px solid var(--color-border); background: var(--color-surface); color: var(--color-text-strong); }
+.dashboard-body .add-root-row .checkbox-inline { display: flex; align-items: center; gap: 6px; white-space: nowrap; }
 
 .dashboard-body .meta-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 8px; margin-bottom: 6px; }
 .dashboard-body .pill { border-radius: 12px; padding: 4px 8px; font-size: 12px; border: 1px solid var(--color-border-strong); background: var(--color-surface-muted); color: var(--color-text-strong); }

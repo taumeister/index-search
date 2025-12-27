@@ -1,0 +1,13 @@
+From: Dave <dave@example.com>
+To: Eve <eve@example.com>
+Subject: HTML Only Mail
+Date: Fri, 01 Dec 2023 11:00:00 +0000
+Message-ID: <msg-9999@example.com>
+Content-Type: text/html; charset="utf-8"
+
+<html>
+  <body>
+    <p>Hello <strong>World</strong>!</p>
+    <p>This mail mentions the word lighthouse for testing.</p>
+  </body>
+</html>

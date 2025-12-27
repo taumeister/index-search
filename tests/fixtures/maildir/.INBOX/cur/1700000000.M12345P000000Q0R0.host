@@ -1,0 +1,10 @@
+From: Alice <alice@example.com>
+To: Bob <bob@example.com>
+Cc: Carol <carol@example.com>
+Subject: Hello Maildir
+Date: Fri, 01 Dec 2023 10:15:00 +0000
+Message-ID: <msg-1234@example.com>
+Content-Type: text/plain; charset="utf-8"
+
+This is a plain text body for Maildir testing.
+It contains the keyword unicorn to allow search.

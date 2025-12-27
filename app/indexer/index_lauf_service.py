@@ -26,7 +26,7 @@ logger = logging.getLogger("indexer")
 stop_event = threading.Event()
 
 
-SUPPORTED_EXTENSIONS = {".pdf", ".rtf", ".msg", ".txt"}
+SUPPORTED_EXTENSIONS = {".pdf", ".rtf", ".msg", ".txt", ".eml"}
 RUN_STATUS_FILE = Path("data/index.run")
 HEARTBEAT_FILE = Path("data/index.heartbeat")
 LIVE_STATUS_FILE = Path("data/index.live.json")
@@ -69,14 +69,14 @@ def _get_base_root(env_default: str = "/data") -> Path:
         return Path(env_default).resolve()
 
 
-def validate_root_entries(root_entries: Iterable[tuple[Path, str]], base_root: Optional[Path] = None) -> List[tuple[Path, str]]:
+def validate_root_entries(root_entries: Iterable[tuple[Path, str, str]], base_root: Optional[Path] = None) -> List[tuple[Path, str, str]]:
     base = (base_root or _get_base_root()).resolve()
     if str(base) in {"", "/"}:
         raise ValueError("Ungültiger Basis-Pfad für Daten (DATA_CONTAINER_PATH)")
     if not base.exists() or not base.is_dir():
         raise ValueError(f"Basis-Ordner nicht gefunden: {base}")
-    validated: List[tuple[Path, str]] = []
-    for raw_root, label in root_entries:
+    validated: List[tuple[Path, str, str]] = []
+    for raw_root, label, type_ in root_entries:
         root = Path(raw_root).resolve()
         if str(root) in {"", "/"}:
             raise ValueError("Ungültiger Wurzelpfad")
@@ -86,7 +86,7 @@ def validate_root_entries(root_entries: Iterable[tuple[Path, str]], base_root: O
             root.relative_to(base)
         except ValueError:
             raise ValueError(f"Wurzelpfad {root} liegt nicht unter Basis {base}")
-        validated.append((root, label))
+        validated.append((root, label, type_ or "file"))
     return validated
 
 
@@ -295,16 +295,28 @@ def run_index_lauf(config: CentralConfig) -> Dict[str, int]:
         db.reset_scanned_paths(conn, run_id)
         save_run_id(run_id)
 
-    root_entries = validate_root_entries(config.paths.roots)
+    normalized_roots: List[tuple[Path, str, str]] = []
+    for entry in config.paths.roots:
+        try:
+            root, label, type_val = entry
+        except Exception:
+            root, label = entry
+            type_val = "file"
+        normalized_roots.append((Path(root), label, type_val or "file"))
+    root_entries = validate_root_entries(normalized_roots)
     sample_paths: Dict[str, str] = {}
+    maildir_entries: List[tuple[Path, str]] = [(root, label) for root, label, type_ in root_entries if (type_ or "file") == "maildir"]
+    file_entries: List[tuple[Path, str]] = [(root, label) for root, label, type_ in root_entries if (type_ or "file") == "file"]
+
+    combined_labels = [label for _, label, _ in root_entries]
     try:
         with db.get_conn() as conn:
-            existing_counts = db.count_documents_by_source(conn, [label for _, label in root_entries])
-            sample_paths = db.get_sample_paths_by_source(conn, [label for _, label in root_entries])
+            existing_counts = db.count_documents_by_source(conn, combined_labels)
+            sample_paths = db.get_sample_paths_by_source(conn, combined_labels)
     except Exception:
         existing_counts = {}
         sample_paths = {}
-    readiness_result = readiness.check_sources_ready(root_entries, existing_counts, sample_paths)
+    readiness_result = readiness.check_sources_ready(file_entries + maildir_entries, existing_counts, sample_paths)
     if not readiness_result.ok:
         finish_message = readiness_result.message or "Netzlaufwerk nicht bereit"
         logger.warning("Indexlauf #%s abgebrochen: %s", run_id, finish_message)
@@ -511,10 +523,68 @@ def run_index_lauf(config: CentralConfig) -> Dict[str, int]:
             WARN_CONTEXT.path = None
             touch_heartbeat()
 
+    def process_mail_task(real_path: Path, source: str) -> None:
+        if stop_event.is_set():
+            return
+        try:
+            stat = real_path.stat()
+        except FileNotFoundError:
+            work_queue.put({"type": "error", "path": str(real_path), "error_type": "FileNotFound", "message": "not found"})
+            return
+
+        max_size = config.indexer.max_file_size_mb
+        if max_size and stat.st_size > max_size * 1024 * 1024:
+            work_queue.put({"type": "unchanged", "path": str(real_path)})
+            return
+
+        ext = ".eml"
+        meta = DocumentMeta(
+            source=source,
+            path=str(real_path),
+            filename=real_path.name,
+            extension=ext,
+            size_bytes=stat.st_size,
+            ctime=stat.st_ctime,
+            mtime=stat.st_mtime,
+            atime=stat.st_atime if hasattr(stat, "st_atime") else None,
+            owner=get_owner(stat),
+            last_editor=get_owner(stat),
+        )
+        try:
+            conn = get_thread_conn()
+            cur = conn.execute("SELECT size_bytes, mtime FROM documents WHERE path = ?", (str(real_path),))
+            existing_row = cur.fetchone()
+            if existing_row and existing_row[0] == meta.size_bytes and existing_row[1] == meta.mtime:
+                work_queue.put({"type": "unchanged", "path": str(real_path)})
+                return
+            meta_existing = bool(existing_row)
+        except Exception:
+            meta_existing = False
+
+        try:
+            WARN_CONTEXT.path = str(real_path)
+            fill_content(meta, real_path, ext)
+            if stop_event.is_set():
+                return
+            work_queue.put({"type": "document", "meta": meta, "existing": meta_existing})
+        except Exception as exc:
+            logger.error("%s %s %s", type(exc).__name__, real_path, real_path.name)
+            work_queue.put(
+                {
+                    "type": "error",
+                    "path": str(real_path),
+                    "error_type": type(exc).__name__,
+                    "message": str(exc),
+                }
+            )
+        finally:
+            WARN_CONTEXT.path = None
+            touch_heartbeat()
+
     exclude_set = {p.lower() for p in getattr(config.indexer, "exclude_dirs", []) if p}
 
     def iter_files():
-        for root, source in root_entries:
+        for root, source in file_entries:
             if not root.exists():
                 logger.error("Wurzelpfad nicht gefunden: %s", root)
                 counters["errors"] += 1
@@ -534,6 +604,20 @@ def run_index_lauf(config: CentralConfig) -> Dict[str, int]:
                     if path.suffix.lower() in SUPPORTED_EXTENSIONS:
                         yield path, path, source
 
+    def iter_maildir_files():
+        for root, source in maildir_entries:
+            if not root.exists():
+                logger.error("Maildir-Wurzel nicht gefunden: %s", root)
+                counters["errors"] += 1
+                continue
+            for dirpath, dirnames, filenames in os.walk(root):
+                # skip quarantine folders
+                dirnames[:] = [d for d in dirnames if d.lower() != ".quarantine"]
+                if Path(dirpath).name.lower() in {"cur", "new"}:
+                    for name in filenames:
+                        path = Path(dirpath) / name
+                        yield path, source
+
     max_outstanding = max(32, config.indexer.worker_count * 8)
     futures: List[concurrent.futures.Future] = []
     with concurrent.futures.ThreadPoolExecutor(max_workers=config.indexer.worker_count) as pool:
@@ -549,6 +633,18 @@ def run_index_lauf(config: CentralConfig) -> Dict[str, int]:
                 for _ in done:
                     pass
             futures.append(pool.submit(process_file_task, real_path, original_path, source))
+        for real_path, source in iter_maildir_files():
+            if stop_event.is_set():
+                break
+            total_files += 1
+            if total_files == 1 or total_files % 200 == 0:
+                update_live_status(counters, total_files=total_files)
+            while len(futures) >= max_outstanding:
+                done, not_done = concurrent.futures.wait(futures, return_when=concurrent.futures.FIRST_COMPLETED)
+                futures = list(not_done)
+                for _ in done:
+                    pass
+            futures.append(pool.submit(process_mail_task, real_path, source))
         update_live_status(counters, total_files=total_files)
         for fut in concurrent.futures.as_completed(futures):
             fut.result()
@@ -558,7 +654,7 @@ def run_index_lauf(config: CentralConfig) -> Dict[str, int]:
     flush_live_status(force=True)
 
     with db.get_conn() as conn:
-        post_check = readiness.check_sources_ready(root_entries, existing_counts)
+        post_check = readiness.check_sources_ready(file_entries + maildir_entries, existing_counts)
         if not post_check.ok:
             finish_message = finish_message or post_check.message or "Netzlaufwerk nicht bereit"
             logger.warning("Indexlauf #%s: Cleanup übersprungen: %s", run_id, finish_message)
@@ -567,7 +663,7 @@ def run_index_lauf(config: CentralConfig) -> Dict[str, int]:
             status_override = status_override or "error"
             db.cleanup_scanned_paths(conn, run_id)
         else:
-            removed_entries = db.remove_documents_not_scanned(conn, run_id, [src for _, src in root_entries])
+            removed_entries = db.remove_documents_not_scanned(conn, run_id, [src for _, src in file_entries + maildir_entries])
             counters["removed"] = len(removed_entries)
             db.cleanup_scanned_paths(conn, run_id)
 
@@ -651,6 +747,17 @@ def fill_content(meta: DocumentMeta, path: Path, ext: str) -> None:
         meta.msg_cc = msg["msg_cc"]
         meta.msg_subject = msg["msg_subject"]
         meta.msg_date = msg["msg_date"]
+    elif ext == ".eml":
+        msg = extractors.extract_mail_file(path)
+        meta.content = msg["content"]
+        meta.title_or_subject = msg["title_or_subject"]
+        meta.msg_from = msg["msg_from"]
+        meta.msg_to = msg["msg_to"]
+        meta.msg_cc = msg["msg_cc"]
+        meta.msg_subject = msg["msg_subject"]
+        meta.msg_date = msg["msg_date"]
+        meta.msg_message_id = msg.get("msg_message_id")
+        meta.msg_attachments = msg.get("msg_attachments")
     else:
         meta.content = ""
         meta.title_or_subject = meta.filename

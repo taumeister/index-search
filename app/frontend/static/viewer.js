@@ -34,10 +34,11 @@ async function loadDoc() {
 }
 
 function render(doc) {
-    const filename = doc.filename || `Dokument ${doc.id || ""}`.trim();
-    const safeFileName = (filename || `dokument-${doc.id || ""}`.trim()).replace(/[\\/]/g, "_");
-    document.title = filename;
-    document.getElementById("title").textContent = filename;
+    const isMail = (doc.extension || "").toLowerCase() === ".eml" || (doc.extension || "").toLowerCase() === ".msg";
+    const displayName = isMail ? (doc.msg_subject || doc.title_or_subject || doc.filename || `Dokument ${doc.id || ""}`.trim()) : (doc.filename || `Dokument ${doc.id || ""}`.trim());
+    const safeFileName = (doc.filename || displayName || `dokument-${doc.id || ""}`.trim()).replace(/[\\/]/g, "_");
+    document.title = displayName;
+    document.getElementById("title").textContent = displayName;
     const dl = document.getElementById("download-link");
     if (dl) {
         dl.dataset.docid = doc.id;
@@ -58,7 +59,7 @@ function render(doc) {
         return;
     }
 
-    if (ext === ".msg") {
+    if (ext === ".msg" || ext === ".eml") {
         const header = document.createElement("div");
         header.innerHTML = `
             <div><strong>Von:</strong> ${doc.msg_from || ""}</div>

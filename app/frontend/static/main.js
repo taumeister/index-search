@@ -19,7 +19,7 @@ const SEARCH_MODE_KEY = "searchMode";
 const SEARCH_MODE_SET = new Set(["strict", "standard", "loose"]);
 const DEFAULT_SEARCH_MODE = normalizeSearchMode(window.searchDefaultMode) || "standard";
 const TYPE_FILTER_KEY = "searchTypeFilter";
-const TYPE_FILTER_SET = new Set(["", ".pdf", ".rtf", ".msg", ".txt"]);
+const TYPE_FILTER_SET = new Set(["", ".pdf", ".rtf", ".msg", ".eml", ".txt"]);
 const TIME_FILTER_KEY = "searchTimeFilter";
 const SOURCE_FILTER_KEY = "searchSourceFilter";
 const SEARCH_FAV_KEY = "searchFavorites";
@@ -1593,9 +1593,20 @@ function renderResults(results, { append = false } = {}) {
         tr.dataset.id = rowId;
         tr.dataset.source = row.source || "";
         const sizeLabel = typeof row.size_bytes === "number" ? `${(row.size_bytes / 1024).toFixed(1)} KB` : "–";
-        const mtimeLabel = row.mtime ? dateFormatter.format(new Date(row.mtime * 1000)) : "–";
+        const isMail = (row.extension || "").toLowerCase() === ".eml" || (row.extension || "").toLowerCase() === ".msg";
+        let mtimeLabel = "–";
+        if (isMail && row.msg_date) {
+            const parsed = new Date(row.msg_date);
+            if (!Number.isNaN(parsed.getTime())) {
+                mtimeLabel = dateFormatter.format(parsed);
+            }
+        }
+        if (mtimeLabel === "–" && row.mtime) {
+            mtimeLabel = dateFormatter.format(new Date(row.mtime * 1000));
+        }
         const pathLabel = row.path || "";
-        const nameLabel = row.filename || "";
+        const subject = row.msg_subject || row.title_or_subject || "";
+        const nameLabel = isMail ? subject || row.filename || "" : row.filename || "";
         const snippetText = row.snippet ? stripTags(row.snippet) : "";
         const snippetHtml = sanitizeSnippet(row.snippet);
         tr.innerHTML = `
@@ -1822,7 +1833,7 @@ function renderPreviewContent(doc, container, onRenderComplete) {
         return;
     }
 
-    if (ext === ".msg") {
+    if (ext === ".msg" || ext === ".eml") {
         const header = document.createElement("div");
         header.innerHTML = `
             <div><strong>Von:</strong> ${escapeHtml(doc.msg_from || "")}</div>

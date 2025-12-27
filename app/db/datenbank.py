@@ -26,6 +26,8 @@ class DocumentMeta:
     msg_cc: Optional[str] = None
     msg_subject: Optional[str] = None
     msg_date: Optional[str] = None
+    msg_message_id: Optional[str] = None
+    msg_attachments: Optional[str] = None
     tags: Optional[str] = None
     content: str = ""
     title_or_subject: str = ""
@@ -99,6 +101,8 @@ def init_db() -> None:
                 msg_cc TEXT,
                 msg_subject TEXT,
                 msg_date TEXT,
+                msg_message_id TEXT,
+                msg_attachments TEXT,
                 tags TEXT
             );
 
@@ -175,15 +179,17 @@ def init_db() -> None:
         """
         )
         _ensure_column(conn, "file_errors", "ignored", "INTEGER NOT NULL DEFAULT 0", default=0)
+        _ensure_column(conn, "documents", "msg_message_id", "TEXT")
+        _ensure_column(conn, "documents", "msg_attachments", "TEXT")
 
 
 def upsert_document(conn: sqlite3.Connection, meta: DocumentMeta) -> int:
     cursor = conn.execute(
         """
         INSERT INTO documents (source, path, filename, extension, size_bytes, ctime, mtime, atime, owner, last_editor,
-                               msg_from, msg_to, msg_cc, msg_subject, msg_date, tags)
+                               msg_from, msg_to, msg_cc, msg_subject, msg_date, msg_message_id, msg_attachments, tags)
         VALUES (:source, :path, :filename, :extension, :size_bytes, :ctime, :mtime, :atime, :owner, :last_editor,
-                :msg_from, :msg_to, :msg_cc, :msg_subject, :msg_date, :tags)
+                :msg_from, :msg_to, :msg_cc, :msg_subject, :msg_date, :msg_message_id, :msg_attachments, :tags)
         ON CONFLICT(path) DO UPDATE SET
             source=excluded.source,
             filename=excluded.filename,
@@ -199,6 +205,8 @@ def upsert_document(conn: sqlite3.Connection, meta: DocumentMeta) -> int:
             msg_cc=excluded.msg_cc,
             msg_subject=excluded.msg_subject,
             msg_date=excluded.msg_date,
+            msg_message_id=excluded.msg_message_id,
+            msg_attachments=excluded.msg_attachments,
             tags=excluded.tags
         RETURNING id;
         """,

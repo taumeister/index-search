@@ -1,5 +1,12 @@
 # Release-Notizen
 
+## v0.3.31 - Maildir Meadow
+- Neue Quelle Maildir (read-only): Maildir++ Strukturen (`cur/new`) werden gescannt, E-Mails als `.eml` indiziert inkl. Betreff/From/To/CC/Message-ID/Anhänge/Body. Schreiben in Maildir ist gesperrt (Move/Copy/Rename/Upload/Download).
+- Quellen-Typ im Dashboard: Checkbox „Mail-Quelle“ beim Anlegen, Typ fest gespeichert (`file`/`maildir`); Indexer nutzt passend File-Walk oder Maildir-Scanner; Readiness/Cleanup beachten Maildir-Roots.
+- UI: Ergebnisliste zeigt Betreff statt Dateiname für Mails, Änderungsdatum nutzt Mail-Datum; Popup/Preview verwenden Betreff. Typ-Filter um `.eml` ergänzt, Source-Filter enthält Mail-Label.
+- Indexer/DB: `.eml` unterstützt, Mail-Metadaten (message_id, attachments) persistiert; Maildir-Scanner robust gegenüber Anhängen/Bytes.
+- Tests: Maildir-Ingest/Read-only Guards mit Fixtures; `.dockerignore` schließt Maildir/Data/Logs/Temp aus dem Build aus.
+
 ## v0.3.30 - Luminous Grove
 - Zielordner-Explorer deutlich modernisiert: Row-Karten mit Accent-Bar, klaren Hover/Focus/Selection-States und dezenten Indent-Guides; Breadcrumb-Leiste im Dialog bleibt beim Scrollen sichtbar.
 - Mikro-Interaktionen: sanfte Expand/Collapse-Animation respektiert prefers-reduced-motion; Toggle-Tooltips und Fokusfähigkeit ergänzen A11y.
